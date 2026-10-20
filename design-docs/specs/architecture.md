@@ -193,7 +193,7 @@ No router, UUID, CLI or logging libraries: the standard library covers them. Add
 | Handlers | `internal/api/v1/*_test.go`, `internal/admin/*_test.go` | httptest per endpoint: status, field names, pagination headers, error body |
 | Webhooks | `internal/webhook` | see `design-webhooks.md` |
 | Auth | `internal/auth` | including fake OIDC issuer |
-| Contract | `internal/contract` | 96 routes, schema validation, webhook payload schemas |
+| Contract | `internal/contract` | 96 routes; a live, schema-validated HTTP scenario for each of the 96 operations (partition in `design-api-coverage.md`); webhook payload schemas |
 | Smoke | `internal/cli/serve_smoke_test.go` | runs `cli.Run` with `serve --listen 127.0.0.1:0 --db <tmp>`, reads the `listening on` line, calls `/healthz`, `GET /v1/user` and `POST /v1/tickets` with a seeded token, then cancels and expects exit code 0 |
 | Web | `web/src/**/*.test.ts` | `bun test` |
 | Manual | README | Keycloak login; curl against a running server |
@@ -348,6 +348,36 @@ Session 464's wave A (PF-14, PF-15, PF-16) made real progress, but every branch 
    - PF-27: about 80 entries, all files. The s464 total of 72 grows by the three new plan files (active `sharedPaths` + completed `writePaths`) and the s464 manifest (its archive pair). It still declares no directory entry.
    - Every other plan keeps its s464 count (PF-15: 11, PF-18: 8, PF-19: 9, PF-20: 12, PF-21: 7, PF-22: 9, PF-23: 9, PF-24: 13, PF-25: 2, PF-26: 10).
    - Every plan is far under the 300 target. The s465 manifest records each plan's computed count and the disjointness of all `writePaths`.
+
+#### PF-26 split and final-run rule (session 466)
+
+Session 466 is the final continuation. All s464/s465 rules stay in force. `impl-plans/active/punchflow-kickflow-dummy-s466-dispatch.json` supersedes the s465 manifest.
+
+1. Accepted set: PF-01..PF-13, PF-14a, PF-14b, PF-14c and PF-15..PF-25 at commit `a2a82de` (`acceptedDependencies[].commit`). They are not dispatched. Logs are `/tmp/<plan-id>-s466-<step>.log`, with evidence copies under `tmp/punchflow-kickflow-dummy-s466/<planId>/attempt-<n>/`. Older logs are history, not evidence. The s465 baseline failure note (verification rule item 9) no longer applies, because PF-16 (the CF-09 owner) is accepted. PF-27's full gate re-proves `TestLoadExportRoundTripMinimal`.
+2. PF-26 is split into PF-26a..PF-26f. Their files, operations, scenario rules and repair-eligible files are defined in `design-api-coverage.md` "Live scenario partition (session 466)". `impl-plans/active/pf-26-contract-smoke.md` stays as a superseded index: status "Superseded by PF-26a..PF-26f", with its progress log kept. It is not dispatched, and PF-27 archives it. Each sub-plan's `dependsOn` is empty, because every dependency is in the accepted set.
+3. Sub-plan paths:
+   - `writePaths`: its plan file `impl-plans/active/pf-26<x>-<slug>.md`, its scenario file and its repair-eligible files with their same-basename `_test.go` files. PF-26c also has `scenarios_users_org_test.go`.
+   - No `sharedPaths`. The `writePaths` of the six sub-plans are pairwise disjoint.
+   - Each plan has about 10-30 entries, all files.
+4. Sub-plan verification, all must pass:
+   - `go build ./...`
+   - `go vet ./internal/contract/...`
+   - `go test -count=1 -v -race -run '^TestContractLive<Group>$' ./internal/contract/...` with PASS/FAIL/SKIP counts
+   - `test -z "$(gofmt -l <own files>)"`
+   - for each edited repair-eligible file, its package guard `go test -count=1 -v -race ./internal/<pkg>/...`
+
+   The whole-package contract run belongs to PF-27's full gate.
+5. PF-27 depends on PF-26a..PF-26f. Additions:
+   - It owns the new file `internal/contract/coverage_test.go` (`TestContractOperationCoverage`), its only file under `internal/`. `repo_invariants_test.go` stays at the module root.
+   - It archives the six sub-plan files, the PF-26 index and the s465 manifest. The s466 manifest stays in `active/`.
+   - Its full gate must also show `--- PASS: TestContractOperationCoverage`, the six `--- PASS: TestContractLive<Group>` lines, `--- PASS: TestContractWebhookPayloads` and `--- PASS: TestServeSmoke`.
+   - The smoke requirement ("serve against a temp SQLite file, call `/v1` with a seeded token, run the webhook receiver") is met by `TestServeSmoke` and the receiver-based tests in the same uncached gate. Nodes may not leave detached processes, so a manual `curl` against a foreground `punchflow serve` stays a README-documented manual check (`README.md` "Point a kickflow client at punchflow").
+   - `README.md` already documents the base URL, the seeded tokens and webhook secret verification (PF-25, accepted). PF-27 edits it only if its `mise.toml` `test` change makes the text wrong.
+
+| Wave | Plans | Ready because |
+|---|---|---|
+| A | PF-26a, PF-26b, PF-26c, PF-26d, PF-26e, PF-26f (parallel) | Every dependency is accepted at `a2a82de` |
+| B | PF-27 (serial, last) | PF-26a..PF-26f accepted |
 
 ### Delivery waves (input for implementation plans)
 

@@ -247,6 +247,52 @@ Manual check left to the user (documented in README by PF-25): Keycloak login vi
 - [ ] CF-01..CF-09 closing notes appended to `notes.md`; the `mise.toml` `test` task is uncached; `go-toolchain.json` and `web/toolchain.json` each have one appended record.
 - [ ] 30 plan files and the s460/s462/s463/s464 manifests are in `impl-plans/completed/`; `impl-plans/README.md` is updated; the s465 manifest is untouched in `active/`.
 
+## Continuation (session 466) - read first; overrides the session-463/464/465 dependencies, paths, archival list, log names and Done Criteria
+
+**Wave**: B (serial, last). **Depends on**: PF-26a, PF-26b, PF-26c, PF-26d, PF-26e, PF-26f. Every other plan, PF-01..PF-25 including PF-14a/b/c, is accepted at `a2a82de`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s466-dispatch.json`. Its PF-27 `writePaths` and `sharedPaths` are authoritative over the "Path Declarations" list above.
+**Design**: `design-docs/specs/architecture.md` "PF-26 split and final-run rule (session 466)" item 5; `design-docs/specs/design-api-coverage.md` "Aggregate coverage (PF-27, after the wave)".
+
+Session-466 changes:
+
+1. **Paths** (all files; no directory entries):
+   - `writePaths` = the s465 list (39, including 3 `artifactRoots`) plus 8 entries:
+     - `internal/contract/coverage_test.go`
+     - `impl-plans/completed/pf-26a-contract-tickets.md`, `impl-plans/completed/pf-26b-contract-comments-files.md`, `impl-plans/completed/pf-26c-contract-users-grades.md`, `impl-plans/completed/pf-26d-contract-orgcharts-teams.md`, `impl-plans/completed/pf-26e-contract-masters.md`, `impl-plans/completed/pf-26f-contract-proxies-roles.md`
+     - `impl-plans/completed/punchflow-kickflow-dummy-s465-dispatch.json`
+   - `sharedPaths` = the s465 list (41) plus 7 entries: the six matching `impl-plans/active/pf-26?-*.md` files, and `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`.
+   - Expansion: 47 - 3 + 48 = 92 files.
+2. **Non-goal amendment.** PF-27 may create exactly one file under `internal/`: `internal/contract/coverage_test.go`. `repo_invariants_test.go` stays at the module root. Every other non-goal stands.
+3. **New task 5b: `internal/contract/coverage_test.go`** (`package contract_test`; standard library plus `punchflow/internal/api/v1`).
+   - Single test `TestContractOperationCoverage`; helpers prefixed `pf27`.
+   - Build a list of operationIds from `liveReadScenarios[i].operationID` (22 entries, hoisted by PF-26c) followed by `liveTicketsOperations`, `liveCommentsFilesOperations`, `liveUsersGradesOperations`, `liveOrgChartsTeamsOperations`, `liveMastersOperations` and `liveProxiesRolesOperations`.
+   - Assert: no id appears twice (report the duplicates); the list length is 96; the set equals the set of `apiv1.Operations()[i].OperationID` in both directions (report missing and extra ids).
+   - Write it only after all six sub-plans are accepted, so every identifier exists. Then run `go vet ./internal/contract/...` (compile gate).
+   - Test cases:
+     - current tree -> PASS;
+     - mutation proof, not in `verification`: temporarily drop one id from a copy of the list inside a scratch test and observe the failure, or reason it out in `authorSelfCheck`. Do not commit a mutated file.
+4. **Log names**: `-s466-`, copied to `tmp/punchflow-kickflow-dummy-s466/PF-27/attempt-<n>/`. The 16 verification lines are the s465 must-pass forms with `-s465-` replaced by `-s466-`. Line 10 is replaced by:
+   - `grep -E -- '--- PASS: (TestRepoInvariants|TestEmbeddedBuild|TestServeSmoke|TestDefaultRoundTrip|TestLoadExportRoundTripMinimal|TestContractOperationCoverage|TestContractWebhookPayloads|TestContractRoutes|TestContractLiveReadScenarios|TestContractLiveTickets|TestContractLiveCommentsFiles|TestContractLiveUsersGrades|TestContractLiveOrgChartsTeams|TestContractLiveMasters|TestContractLiveProxiesRoles) ' /tmp/pf27-s466-test.log | sort -u | wc -l`, which must print 15.
+   - As must-pass form: `test "$(<that pipeline>)" -eq 15; echo "exit=$?"`.
+5. **Smoke requirement** (architecture s466 item 5): satisfied by `TestServeSmoke` (temp SQLite, seeded tokens, `/v1/user`, `POST /v1/tickets`, `/healthz`, `/`) and `TestContractWebhookPayloads` (httptest receiver, signatures) in the uncached full gate (line 7). Do not start a background `punchflow serve`. The manual curl walkthrough stays in `README.md` "Point a kickflow client at punchflow".
+6. **README.md**: it already documents the base URL, seeded tokens, webhook registration and signature verification (PF-25). Edit only the `mise run test` description, if the `mise.toml` change below makes it wrong.
+7. **mise.toml** (unchanged intent): only the `test` task `run` becomes `go test -count=1 ./... && mise run web:test`. At `a2a82de` it is still `go test ./... && mise run web:test`.
+8. **Toolchain records**: `go-toolchain.json` and `web/toolchain.json` are single JSON objects. Add one top-level key `"finalizeS466"`, an object with the commands, exit codes, `goVersion` / `bunVersion` and the `bun.lock` sha256. Keep every existing key unchanged. The files must stay valid JSON (`jq . <file>` exit 0).
+9. **Reconciliation collection**: copy the "Transfer candidates" and "Reconciliation requests" from the PF-26a..PF-26f progress logs into this log. Resolve nothing outside PF-27's paths.
+10. **notes.md** (append only): the CF-01..CF-09 closing notes as in s465, plus one line under the s464 wave-A findings table. That line records the PF-26 split outcome: the six `TestContractLive*` PASS lines and `TestContractOperationCoverage` PASS, with the gate log path.
+11. **Archival**, only after the gate passes in one uninterrupted run:
+    - 36 plan files: the s465 list of 30 plus the six PF-26 sub-plans. `pf-26-contract-smoke.md` (superseded index) is already in the 30.
+    - Five historical manifests: s460, s462, s463, s464, s465. Move s465 last.
+    - The s466 manifest stays in `impl-plans/active/`. Name it in `impl-plans/README.md` as the final manifest that the operator archives.
+    - Last, set this plan to Completed and move it.
+
+### Done Criteria (session 466)
+
+- [ ] Verification lines 1-16 (`-s466-` logs; line 10 as rewritten above) passed in one final uninterrupted run, each with exit 0, log path and counts. Full gate: FAIL=0, SKIP=0, zero `(cached)`, every package `ok`, and 15 required PASS lines including `TestContractOperationCoverage`.
+- [ ] `internal/contract/coverage_test.go` exists and passes (96 unique operations equal to `apiv1.Operations()`).
+- [ ] CF closing notes and the PF-26 split note appended to `notes.md`. `mise.toml` `test` is uncached. Both toolchain files have a `finalizeS466` key and are valid JSON.
+- [ ] 36 plan files and the s460..s465 manifests are in `impl-plans/completed/`. `impl-plans/README.md` is updated. The s466 manifest is untouched in `active/`.
+
 ## Execution Protocol
 
 Evidence reporting (README rule 14; design architecture.md s465 rule 3):

@@ -249,9 +249,55 @@ Location: `internal/contract/` (test-only package; `contract_test.go` plus per-r
 1. Load `design-docs/references/kickflow-openapi.yaml` (path computed relative to the module root) with a YAML parser and convert it to a JSON document.
 2. Route coverage: collect every `(method, path)` under `paths` (exactly 96 expected; the test fails if the count changes). Convert `{param}` segments to ServeMux wildcards and compare with `apiv1.Operations()` (exported table of `{OperationID, Method, Pattern}` used for registration). Both directions must match exactly, and operationIds must match.
 3. Schema validation: compile each operation's `200` `application/json` response schema with a JSON Schema 2020-12 validator, using the whole spec document as the resource so `#/components/schemas/...` references resolve. Unknown OpenAPI keywords are ignored. `format` assertions are enabled for `uuid`, `date`, `date-time` and `email`.
-4. Scenarios: one scenario per operation (96) running against a server built with `testutil.NewServer` and the default fixtures, each using a persona token with the needed permission. The response must be 200 and validate; empty-body operations must return zero bytes.
+4. Scenarios: every one of the 96 operations has at least one live HTTP scenario running against `testutil.New(t)` (default fixtures, fresh SQLite), using a persona token with the needed permission. The response must be 200 and validate; empty-body operations must return zero bytes. Session 466 partitions the scenarios as described in "Live scenario partition (session 466)" below.
 5. Timestamp check: every string value under a key ending in `At` must match `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+09:00$`.
 6. Webhook payloads: one sample body of each of the 13 events (captured by the test receiver) is validated against `WebhookRequestBodyPing`, `WebhookRequestBodyTicket` or `WebhookRequestBodyComment`.
+
+### Live scenario partition (session 466)
+
+State at `a2a82de`: `internal/contract` passes with route coverage (`TestContractRoutes`), schema compilation for all 96 operations (`TestContractScenarios`), live GET scenarios for 22 read operations (`TestContractLiveReadScenarios`) and delivered, signed, schema-validated payloads for all 13 events (`TestContractWebhookPayloads`). `TestServeSmoke` passes. The remaining 74 operations get live scenarios from six sub-plans, PF-26a..PF-26f. All six are ready in one wave. `pf-26-contract-smoke.md` becomes a superseded index (not dispatched), like `pf-14-engine.md`.
+
+Frozen during the wave (no sub-plan edits them): `helpers_test.go`, `spec_test.go`, `routes_test.go`, `webhooks_test.go` and `internal/cli/serve_smoke_test.go`. A sub-plan that needs a helper defines it in its own file.
+
+| Plan | Scenario file (new) | Test function | Operations (coverage-matrix rows) | Count |
+|---|---|---|---|---|
+| PF-26a tickets | `scenarios_tickets_test.go` | `TestContractLiveTickets` | #57, #59-#70 | 13 |
+| PF-26b comments and files | `scenarios_comments_files_test.go` | `TestContractLiveCommentsFiles` | #71, #72, #91-#95 | 7 |
+| PF-26c users and grades | `scenarios_users_grades_test.go` | `TestContractLiveUsersGrades` | #3, #5-#12, #14, #16-#18 | 13 |
+| PF-26d org charts and teams | `scenarios_orgcharts_teams_test.go` | `TestContractLiveOrgChartsTeams` | #28-#31, #33-#42 | 14 |
+| PF-26e categories, folders, general masters | `scenarios_masters_test.go` | `TestContractLiveMasters` | #44-#46, #48-#50, #74, #76-#82 | 14 |
+| PF-26f proxies and roles | `scenarios_proxies_roles_test.go` | `TestContractLiveProxiesRoles` | #20-#22, #24-#26, #84-#90 | 13 |
+
+The 74 rows plus the 22 operations of `TestContractLiveReadScenarios` are the 96 operations, each exactly once. Rows #52-#55 and #96 are read-only and already covered. PF-26c also owns `scenarios_users_org_test.go`. Its only allowed change is to move the 22 read cases into a package-level `liveReadScenarios` slice, without changing their behavior or subtest names.
+
+Rules for every sub-plan file:
+
+1. Inventory. The file declares `var live<Group>Operations = []string{...}` with exactly its rows' operationIds (`<Group>` as in the test function name). The test fails if an id is missing from `apiv1.Operations()`, or if a listed id has no passing subtest named `TestContractLive<Group>/<operationId>`. Extra subtests use `<operationId>/<case>`.
+2. Isolation. Each test function creates its own `testutil.New(t)` env and runs its mutations in dependency order (create -> get -> update -> state change -> delete). It uses fixture codes or ids returned by earlier responses. It never depends on another sub-plan's data or test order.
+3. Success checks for each operation: status 200. A non-empty body validates against the operation's 200 schema (`responseSchemaURI`) and passes `checkTimestamps`. An operation whose spec 200 response has no content returns zero bytes. Every operation in the group whose spec declares the `page`/`perPage` query parameters returns `Page`, `Per-Page` and `Total` headers. The test reads this from the spec operation, not from a hand-written list. If the group has such an operation, at least one call uses `perPage=1` with `Total` > 1 and asserts a `Link` header with `rel="next"` (INF-01).
+4. Field names. The schema validation in check 3 is the field-name check: the response schemas list the required properties. Check 3 adds no hand-written key lists.
+5. Error format. Each resource in the group has at least one error subtest, `<operationId>/error_<code>`, using a documented trigger from the operation matrix or the error catalog (for example `resource_not_found`, `validation_failed`, `invalid_state`, `missing_permission`, `resource_not_editable`). It asserts the status and that the body validates against `#/components/schemas/ErrorResponse`. Its keys must be a subset of `code`, `message` and `errors`. `errors` is present only on 422, and `doc_url` never appears (cross-cutting "Error body" row).
+6. Webhooks. Scenarios do not assert webhook delivery. Payload shape and signatures are covered by `TestContractWebhookPayloads`, and emission order by the engine and handler tests. No scenario waits on asynchronous delivery.
+7. Size and names. Each file stays under 1000 lines. Every package-level identifier, other than the test function and the inventory variable, starts with that plan's prefix `pf26a`..`pf26f`.
+8. Never loosen. A failure is never fixed by loosening the validator, skipping an operation, special-casing an operation or editing a frozen file.
+
+Defect repair and ownership transfer. Accepted plans are not redispatched in session 466. A schema or behavior defect that a scenario finds is fixed by the sub-plan that found it. Only the repair-eligible files below may be edited, and only for that defect. Each production file is eligible for exactly one sub-plan, so `writePaths` stay disjoint at dispatch. A file becomes a recorded `ownershipTransfers[]` entry (`fromPlan` = the accepted owner) only if the sub-plan actually changes it. Unchanged eligible files stay with their accepted owner.
+
+| Plan | Repair-eligible production files (plus the matching existing `_test.go` file, edited only to keep it consistent with the fix) |
+|---|---|
+| PF-26a | `internal/api/v1/tickets.go`, `ticket_actions.go`, `ticket_viewers.go`; `internal/present/ticket.go`, `ticket_detail.go`, `viewer.go`; `internal/store/tickets.go`, `read_tickets.go`, `ticket_queries.go`; `internal/engine/engine.go`, `actions.go`, `create.go`, `update.go`, `forms.go`, `routing.go`, `conditions.go`, `visibility.go`, `numbering.go` |
+| PF-26b | `internal/api/v1/comments.go`, `files.go`; `internal/present/comment.go`; `internal/store/files.go`; `internal/engine/comments.go`; `internal/files/files.go`, `download.go` |
+| PF-26c | `internal/api/v1/users.go`, `users_status.go`, `grades.go`; `internal/present/user.go`; `internal/store/users.go`, `read_users.go`, `grades.go` |
+| PF-26d | `internal/api/v1/orgcharts.go`, `teams.go`; `internal/present/org.go`; `internal/store/org.go`, `read_org.go` |
+| PF-26e | `internal/api/v1/categories.go`, `folders.go`, `general_masters.go`; `internal/present/classification.go`, `master.go`; `internal/store/classification.go`, `read_classification.go`, `masters.go`, `read_masters.go` |
+| PF-26f | `internal/api/v1/proxies.go`, `roles.go`; `internal/present/proxy.go`, `role.go`; `internal/store/proxies.go`, `read_proxies.go`, `roles.go`, `read_roles.go` |
+
+- Guard verification for an edited file: the whole owning package, uncached, `go test -count=1 -v -race ./internal/<pkg>/...`. A failure there in a sibling's in-flight file follows the s464 sibling-breakage rule.
+- Contract stubs keep their exported identifiers and signatures (s464 rule 2), and the `Operations()` table in `routes.go` stays fixed at 96.
+- A defect in any other file is not eligible in the wave: `fixtures/default/*.json`, `internal/{httpx,auth,kferr,kftime,model,webhook,testutil,admin,server,cli}`, `internal/api/v1/{api,routes}.go`, `internal/present/{present,tenant,workflow,workflow_form,route,audit}.go` and the other store files. Such a defect is a reconciliation request with `file:line`, the failing subtest and the log path. The sub-plan reports `implementationIncomplete: true` with the request. Integration review then transfers exactly that file to the finding sub-plan, or to the first one to record it if several do, in that plan's correction instructions. Until then no sibling edits the file.
+- A defect in a file that is repair-eligible for a sibling sub-plan is a reconciliation request addressed to that sibling. The sibling fixes it within its eligibility, and the finder never edits it.
+
+Aggregate coverage (PF-27, after the wave). PF-27 adds `internal/contract/coverage_test.go` with `TestContractOperationCoverage`. It asserts that the operationIds of `liveReadScenarios` plus the six `live<Group>Operations` lists contain no duplicates and, as a set, equal the 96 operationIds of `apiv1.Operations()`. The six sub-plans are accepted before PF-27 starts, so every referenced identifier exists. The shared tree compiles at every step.
 
 ## References
 

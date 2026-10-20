@@ -1,7 +1,17 @@
 # PF-26 Contract Test and Serve Smoke Test Implementation Plan
 
-**Status**: In Progress
+**Status**: Superseded by PF-26a, PF-26b, PF-26c, PF-26d, PF-26e and PF-26f (session 466; not dispatched)
 **Wave**: 5 | **Depends On**: PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-23, PF-24 | **Plan ID**: PF-26
+
+> **Session 466 (read first).** This file is now a superseded index, like `pf-14-engine.md`. Its delivered work is at `a2a82de` and stays green: `TestContractRoutes`, `TestContractScenarios`, `TestContractLiveReadScenarios` (22 operations), `TestContractWebhookSchemas`, `TestContractWebhookPayloads` (13 events, signatures) and `TestServeSmoke`. Those files are frozen for the s466 wave. The remaining 74 live scenarios are split as follows (design: `design-api-coverage.md` "Live scenario partition (session 466)"):
+> - `pf-26a-contract-tickets.md` (13 operations)
+> - `pf-26b-contract-comments-files.md` (7)
+> - `pf-26c-contract-users-grades.md` (13; also owns the `liveReadScenarios` hoist in `scenarios_users_org_test.go`)
+> - `pf-26d-contract-orgcharts-teams.md` (14)
+> - `pf-26e-contract-masters.md` (14)
+> - `pf-26f-contract-proxies-roles.md` (13)
+>
+> The planned files `scenarios_definitions_test.go` and `scenarios_misc_test.go` are dropped; they were never created. PF-27 adds the aggregate `TestContractOperationCoverage` and archives this file. The older continuation sections below are history.
 **Design Reference**: design-docs/specs/design-api-coverage.md#contract-test; design-docs/specs/architecture.md#testing-and-verification (smoke row)
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-20

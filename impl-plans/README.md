@@ -71,13 +71,20 @@ Session 463 continuation (from checkpoint commit f82e374). The session-462 integ
 | [pf-23-api-comments-files](./active/pf-23-api-comments-files.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
 | [pf-24-admin-api](./active/pf-24-admin-api.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
 | [pf-25-readme](./active/pf-25-readme.md) | A | PF-07 (accepted) | Ready |
-| [pf-26-contract-smoke](./active/pf-26-contract-smoke.md) | C | PF-17 to PF-24 | Ready |
-| [pf-27-finalize](./active/pf-27-finalize.md) | D (serial, last) | all | Ready |
+| [pf-26-contract-smoke](./active/pf-26-contract-smoke.md) | - | - | Superseded by PF-26a..PF-26f (s466; not dispatched) |
+| [pf-26a-contract-tickets](./active/pf-26a-contract-tickets.md) | A (s466) | none (accepted at a2a82de) | Ready |
+| [pf-26b-contract-comments-files](./active/pf-26b-contract-comments-files.md) | A (s466) | none (accepted at a2a82de) | Ready |
+| [pf-26c-contract-users-grades](./active/pf-26c-contract-users-grades.md) | A (s466) | none (accepted at a2a82de) | Ready |
+| [pf-26d-contract-orgcharts-teams](./active/pf-26d-contract-orgcharts-teams.md) | A (s466) | none (accepted at a2a82de) | Ready |
+| [pf-26e-contract-masters](./active/pf-26e-contract-masters.md) | A (s466) | none (accepted at a2a82de) | Ready |
+| [pf-26f-contract-proxies-roles](./active/pf-26f-contract-proxies-roles.md) | A (s466) | none (accepted at a2a82de) | Ready |
+| [pf-27-finalize](./active/pf-27-finalize.md) | B (s466; serial, last) | PF-26a..PF-26f | Ready |
 
-The Wave column follows session 465 (rule 15). Plans are dispatched as soon as their dependencies are accepted.
+Session 466: PF-01..PF-25, including PF-14a/b/c, are accepted at `a2a82de`. Status cells above that still read "Ready" for those plans are stale. PF-27 sets them to Completed when it archives. The Wave column for PF-26a..PF-27 follows rule 16.
 
 Dispatch manifests:
-- `punchflow-kickflow-dummy-s465-dispatch.json` is the current manifest. It stays in `active/` after the run, and the operator archives it.
+- `punchflow-kickflow-dummy-s466-dispatch.json` is the current and final manifest. It stays in `active/` after the run, and the operator archives it.
+- `punchflow-kickflow-dummy-s465-dispatch.json` is superseded. PF-27 archives it last.
 - `punchflow-kickflow-dummy-s463-dispatch.json` and `punchflow-kickflow-dummy-s464-dispatch.json` are superseded. PF-27 archives them.
 - `punchflow-kickflow-dummy-s460-dispatch.json` and `punchflow-kickflow-dummy-s462-dispatch.json` are historical. They remain the path-declaration sources for accepted plans (s460: PF-01, PF-03, PF-11, PF-12, PF-13; s462: PF-02, PF-04..PF-10, PF-17). PF-27 archives both.
 
@@ -96,23 +103,16 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Depends On |
 |-------|--------|------------|
-| A | READY | accepted PF-01..PF-13, PF-17 at ea385c7 (session 465) |
-| B1 | BLOCKED | PF-16 accepted |
-| B2 | BLOCKED | PF-14a, PF-14b, PF-14c, PF-15, PF-16 accepted |
-| C | BLOCKED | PF-18..PF-24 accepted |
-| D | BLOCKED | every other plan accepted |
+| A | READY | accepted PF-01..PF-25 (incl. PF-14a/b/c) at a2a82de (session 466) |
+| B | BLOCKED | PF-26a..PF-26f accepted |
 
 ### Phase to Plans Mapping
 
 ```
-PHASE_TO_PLANS = {   # session 465 continuation (manifest punchflow-kickflow-dummy-s465-dispatch.json); accepted PF-01..PF-13 and PF-17 are not dispatched; pf-14-engine.md is superseded
-  "A": ["pf-14a-engine-lifecycle.md", "pf-14b-engine-routing.md", "pf-14c-engine-forms-create.md",
-        "pf-15-present-ticket-payloads.md", "pf-16-server-cli-testutil.md", "pf-25-readme.md"],
-  "B1": ["pf-18-api-users-grades.md", "pf-19-api-proxies-org.md", "pf-20-api-definitions-masters.md",
-         "pf-21-api-roles-audit.md"],
-  "B2": ["pf-22-api-tickets.md", "pf-23-api-comments-files.md", "pf-24-admin-api.md"],
-  "C": ["pf-26-contract-smoke.md"],
-  "D": ["pf-27-finalize.md"]
+PHASE_TO_PLANS = {   # session 466 final continuation (manifest punchflow-kickflow-dummy-s466-dispatch.json); PF-01..PF-25 accepted and not dispatched; pf-14-engine.md and pf-26-contract-smoke.md are superseded indexes
+  "A": ["pf-26a-contract-tickets.md", "pf-26b-contract-comments-files.md", "pf-26c-contract-users-grades.md",
+        "pf-26d-contract-orgcharts-teams.md", "pf-26e-contract-masters.md", "pf-26f-contract-proxies-roles.md"],
+  "B": ["pf-27-finalize.md"]
 }
 ```
 
@@ -173,6 +173,13 @@ All plans of a wave run at the same time on the same branch and working director
     - Each plan's "Continuation (session 465)" section overrides its earlier continuation sections for wave, dependencies, log names and Done Criteria.
     - PF-14 is replaced by PF-14a (`pf-14a-engine-lifecycle.md`), PF-14b (`pf-14b-engine-routing.md`) and PF-14c (`pf-14c-engine-forms-create.md`). They have disjoint files in `internal/engine` and `internal/store`. The cross-file helpers they share are frozen (design-approval-engine.md "Plan ownership (session 465)").
     - A plan is dispatched as soon as every plan in its `dependsOn` is accepted.
+16. **Session 466 override (final run)** (design: architecture.md "PF-26 split and final-run rule (session 466)"; design-api-coverage.md "Live scenario partition (session 466)"):
+    - The active manifest is `punchflow-kickflow-dummy-s466-dispatch.json`. It supersedes s465. Its `ownershipTransfers[]` carries the s465 list forward unchanged; integration review appends one entry per repair-eligible file a PF-26 sub-plan actually edits.
+    - Accepted commit: `a2a82de`, for PF-01..PF-25 including PF-14a/b/c. Logs are `/tmp/<plan-id>-s466-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s466/<planId>/attempt-<n>/`. Older logs are history.
+    - Wave A: PF-26a..PF-26f, in parallel, each with pairwise-disjoint `writePaths` and no `sharedPaths`. Wave B: PF-27.
+    - Frozen during wave A (no plan edits them): `internal/contract/helpers_test.go`, `spec_test.go`, `routes_test.go`, `webhooks_test.go`, `internal/cli/serve_smoke_test.go`. `scenarios_users_org_test.go` may be edited only by PF-26c, and only for the `liveReadScenarios` hoist.
+    - Repair-eligible files in a sub-plan's `writePaths` are edited only to fix a defect that one of its own scenarios exposes. Each edit needs a transfer-candidate record in the progress log and an uncached package guard. A defect in another file is a reconciliation request (README rule 11) plus `implementationIncomplete: true`.
+    - Identifier prefixes in `package contract_test`: `pf26a`..`pf26f`, and `pf27` for PF-27's coverage test. The only unprefixed names are the six `TestContractLive<Group>` functions, the six `live<Group>Operations` variables and `liveReadScenarios`.
 
 ## Workflow
 
