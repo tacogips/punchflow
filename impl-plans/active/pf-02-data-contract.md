@@ -1,6 +1,6 @@
 # PF-02 Data Contract Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 1 | **Depends On**: - | **Plan ID**: PF-02
 **Design Reference**: design-docs/specs/architecture.md#storage, #fixtures, #dependencies; design-docs/specs/design-approval-engine.md#data-owned-by-the-engine; design-docs/specs/design-webhooks.md#data-model; design-docs/specs/design-auth-admin.md
 **Created**: 2026-10-20
@@ -120,7 +120,7 @@ Conventions: ids `TEXT PRIMARY KEY` (UUID); instants `INTEGER` Unix ms; dates `T
 - `categories`(id, code UNIQUE, name); `folders`(id, code UNIQUE, name, description NULL, parent_id NULL FK, editable)
 - `general_masters`(id, code UNIQUE, name, description NULL, default_sort_by, initial_display_code, initial_display_created_at, initial_display_description)
 - `general_master_fields`(id, general_master_id FK, code, title, description NULL, field_type, required, field_order, visible, initial_display, options json NULL)
-- `general_master_items`(id, general_master_id FK, code, name, description NULL, starts_on NULL, ends_on NULL, inputs json; UNIQUE(general_master_id, code))
+- `general_master_items`(id, general_master_id FK, code, name, description NULL, starts_on NULL, ends_on NULL, inputs json, input_ids json DEFAULT `{}` (field ID to input ID); UNIQUE(general_master_id, code))
 - `routes`(id, code UNIQUE, status, folder_id FK, definition_json); `workflows`(id, code UNIQUE, status, folder_id FK, definition_json, ticket_number_counter)
 - `proxy_applicants`, `proxy_approvers`(id, user_id FK, proxy_user_id FK, starts_on NULL, ends_on NULL, workflow_ids json; UNIQUE(user_id, proxy_user_id))
 - `tickets`(id, workflow_id FK, status, current_step, title NULL, ticket_number NULL, author_id NULL, author_team_id NULL, author_team_snapshot json NULL, proxy_client_user_id NULL, forced_public_type, route_id NULL, opened_at, completed_at, denied_at, archived_at, closed_at all NULL)
@@ -148,7 +148,7 @@ Add indexes on every FK column used in WHERE clauses (`ticket_assignees.user_id`
 ## Model (`internal/model`)
 
 - Row structs mirror the tables with Go names (`User{ID, Code, Email, FirstName, LastName, EmployeeID *string, Status, Locale, UserType string, CustomFields json.RawMessage, LastUsedOn *string, DeactivatedAt *time.Time, CreatedAt, UpdatedAt time.Time}` and so on for every table). Times are `time.Time` / `*time.Time`. JSON columns are typed slices/structs where the shape is fixed (e.g. `GradeIDs []string`, `WorkflowIDs []string`, `PermissionList []RolePermission`).
-- `enums.go`: string constants for ticket status, step status, action types, step types, user status, tenant plan/mode, token kind, webhook event types (all 13), webhook event status, permissions (all 19).
+- `enums.go`: string constants for ticket status (`draft|in_progress|completed|rejected|denied|archived`), step status (`pending|in_progress|completed|skipped`), action types, the eight kickflow step types, user status (`activated|invited|suspended|deactivated`), tenant plan/mode, token kind, webhook event types (all 13), webhook event status, permissions (all 19). Legacy enum identifiers remain deprecated until PF-27 removes their fixture-validator references.
 - `webhook.go`: `type WebhookEvent struct{ Type, TicketID, CommentID, ActorUserID string }` (the engine/handler -> webhook contract) plus `Webhook`, `WebhookDelivery` (row of `webhook_events`), `WebhookAttempt`.
 - `definition.go`: `WorkflowDef` and `RouteDef`, the JSON stored in `definition_json` and used verbatim as fixture entries. JSON tags equal the kickflow `WorkflowDetail` / `RouteDetail` property names, with these rules: server-computed properties are omitted (createdAt, updatedAt, counts, author, versionAuthor, nextTicketNumberValue*, publishable, integration objects); references to other entities use codes (`folderCode`, `categoryCodes`, `teamCode`, `gradeCodes`, `userCodes`, `routeCode`, `formFieldCode`, `generalMasterCode`, `generalMasterItemCode`); every API-visible sub-entity keeps an explicit `id`. Required members: workflow settings listed in `kickflow-api.md` "Workflow" schema; `ticketNumberingTiming` (string); `availableTeams[]`; `sectionList[]` with `formFields[]` (FormField properties) or `slipFields[]` (SlipField properties) and section `conditionFields[]`; `routeConditions[]` (`id, conditionType, combinationType, combinationExpression, routeCode|null, errorMessage|null, conditionFields[]`). `RouteDef`: `id, code, status, name, description, notes, folderCode, steps[]` where each step has RouteStep properties with `userCodes`, `targets[]{teamCode, descendants, gradeSymbol, gradeCodes, variable}`, `routeStepCondition{id, conditionType, combinationType, routeStepConditionFields[]{id, variable, fieldKey, symbol, value, gradeCode, teamCode, generalMasterCode, generalMasterItemCode}}`.
 
@@ -180,10 +180,10 @@ gofmt -l internal/store internal/model internal/fixtures   # prints nothing
 
 ## Done Criteria
 
-- [ ] 5 modules in go.mod with go.sum entries; `go mod verify` passes; `go-toolchain.json` records go version, each `go get` with exit code 0 and resolved version, and the verify result
-- [ ] Schema contains every table above; migration idempotent
-- [ ] Model and fixture types compile with documented JSON tags; every file < 1000 lines
-- [ ] Tests pass; gofmt clean
+- [x] 5 required modules in go.mod with go.sum entries; `go mod verify` passes; `go-toolchain.json` records go version, each selected compatible `go get` with exit code 0 and resolved version, and the verify result
+- [x] Schema contains every table above; migration idempotent
+- [x] Model and fixture types compile with documented JSON tags; every file < 1000 lines
+- [x] Tests pass across all Go packages; focused PF-02 tests pass and gofmt is clean.
 
 ## Execution Protocol
 
@@ -191,8 +191,40 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-02 implementation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-1/baseline.json`; per-edit intents `edit-001` through `edit-023` in the same directory.
+**Tasks Completed**: Added five required module dependencies, Go toolchain audit manifest, full idempotent SQLite schema, model row and definition types, fixture JSON types, store database/migration/transaction/id/secret/audit/truncate helpers, and focused store tests. Expanded workflow, form, slip, and route step definitions (including external publish settings) to preserve API property names, and completed timestamp fields on assignee/webhook rows after independent verification identified omissions. Preserved Go 1.25.4 by selecting latest compatible SQLite v1.59.0 and x/oauth2 v0.36.0; incompatible latest tags require Go 1.26 and are noted in `go-toolchain.json`.
+**Verification**: `go mod verify` exit 0 (`/tmp/pf02-modverify.log`); `go list -m all` exit 0 (`/tmp/pf02-modules.log`); Final-source `go build ./...` exit 0 (`/tmp/pf02-final-build.log`); `go vet ./internal/store/... ./internal/model/... ./internal/fixtures/...` exit 0 (`/tmp/pf02-final-vet.log`); uncached focused tests exit 0 with 8 tests passing (`/tmp/pf02-final-test.log`); `gofmt -l internal/store internal/model internal/fixtures` clean (`/tmp/pf02-final-gofmt.log`). Module integrity/list checks also pass at `/tmp/pf02-modverify.log` and `/tmp/pf02-modules.log`.
+**Prior attempts**: Unconstrained `go get modernc.org/sqlite` selected v1.60.1 and temporarily raised the go directive to 1.26.0; its output is `/tmp/pf02-get-sqlite.log`. An unconstrained x/oauth2 resolution selected v0.37.0 and required Go 1.26; output is `/tmp/pf02-get-oauth2.log`. Both were corrected to the latest versions compatible with Go 1.25.4. `go mod tidy` was not run per plan.
+**Reconciliation requests**: None. Independent PF-02 verification found missing Workflow/FormField/SlipField/RouteStep API properties and three row timestamp fields; these were fixed and verified on final source. Formal implementation review and plan archival/index updates remain downstream workflow steps.
+
+### Session: 2026-10-20 PF02-ADV-001 repair
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-2/baseline.json`; per-edit intents `attempt-2-edit-001` through `attempt-2-edit-003` in `tmp/punchflow-kickflow-dummy-s460/PF-02/`.
+**Finding addressed**: PF02-ADV-001 (high): relative SQLite paths produced a URI authority error; canonical `:memory:` was also malformed.
+**Tasks Completed**: `Open` now resolves file paths with `filepath.Abs`, creates the absolute parent directory, and constructs a slash-normalized file URL. Canonical `:memory:` uses `file::memory:` with the existing pragmas; legacy memory aliases were removed. Added relative path, spaced path, migration/pragmas/reopen, and in-memory regression coverage. Exported signatures, pragmas and pool settings are unchanged.
+**Verification**: `go build ./...` exit 0 (`/tmp/pf02-attempt2-build.log`); `go vet ./internal/store/... ./internal/model/... ./internal/fixtures/...` exit 0 (`/tmp/pf02-attempt2-vet.log`); uncached focused tests exit 0 with 10 tests passing, including `TestOpenRelativePath` and `TestOpenMemoryPath` (`/tmp/pf02-attempt2-test.log`); `gofmt -l internal/store internal/model internal/fixtures` printed nothing, exit 0 (`/tmp/pf02-attempt2-gofmt.log`); `go mod verify` reported all modules verified, exit 0 (`/tmp/pf02-attempt2-modverify.log`).
+**Reproduction**: Before the Open fix, `go test -count=1 -run 'TestOpen(RelativePath|MemoryPath)' ./internal/store` failed as expected with `invalid uri authority: rel` and an invalid memory authority (`/tmp/pf02-relative-path-repro.log`, exit 1). The same regressions pass on final source.
+**Evidence**: Final source hashes and verification log identities are recorded under `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-2/final-source.json`.
+**Reconciliation requests**: None. Adversarial re-review of PF02-ADV-001 remains downstream.
+
+### Session: 2026-10-20 PF-02 Step 6 final verification
+**Intent snapshots**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-3/edit-intent-001.md` and `edit-intent-002.md`; verification source hashes: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-3/final-source-files.json` (27 tracked implementation source paths; progress-plan hash recorded separately in this log).
+**Tasks Completed**: Re-read the accepted PF-02 data contract and current review state. The previous PF02-ADV-001 correction and relative-path, spaced-path, migration/reopen, pragma, and `:memory:` tests are present. No new source change was needed. Independent read-only audit `/root/pf02_readonly_review` found no current high or medium implementation findings or unmet assigned criteria.
+**Verification**: `go mod verify` exit 0, all modules verified (`/tmp/pf02-step6-modverify.log`); `go list -m all` exit 0 and lists the five required direct module families alongside their transitive dependencies (`/tmp/pf02-step6-modules.log`); `go build ./...` exit 0 (`/tmp/pf02-step6-build.log`); `go vet ./internal/store/... ./internal/model/... ./internal/fixtures/...` exit 0 (`/tmp/pf02-step6-vet.log`); uncached `go test -count=1 -v ./internal/store/... ./internal/model/... ./internal/fixtures/...` exit 0, 10 tests passed and 0 failed (`/tmp/pf02-step6-test.log`); `gofmt -l internal/store internal/model internal/fixtures` exit 0 with no formatted-file output (`/tmp/pf02-step6-gofmt.log`); `git diff --check` exit 0. All Go files in the assigned packages are below 1000 lines.
+**Review boundary**: Formal independent adversarial re-review of PF02-ADV-001 and later workflow integration/finalization remain downstream. Existing low-severity notes are recorded in the prior repair entry; no high or medium issue remains on this source.
+**Reconciliation requests**: None.
+
+### Session: 2026-10-20 PF-02 review repair attempt 4
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-4/edit-intent.md`; progress edit intent: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-4/edit-intent-progress.md`. Pre-edit hashes: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-4/pre-edit-sha256.txt` and `pre-progress-edit-sha256.txt`.
+**Findings addressed**: PF02-ENUM-DESIGN-DRIFT (high) and PF02-MASTER-INPUT-ID (high). `internal/model/enums.go` now has the accepted eight step types, `activated`, canonical ticket/step status values, and deprecated legacy identifiers retained for PF-06 compatibility. `internal/model/master.go` adds JSON-tagged `InputIDs`; `0001_init.sql` adds `input_ids TEXT NOT NULL DEFAULT '{}'`. `store_test.go` checks canonical enum sets, input_ids default, all 38 tables, and migration idempotence. PF-06 handoff: fixture load persists each input ID in `InputIDs` keyed by field ID; export restores it to `MasterInputFixture.ID`.
+**Schema note**: Existing local `.punchflow-data` databases predate this pre-release column and must be recreated or reset; the initial migration is intentionally unchanged/idempotent for fresh development databases.
+**Verification**: `go mod verify` exit 0 (`/tmp/pf02-a4-modverify.log`); `go list -m all` exit 0, includes all five required module families (`/tmp/pf02-a4-modules.log`); `go build ./...` exit 0 (`/tmp/pf02-a4-build.log`); `go vet ./...` exit 0 (`/tmp/pf02-a4-vet.log`); focused uncached `go test -count=1 -v ./internal/model/... ./internal/store/... ./internal/fixtures/...` exit 0, 11 store tests passed (`/tmp/pf02-a4-test.log`); migration regression `go test -count=1 -v ./internal/store/...` exit 0, 11 store tests passed (`/tmp/pf02-a4-store-test.log`); `gofmt -l internal/model internal/store internal/fixtures` exit 0 with no output (`/tmp/pf02-a4-gofmt.log`); enum grep exit 0 (`/tmp/pf02-a4-enumgrep.log`). Required full-suite `go test -count=1 ./...` exited 1 (`/tmp/pf02-a4-all-test.log`): `TestSessionActivationRequiresValidInvitation` and `TestHandlersLocalLoginAndOIDCDisabled` fail because auth still expects the old `active` value. Read-only `rg -n 'active' internal/store internal/auth --glob '*.go'` also found `internal/store/auth.go:161` writing literal `active`, plus PF-05 tests seeding/asserting it. This is an additional production mismatch: subsequent login for an invited user will see stored `active` and reject it after PF-02 makes `activated` canonical. All logs are copied to the attempt-4 evidence directory.
+**Reconciliation request / blocker**: PF-05 owner must replace the literal activation write in `internal/store/auth.go` and migrate auth test fixture/status expectations to `model.UserStatusActive` / `activated`, then rerun auth and full-suite tests. Those files are forbidden by this repair brief. Implementation remains In Progress until `go test -count=1 ./...` passes. Source contract intentionally uses `activated` per accepted design/OpenAPI.
+**Source hashes**: See `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-4/final-source-sha256.txt`; full test outputs are copied into that attempt directory.
+
+### Session: 2026-10-20 PF-02 integration review redispatch attempt 5
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-5/intent.md`; plan edit intent: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-5/edit-intent-progress.md`; pre-verification hashes: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-5/pre-verification-sha256.txt`.
+**Findings addressed**: Re-verified PF02-ENUM-DESIGN-DRIFT and PF02-MASTER-INPUT-ID from fresh source. The accepted enum values and deprecated compatibility constants are present in `internal/model/enums.go`; `GeneralMasterItem.InputIDs` and the `general_master_items.input_ids` default are present, with migration/default and idempotence checks in `internal/store/store_test.go`. PF-06 handoff remains: load stores input IDs keyed by field ID and export restores `MasterInputFixture.ID`.
+**Verification**: `go mod verify` exit 0, all modules verified (`/tmp/pf02-a5-modverify.log`); `go list -m all` exit 0 and includes all five required direct module families (`/tmp/pf02-a5-modules.log`); `go build ./...` exit 0 (`/tmp/pf02-a5-build.log`); `go vet ./...` exit 0 (`/tmp/pf02-a5-vet.log`); focused `go test -count=1 -v ./internal/model/... ./internal/store/... ./internal/fixtures/...` exit 0, 11 store tests passed (`/tmp/pf02-a5-model-store-test.log`); migration regression `go test -count=1 -v ./internal/store/...` exit 0, 11 store tests passed (`/tmp/pf02-a5-store-test.log`); full `go test -count=1 ./...` exit 0 across all packages (`/tmp/pf02-a5-all-test.log`); `gofmt -l internal/model internal/store internal/fixtures` exit 0 with no output (`/tmp/pf02-a5-gofmt.log`); enum grep exit 0 (`/tmp/pf02-a5-enumgrep.log`).
+**Current source hashes**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-5/final-source-sha256.txt`; verification outputs and exit codes are copied into the same attempt directory.
+**Reconciliation requests**: None. Formal independent re-review and workflow finalization remain downstream.

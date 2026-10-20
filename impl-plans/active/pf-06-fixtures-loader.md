@@ -119,8 +119,13 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-06 implementation attempt 1
+**Intent snapshot**: Added in `tmp/punchflow-kickflow-dummy-s460/PF-06/attempt-1/intent.md`; input hashes are in `intent-input-sha256.txt`. Planned source changes are Parse, Validate, Load/Reset, Export, and testdata under the declared PF-06 write paths.
+**Tasks Completed**: Drafted `parse.go`, `validate.go`, `load.go`, and `export.go`; created canonical minimal fixture data and invalid fixture directories. Parsing, the current set of validation rules, FK-ordered fixture insertion, Reset cleanup, export, and canonical writing are present. Tests and final required gates are not complete.
+**Verification already run**:
+- `go test ./internal/fixtures/...` after source draft: exit 0, package compiled, no test files yet; `/tmp/pf06-compile.log`.
+- `go run tmp/punchflow-kickflow-dummy-s460/PF-06/attempt-1/generate-fixtures.go`: exit 0; generated `testdata/minimal` by loading and exporting a representative set; `/tmp/pf06-fixture-generate.log`.
+- An earlier compile attempt printed `undefined: strings` and failed, but its original log was overwritten by the later successful package compile; do not treat it as current passing evidence.
+- Required `go build`, `go vet`, behavioral test suite, and final `gofmt -l` gates have not been run.
+**Reconciliation requests**:
+- PF-27 must resolve the frozen contract gap before PF-06 can prove byte-identical round-trip for all fixture values: `internal/fixtures/types.go` defines `MasterInputFixture.ID`, but PF-02's `internal/model/master.go` defines `GeneralMasterItem.Inputs` as `map[string]any`, and `internal/store/migrations/0001_init.sql` stores `general_master_items.inputs` as JSON `fieldID -> value`. The ID cannot be recovered by `Export`; the representative exported `general-masters.json` currently loses the original nested input ID. Relevant implementation locations: `internal/fixtures/load.go` (`pf06InsertTx`, mapping `FieldCode` to field ID/value), `internal/fixtures/export.go` (reconstruction), and `internal/fixtures/testdata/minimal/general-masters.json` (input ID emitted empty). Impact: assigned acceptance criterion “Export(Load(minimal)) byte-identical to testdata/minimal” is not satisfied for this value, and integrity/round-trip tests are not yet added. Resume only after PF-27 serially reconciles the storage contract or records an explicit accepted representation decision; then update PF-06 implementation/tests within authorized paths and rerun all four plan verification commands.

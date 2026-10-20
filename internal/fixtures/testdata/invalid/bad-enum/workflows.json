@@ -1,0 +1,57 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000021",
+    "code": "WF",
+    "status": "active",
+    "name": "Workflow",
+    "description": "",
+    "notes": "",
+    "folderCode": "ROOT",
+    "categoryCodes": [
+      "CAT"
+    ],
+    "routeCode": "ROUTE",
+    "publicTicket": false,
+    "visibleToManager": "",
+    "visibleToTeamMembers": false,
+    "titleDescription": null,
+    "ticketNumberFormat": null,
+    "overwritable": false,
+    "titleInputMode": "",
+    "titleFormula": null,
+    "allowEditingOfViewers": false,
+    "commentingEnabled": false,
+    "commentingRequiredOnApproval": false,
+    "commentingRequiredOnRejection": false,
+    "commentingRequiredOnDenial": false,
+    "availableToEveryone": false,
+    "availableTeams": null,
+    "sectionList": [],
+    "routeConditions": [
+      {
+        "id": "00000000-0000-4000-8000-000000000022",
+        "conditionType": "always",
+        "combinationType": "",
+        "combinationExpression": "",
+        "routeCode": "ROUTE",
+        "errorMessage": null,
+        "conditionFields": []
+      }
+    ],
+    "ticketNumberingTiming": "",
+    "reportFormats": null,
+    "hiddenOnWorkflowFilterForTicket": false,
+    "hiddenOnWorkflowSelectionScreen": false,
+    "approvalCancellable": false,
+    "reportFileNameFormat": null,
+    "collectEmailOnExternalPublish": false,
+    "notifyGuestOnCompletion": false,
+    "allowCustomSteps": false,
+    "ticketNumberKey": null,
+    "ticketViewers": null,
+    "watchers": null,
+    "excelTemplate": null,
+    "customNumberings": null,
+    "customNumberingSettings": null
+  }
+]

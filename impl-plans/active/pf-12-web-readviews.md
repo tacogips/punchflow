@@ -1,6 +1,6 @@
 # PF-12 Web Read Views Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 2 | **Depends On**: PF-03 | **Plan ID**: PF-12
 **Design Reference**: design-docs/specs/architecture.md#web-ui-web (workflows/routes JSON views; users, org, grades, roles, masters, categories/folders, proxies, audit logs); design-docs/user-qa/pending-punchflow-defaults.md item 10
 **Created**: 2026-10-20
@@ -100,7 +100,7 @@ git status --porcelain web/package.json web/bun.lock   # must print nothing
 
 ## Done Criteria
 
-- [ ] 12 pages implemented; `tree.ts` with tests; typecheck, tests and temp build pass; dependency files unchanged
+- [x] 12 pages implemented; `tree.ts` with tests; typecheck, tests and temp build pass; dependency files unchanged
 
 ## Execution Protocol
 
@@ -108,8 +108,21 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. PF-11 and PF-13 ed
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-12 implementation
+**Intent snapshot**: Recorded before edits in `tmp/punchflow-kickflow-dummy-s460/PF-12/attempt-1/edit-intents.md`; final PF-12 source hashes are in `post-edit-sha256.json`.
+**Tasks Completed**: Implemented all twelve assigned read views, reusable JSON/error/table/tree components, and `buildTree`/`flattenWithDepth` with orphan and cycle handling. Workflows, routes, users, and audit logs consume API pagination headers. Users expose status-appropriate actions; organization hierarchy fetches child teams lazily and displays memberships. Definition JSON and audit data can be inspected.
+**Verification**: PF-12 scoped TypeScript compile passed (`/tmp/pf12-scoped-typecheck-final.log`); tree tests passed 3/3 (`/tmp/pf12-tree-test-final.log`); temporary Vite build passed (`/tmp/pf12-build-final.log`); dependency status check exited 0 with no output. Final-source `bun test` passed 17/17 with zero failures (`/tmp/pf12-test-final.log`); the PF-12 tree suite passed 3/3 (`/tmp/pf12-tree-test-final.log`). Scoped TypeScript compilation of all PF-12 files passed (`/tmp/pf12-scoped-typecheck-final.log`). The full Vite build passed to `${TMPDIR}/pf12-dist` (`/tmp/pf12-build-final.log`). Full `bun run typecheck` still exits 2 (`/tmp/pf12-typecheck-final.log`) due to type errors in `web/src/components/tickets/FormFields.tsx`, `web/src/pages/tickets/TicketDetail.tsx`, `web/src/pages/tickets/TicketEdit.tsx`, and `web/src/pages/tickets/TicketSearch.tsx`; these paths are outside PF-12 ownership. The dependency status check exited 0 and printed nothing. No dependency files were changed.
+**Reconciliation requests**: None for PF-12 implementation. The earlier full-tree typecheck errors in ticket UI files were resolved on the shared tree by their owners; PF-12 reran and passed the required full typecheck, tests, and temporary build. PF-27 still owns serial combined-tree finalization.
+
+### Session: 2026-10-20 PF-12 verification continuation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-12/attempt-2/edit-intent.md`; pre-edit plan hash in `pre-edit-sha256.txt`.
+**Tasks Completed**: Re-ran the full PF-12 verification after the shared tree stabilized. The prior out-of-scope ticket UI type errors and transient ticket/tree test failures no longer reproduce. All twelve read views and tree utilities remain in place. `web/package.json` and `web/bun.lock` match the PF-03 `web/toolchain.json` hashes; their untracked status is inherited from the shared no-commit branch.
+**Verification**: `test -d web/node_modules && echo node_modules-present` exited 0; `cd web && bun run typecheck 2>&1 | tee /tmp/pf12-typecheck.log` exited 0; `cd web && bun test 2>&1 | tee /tmp/pf12-test.log` exited 0 (19 passed, 0 failed); temporary Vite build via `cd web && bun run build --outDir "${TMPDIR:-/tmp}/pf12-dist" --emptyOutDir 2>&1 | tee /tmp/pf12-build.log` exited 0; PF-12 scoped TypeScript check exited 0; `git status --porcelain web/package.json web/bun.lock` exited 0 but prints both as untracked, with digests matching PF-03 (`021bffcb3f794a75011ebcaaaa36c0e18ea11c420ac745f52a94314fd14760ef`, `eee300137f6b77ce73ab6491efd1cda132c13fd3548c394bf5ba7270788beee0`).
+**Resolved Earlier Verification**: Attempt 1 full typecheck exited 2 on ticket UI files outside PF-12 ownership and `bun test` had a transient shared-tree failure. The current full-tree reruns above pass, so these are historical failures resolved by shared-tree stabilization; no out-of-scope files were edited.
+**Downstream**: Independent test-integrity/adversarial review and PF-27 serial integration remain pending downstream workflow steps.
+
+### Session: 2026-10-20 PF-12 adversarial repairs (comm-008112)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-12/attempt-3/edit-intents.md`; source hashes before and after edits are in `pre-edit-sha256.txt` and `post-edit-sha256.txt`.
+**Tasks Completed**: PF12-ADV-001: added `parentIndexFromChildLists` and `parentByPath`; Org now derives parents from lazy child-list cache keys, ignores child responses from a previous chart, and reads member grades from `grades[]`; Classification derives folder parents from `fullName`. Added two pure-helper tests while preserving the original three tests. PF12-ADV-002: Proxies now reads `user`, `proxyUser`, `startsOn`, `endsOn`, and workflow names; WorkflowView uses route condition and route fields plus form-field `title`; Workflows reads the folder object; Grades reads `level`.
+**Verification**: `cd web && bun test src/lib/tree.test.ts` exited 0 (5 passed, 0 failed; `/tmp/pf12-adv1-tree-test.log`); `cd web && bun run typecheck` exited 0 (`/tmp/pf12-adv1-typecheck.log`); `cd web && bun test` exited 0 (25 passed, 0 failed; `/tmp/pf12-adv1-test.log`); temporary Vite build exited 0 (`/tmp/pf12-adv1-build.log`). Stale-field grep checks exited 0 with no matches. `web/package.json` and `web/bun.lock` hashes remain equal to PF-03 evidence: `021bffcb3f794a75011ebcaaaa36c0e18ea11c420ac745f52a94314fd14760ef` and `eee300137f6b77ce73ab6491efd1cda132c13fd3548c394bf5ba7270788beee0`. Post-edit hashes for all eight changed source files are in `attempt-3/post-edit-sha256.txt`.
+**Review disposition**: Both mid findings are implemented and verified on the current source. Independent re-review is pending. Optional low-priority Settings/Category-description display cleanup was not part of the required repairs.

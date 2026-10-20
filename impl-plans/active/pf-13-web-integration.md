@@ -1,6 +1,6 @@
 # PF-13 Web Login, Tokens, Webhooks and Dev Tools Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 2 | **Depends On**: PF-03 | **Plan ID**: PF-13
 **Design Reference**: design-docs/specs/design-auth-admin.md#browser-sessions, #dev-admin-api-internaladmin; design-docs/specs/design-webhooks.md#manual-operations-admin-api-integration-permission; design-docs/specs/architecture.md#web-ui-web
 **Created**: 2026-10-20
@@ -90,7 +90,7 @@ git status --porcelain web/package.json web/bun.lock   # must print nothing
 
 ## Done Criteria
 
-- [ ] 6 pages implemented; components and `webhook-view.ts` with tests; typecheck, tests and temp build pass; dependency files unchanged
+- [x] 6 pages implemented; components and `webhook-view.ts` with tests; typecheck, tests and temp build pass; dependency files unchanged
 
 ## Execution Protocol
 
@@ -98,8 +98,14 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. PF-11 and PF-12 ed
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-13 implementation attempt 1
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-13/attempt-1/edit-intents.md`; source state is on the shared branch `feat/kickflow-dummy-server`.
+**Tasks Completed**: Implemented all six PF-13 pages, three integration components, and `webhook-view.ts` with its tests. Token and service-account secrets are shown only once; webhook CRUD, delivery inspection/resend/fire, tenant settings, fault rules, fixture export/reset, and the Keycloak/local login paths are wired to the accepted API contracts.
+**Verification**: PF-13 targeted TypeScript check passed (`/tmp/pf13-target-typecheck-final.log`, exit 0); PF-13 helper tests passed (3 tests, 0 failures, `/tmp/pf13-target-test-final.log`, exit 0); temp Vite build passed (`/tmp/pf13-build-final.log`, exit 0). Required full-tree typecheck remains blocked by TS1381 in `web/src/components/tickets/Comments.tsx:32`, outside PF-13 ownership (`/tmp/pf13-typecheck-final.log`, exit 2). Required full `bun test` has 3 failures in `web/src/lib/ticket-view.test.ts` (2 assertions) and `web/src/lib/tree.test.ts` (1 assertion), outside PF-13 ownership; 14 passed, 3 failed (`/tmp/pf13-test-final.log`, exit 1). Dependency files were not edited and no `bun install` was run by PF-13; the scoped status check reports the PF-03-created untracked `web/package.json` and `web/bun.lock` in this shared working tree.
+**Reconciliation requests**: Re-run full `bun run typecheck` and `bun test` after concurrent PF-11/PF-12 changes stabilize and their files/tests are reconciled. Do not modify their paths from PF-13.
+
+### Session: 2026-10-20 PF-13 verification continuation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-13/attempt-2/edit-intent-001.md`; the implementation source is unchanged from attempt 1, and the shared PF-11/PF-12 tree has stabilized.
+**Tasks Completed**: Re-ran the full PF-13 verification gates against the current shared tree. The six pages, integration components and webhook view helper remain present. No dependency files were edited; current `web/package.json` and `web/bun.lock` hashes match `web/toolchain.json`/PF-03 evidence. The earlier attempt-1 full-tree failures are resolved on this source. The attempt-1 history above is retained as historical evidence.
+**Verification**: `test -d web/node_modules` exit 0. `cd web && bun run typecheck 2>&1 | tee /tmp/pf13-typecheck-rerun.log` exit 0. `cd web && bun test 2>&1 | tee /tmp/pf13-test-rerun.log` exit 0 (19 passed, 0 failed, 40 assertions across 7 files). `cd web && bun run build --outDir "${TMPDIR:-/tmp}/pf13-dist-rerun" --emptyOutDir 2>&1 | tee /tmp/pf13-build-rerun.log` exit 0 (69 modules transformed; built in 450 ms). `git status --porcelain web/package.json web/bun.lock` reports both as untracked because PF-03 created them on the shared no-commit branch; hashes match the accepted PF-03 values (`021bffcb3f794a75011ebcaaaa36c0e18ea11c420ac745f52a94314fd14760ef`, `eee300137f6b77ce73ab6491efd1cda132c13fd3548c394bf5ba7270788beee0`).
+**Handoff**: Implementation criteria are complete. Formal independent review, integration review and any downstream documentation/index work remain with their later workflow steps; this plan remains In Progress pending those steps.

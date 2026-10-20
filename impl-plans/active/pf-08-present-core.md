@@ -1,6 +1,6 @@
 # PF-08 Present Core Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-08
 **Design Reference**: design-docs/specs/architecture.md#package-layout (`internal/present`); design-docs/references/kickflow-api.md section 4; design-docs/specs/notes.md DIV-03, DIV-05, DIV-08
 **Created**: 2026-10-20
@@ -130,7 +130,7 @@ gofmt -l internal/present internal/store   # prints nothing for this plan's file
 
 ## Done Criteria
 
-- [ ] All contract functions and store read helpers exist; tests assert key sets for every presenter; gofmt clean; files < 1000 lines
+- [x] All contract functions and store read helpers exist; tests assert key sets for every presenter; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 
@@ -138,8 +138,8 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-08 implementation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-08/attempt-1/intent-001.md` through `intent-022.md`; final plan update intent: `tmp/punchflow-kickflow-dummy-s460/PF-08/attempt-1/intent-progress-final.md`.
+**Tasks Completed**: Added schema-shaped non-ticket presenters and `store.Querier` read helpers for users, organization, roles, categories/folders, general masters, definitions/routes, proxies and audit logs. Added exact JSON key-set tests across every presenter, plus seeded SQLite behavior checks for relationships, null/empty values, ordering, timestamp format and not-found handling. No files outside PF-08 writePaths were changed.
+**Verification**: `go build ./...` exit 0 (`/tmp/pf08-build.log`); `go vet ./internal/present/... ./internal/store/...` exit 0 (`/tmp/pf08-vet.log`); `go test ./internal/present/...` exit 0 (`/tmp/pf08-test.log`); `go test ./internal/present/... ./internal/store/...` exit 0 (`/tmp/pf08-store-present-test.log`); `gofmt -l internal/present internal/store` exit 0, no output (`/tmp/pf08-gofmt.log`). All PF-08 Go files are below 1000 lines.
+**Reconciliation requests**: None. Formal independent review and combined-tree integration review remain downstream workflow steps.

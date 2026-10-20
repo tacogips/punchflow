@@ -1,6 +1,6 @@
 # PF-10 API Contracts Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-10
 **Design Reference**: design-docs/specs/design-api-coverage.md#operation-matrix-96-operations-57-paths; design-docs/specs/design-approval-engine.md#engine-surface; design-docs/specs/architecture.md#files
 **Created**: 2026-10-20
@@ -183,8 +183,12 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-10 implementation
+**Intent snapshot**: Create `internal/api/v1` route/API contracts, all matrix-assigned handlers and route tests; create the engine and files contract stubs. No middleware or business behavior.
+**Tasks Completed**: Added the 96-operation route table in matrix order, all 16 handler files, exact engine input/method contracts, and file store surface. Added matrix, specificity, wildcard dispatch, and catch-all route tests. Generated Go source was formatted.
+**Verification**:
+- `go build ./...` — exit 1, `/tmp/pf10-build.log`; compile failures are in PF-04 `internal/httpx/json.go` (`errorsAs`) and PF-08 `internal/store/read_masters.go`, `read_org.go`, `read_proxies.go`, and `read_users.go` (`valid` calls, missing `strings`, `jsonUnmarshal`).
+- `go vet ./internal/api/... ./internal/engine/... ./internal/files/...` — exit 1, `/tmp/pf10-vet.log`; blocked compiling PF-08-owned store reads.
+- `go test ./internal/api/...` — exit 1, `/tmp/pf10-test.log`; blocked compiling PF-08-owned store reads.
+- `gofmt -l internal/api internal/engine internal/files` — exit 0, no output.
+**Reconciliation requests**: PF-04 to make `errorsAs` available in `internal/httpx/json.go`; PF-08 to repair the listed store read files. After those upstream-owned paths compile on the shared tree, rerun all four verification commands and update this criterion only if every required gate passes.

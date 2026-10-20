@@ -31,7 +31,31 @@ run = "mise tasks ls"
 
 [tasks.build]
 description = "Build the binary"
+depends = ["web:build"]
 run = "go build -o punchflow ./cmd/punchflow"
+
+[tasks."web:install"]
+description = "Install web dependencies"
+dir = "web"
+run = "bun install --frozen-lockfile"
+
+[tasks."web:build"]
+description = "Build the web application"
+depends = ["web:install"]
+dir = "web"
+run = "bun run build"
+
+[tasks."web:test"]
+description = "Run web tests"
+depends = ["web:install"]
+dir = "web"
+run = "bun test"
+
+[tasks."web:typecheck"]
+description = "Typecheck the web application"
+depends = ["web:install"]
+dir = "web"
+run = "bun run typecheck"
 
 [tasks."build:homebrew"]
 description = "Build Homebrew release archives"
@@ -53,19 +77,32 @@ scripts/render-homebrew-formula.sh "$1" "../homebrew-tap/Formula/punchflow.rb"
 
 [tasks.run]
 description = "Build and run the application"
-run = "mise run build && ./punchflow"
+run = "mise run build && ./punchflow serve"
+
+[tasks.dev]
+description = "Build and run the local development server"
+depends = ["web:build"]
+run = "go run ./cmd/punchflow serve --enable-local-login --enable-admin-reset"
 
 [tasks.test]
 description = "Run tests"
-run = "go test -v ./..."
+run = "go test ./... && mise run web:test"
 
 [tasks.test-coverage]
 description = "Run tests with coverage"
 run = "go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html"
 
 [tasks.lint]
-description = "Run golangci-lint"
-run = "golangci-lint run ./..."
+description = "Lint and typecheck the project"
+run = "golangci-lint run ./... && go vet ./... && mise run web:typecheck"
+
+[tasks."keycloak:up"]
+description = "Start local Keycloak"
+run = "docker compose -f deploy/keycloak/docker-compose.yml up -d"
+
+[tasks."keycloak:down"]
+description = "Stop local Keycloak"
+run = "docker compose -f deploy/keycloak/docker-compose.yml down"
 
 [tasks.fmt]
 description = "Format code"

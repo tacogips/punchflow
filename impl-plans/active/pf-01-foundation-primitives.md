@@ -1,6 +1,6 @@
 # PF-01 Foundation Primitives Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 1 | **Depends On**: - | **Plan ID**: PF-01
 **Design Reference**: design-docs/specs/architecture.md#package-layout, #developer-tooling; design-docs/specs/design-api-coverage.md#cross-cutting-v1-conventions; design-docs/specs/notes.md INF-33
 **Created**: 2026-10-20
@@ -153,10 +153,10 @@ mise tasks ls 2>&1 | tee /tmp/pf01-mise.log   # must list web:install web:build 
 
 ## Done Criteria
 
-- [ ] All files in the table exist; `cmd/punchflow/.gitkeep` removed
-- [ ] Contract symbols exist with the exact names/signatures above
-- [ ] All listed tests exist and pass; gofmt clean
-- [ ] `mise tasks ls` shows the new tasks; existing tasks still present
+- [x] All files in the table exist; `cmd/punchflow/.gitkeep` removed
+- [x] Contract symbols exist with the exact names/signatures above
+- [x] All listed tests exist and pass; gofmt clean
+- [x] `mise tasks ls` shows the new tasks; existing tasks still present
 
 ## Execution Protocol
 
@@ -164,8 +164,13 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (ownership, fresh r
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
+### Session: 2026-10-20 PF-01 implementation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-01/attempt-1/intent.md`; node-boundary snapshot copied from `tmp/riela-fanout/40C5086C-DF26-43B5-86A2-D15F25DEC90E/AC5288BF-5149-4013-AC12-CC12439FCDBF.json`.
+**Tasks Completed**: Implemented the stdlib JST clock/time helpers, kickflow error constructors and response writer, embedded version, CLI skeleton, signal-aware entry point, embedded filesystem anchors, mise tasks, and gitignore entries. Added focused tests. `kferr.Write` preserves a non-nil empty validation error map as `"errors":{}`. Removed `cmd/punchflow/.gitkeep`. Preserved concurrent wave-1 changes in other owners' files.
+**Verification**: `go build ./...` exit 0 (`/tmp/pf01-build-final.log`); `go vet ./internal/kftime/... ./internal/kferr/... ./internal/build/... ./internal/cli/... ./cmd/... .` exit 0 (`/tmp/pf01-vet-final.log`); `go test ./internal/kftime/... ./internal/kferr/... ./internal/build/... ./internal/cli/... .` exit 0 (`/tmp/pf01-test-final.log`); `go test -count=1 -v ./internal/kftime/... ./internal/kferr/... ./internal/build/... ./internal/cli/... .` exit 0, 13 passing top-level tests (`/tmp/pf01-test-verbose-final.log`); `gofmt -l internal/kftime internal/kferr internal/build internal/cli cmd embed.go embed_test.go` exit 0 with no output (`/tmp/pf01-gofmt-final.log`); `mise tasks ls` exit 0 with all required tasks and existing tasks listed (`/tmp/pf01-mise-final.log`). Post-modify agent `pf01_post_modify_check` independently repeated build, scoped vet, tests, gofmt, and task-list checks successfully; its logs are `/tmp/pf01-postcheck-build.log`, `/tmp/pf01-postcheck-vet.log`, `/tmp/pf01-postcheck-test.log`, and `/tmp/pf01-postcheck-mise.log`.
 **Reconciliation requests**: -
+
+### Session: 2026-10-20 PF-01 current-source verification
+**Tasks Completed**: Re-verified the assigned PF-01 contract on the shared current source tree; no source edits were needed. Preserved other plans' concurrent changes.
+**Verification**: `go build ./...` exit 0 (`/tmp/pf01-build-current.log`); scoped `go vet` exit 0 (`/tmp/pf01-vet-current.log`); uncached verbose scoped tests exit 0, 13/13 top-level tests passed (`/tmp/pf01-test-current.log`); scoped `gofmt -l` exit 0 with no output (`/tmp/pf01-gofmt-current.log`); `mise tasks ls` exit 0 with all PF-01 required tasks present (`/tmp/pf01-mise-current.log`).
+**Per-edit intent**: `tmp/punchflow-kickflow-dummy-s460/PF-01/attempt-2/edit-intent.md`; pre-edit plan hash: `tmp/punchflow-kickflow-dummy-s460/PF-01/attempt-2/plan-before-sha256.txt`.

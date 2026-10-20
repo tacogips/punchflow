@@ -1,6 +1,6 @@
 # PF-07 Default Fixtures and Keycloak Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-07
 **Design Reference**: design-docs/specs/architecture.md#fixtures (default content); design-docs/specs/design-auth-admin.md#keycloak-dev-deployment-deploykeycloak; design-docs/specs/design-approval-engine.md (step types, branching)
 **Created**: 2026-10-20
@@ -107,8 +107,8 @@ docker compose -f deploy/keycloak/docker-compose.yml config -q 2>&1 | tee /tmp/p
 
 ## Done Criteria
 
-- [ ] All 14 fixture files and both Keycloak files exist with the pinned content
-- [ ] Root package tests pass; JSON valid; compose config valid or explicitly skipped (no docker)
+- [x] All 14 fixture files and both Keycloak files exist with the pinned content
+- [x] Root package tests pass; JSON valid; compose config valid or explicitly skipped (no docker)
 
 ## Execution Protocol
 
@@ -116,8 +116,27 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20
+**Intent snapshot**: Created the 14 pinned `fixtures/default/*.json` files, Keycloak compose and realm import, and `fixtures_default_test.go` for strict fixture decoding, persona/definition invariants, and realm-to-fixture/PKCE agreement. No files outside PF-07 writePaths were changed.
+**Tasks Completed**: Authored the fixture set and Keycloak setup. Sorted fixture collections canonically while preserving ordered workflow sections and route steps. Pinned Keycloak image `quay.io/keycloak/keycloak:26.8.1`, the upstream release current on 2026-10-20 (official 26.8.1 release, 2026-10-13).
+**Verification**:
+- `go vet .` exit 0, `/tmp/pf07-vet.log`.
+- `gofmt -l fixtures_default_test.go` exit 0, no output, `/tmp/pf07-gofmt.log`.
+- `python3 -I -m json.tool deploy/keycloak/realm-punchflow.json` exit 0, `realm-json-ok`, `/tmp/pf07-json.log`.
+- `docker compose -f deploy/keycloak/docker-compose.yml config -q` exit 0, `/tmp/pf07-compose.log`.
+- `go build ./...` exit 1, `/tmp/pf07-build.log`; current shared tree has compile errors in PF-06-owned `internal/store/read_masters.go`, `internal/store/read_proxies.go`, and `internal/store/webhooks.go`.
+- `go test .` exit 1, `/tmp/pf07-test.log`; compiling root tests now reaches the same PF-06 `internal/store` errors through `internal/fixtures`. An earlier `go test .` passed before those PF-06 files appeared and is not treated as current-source evidence.
+**Reconciliation requests**: PF-06/PF-27: repair the current `internal/store` compile errors, then rerun `go test .` and `go build ./...` against the final shared tree. PF-07-owned source is complete; no out-of-scope files were edited.
+
+### Session: 2026-10-20 (verification resolution)
+**Tasks Completed**: Corrected duplicate UUIDs for the 2027 company team and the expense/purchase amount fields. All 121 fixture IDs are now unique. The PF-06 compile errors observed during a moving-tree run did not reproduce once that shared work stabilized; no PF-07 repair was needed. The plan is implementation-complete; PF-27 owns later combined-tree reconciliation and active-to-completed plan archiving/index maintenance.
+**Verification**:
+- `go build ./...` exit 0, `/tmp/pf07-build.log`.
+- `go vet .` exit 0, `/tmp/pf07-vet.log`.
+- `go test -count=1 -v .` exit 0; 4 top-level tests and 14 strict-decode subtests passed (18 total, 0 failures), `/tmp/pf07-test.log`.
+- `gofmt -l fixtures_default_test.go` exit 0, no output, `/tmp/pf07-gofmt.log`.
+- `python3 -I -m json.tool deploy/keycloak/realm-punchflow.json` exit 0, `/tmp/pf07-json.log`.
+- `docker compose -f deploy/keycloak/docker-compose.yml config -q` exit 0, `/tmp/pf07-compose.log`.
+- Fixture content check: 14 JSON files valid, 13 realm user e-mails match fixture users, 121 unique IDs, and route approval constraints hold, `/tmp/pf07-content-check.log`.
+**Earlier attempts**: transient shared-tree `go build ./...` and `go test .` failures and the duplicate-ID assertion are preserved under `tmp/punchflow-kickflow-dummy-s460/PF-07/attempt-1/prior-*-failure.log`; all were resolved on current source by shared-tree stabilization or the UUID correction above.
+**Reconciliation requests**: None for PF-07. Final plan archiving and shared index updates remain with PF-27.

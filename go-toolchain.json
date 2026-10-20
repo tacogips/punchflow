@@ -1,0 +1,39 @@
+{
+  "goVersion": "go version go1.25.4 darwin/arm64",
+  "commands": [
+    {
+      "cmd": "go get modernc.org/sqlite@v1.59.0",
+      "exitCode": 0,
+      "resolved": "modernc.org/sqlite@v1.59.0"
+    },
+    {
+      "cmd": "go get github.com/coreos/go-oidc/v3/oidc",
+      "exitCode": 0,
+      "resolved": "github.com/coreos/go-oidc/v3@v3.21.0"
+    },
+    {
+      "cmd": "go get golang.org/x/oauth2@v0.36.0",
+      "exitCode": 0,
+      "resolved": "golang.org/x/oauth2@v0.36.0"
+    },
+    {
+      "cmd": "go get github.com/santhosh-tekuri/jsonschema/v6",
+      "exitCode": 0,
+      "resolved": "github.com/santhosh-tekuri/jsonschema/v6@v6.0.3"
+    },
+    {
+      "cmd": "go get gopkg.in/yaml.v3",
+      "exitCode": 0,
+      "resolved": "gopkg.in/yaml.v3@v3.0.1"
+    }
+  ],
+  "modVerify": {
+    "cmd": "go mod verify",
+    "exitCode": 0,
+    "output": "all modules verified"
+  },
+  "notes": [
+    "modernc.org/sqlite v1.60.1 and golang.org/x/oauth2 v0.37.0 require Go 1.26; selected latest compatible tags v1.59.0 and v0.36.0 to preserve the accepted Go 1.25.4 baseline."
+  ],
+  "recordedAt": "2026-10-20T09:59:24.477619Z"
+}

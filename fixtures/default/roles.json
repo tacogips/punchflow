@@ -1,0 +1,114 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000029",
+    "name": "Super Admin",
+    "editable": false,
+    "permissionList": [
+      {
+        "permission": "audit_read"
+      },
+      {
+        "permission": "file_read"
+      },
+      {
+        "permission": "file_write"
+      },
+      {
+        "permission": "integration"
+      },
+      {
+        "permission": "master"
+      },
+      {
+        "permission": "master_read"
+      },
+      {
+        "permission": "org_read"
+      },
+      {
+        "permission": "org_write"
+      },
+      {
+        "permission": "proxy_read"
+      },
+      {
+        "permission": "proxy_write"
+      },
+      {
+        "permission": "role_read"
+      },
+      {
+        "permission": "role_write"
+      },
+      {
+        "permission": "ticket_admin"
+      },
+      {
+        "permission": "ticket_read"
+      },
+      {
+        "permission": "ticket_write"
+      },
+      {
+        "permission": "user_read"
+      },
+      {
+        "permission": "user_write"
+      },
+      {
+        "permission": "workflow_read"
+      },
+      {
+        "permission": "workflow_write"
+      }
+    ],
+    "memberCodes": [
+      "admin"
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000030",
+    "name": "Ticket Admin",
+    "editable": true,
+    "permissionList": [
+      {
+        "permission": "ticket_read"
+      },
+      {
+        "permission": "ticket_write"
+      }
+    ],
+    "memberCodes": [
+      "hr-manager"
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000031",
+    "name": "Master Editor",
+    "editable": true,
+    "permissionList": [
+      {
+        "permission": "master"
+      },
+      {
+        "permission": "master_read"
+      }
+    ],
+    "memberCodes": [
+      "accountant"
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000032",
+    "name": "Integration Admin",
+    "editable": true,
+    "permissionList": [
+      {
+        "permission": "integration"
+      }
+    ],
+    "memberCodes": [
+      "eng-manager"
+    ]
+  }
+]

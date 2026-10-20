@@ -1,0 +1,83 @@
+package present
+
+import (
+	"context"
+	"punchflow/internal/model"
+	"punchflow/internal/store"
+)
+
+func pf08Sections(ctx context.Context, q store.Querier, sections []model.WorkflowSection) ([]any, error) {
+	out := []any{}
+	for _, s := range sections {
+		fields := []any{}
+		for _, f := range s.FormFields {
+			fields = append(fields, pf08FormField(ctx, q, f))
+		}
+		slips := []any{}
+		for _, f := range s.SlipFields {
+			slips = append(slips, pf08SlipField(f))
+		}
+		cfs := []any{}
+		for _, f := range s.ConditionFields {
+			cfs = append(cfs, pf08WorkflowConditionField(ctx, q, f))
+		}
+		out = append(out, map[string]any{"id": s.ID, "title": s.Title, "sectionType": s.SectionType, "description": nil, "viewRestriction": false, "sectionViewers": []any{}, "formFields": fields, "slipFields": slips, "conditionFields": cfs})
+	}
+	return out, nil
+}
+func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[string]any {
+	allowed := f.AllowedExtensions
+	if allowed == nil {
+		allowed = []string{}
+	}
+	statuses := f.AllowedTicketStatus
+	if statuses == nil {
+		statuses = []string{}
+	}
+	opts := f.Options
+	if opts == nil {
+		opts = []string{}
+	}
+	out := map[string]any{"id": f.ID, "title": f.Title, "description": f.Description, "fieldType": f.FieldType, "required": f.Required, "approver": f.Approver, "options": opts, "code": f.Code, "size": f.Size, "regexpFormat": f.RegexpFormat, "formula": f.Formula, "defaultValue": f.DefaultValue, "minValue": f.MinValue, "maxValue": f.MaxValue, "minLength": f.MinLength, "maxLength": f.MaxLength, "decimalDigit": f.DecimalDigit, "delimited": f.Delimited, "prefix": f.Prefix, "suffix": f.Suffix, "multiple": f.Multiple, "orientation": f.Orientation, "author": f.Author, "hidden": f.Hidden, "readonlyOnUi": f.ReadonlyOnUI, "allowedExtensions": allowed, "autoLink": f.AutoLink, "useTodayForDefaultValue": f.UseTodayForDefaultValue, "allowedTicketStatus": statuses}
+	if f.GeneralMasterCode != "" {
+		if id, e := store.ResolveID(ctx, q, "general_masters", f.GeneralMasterCode); e == nil {
+			if m, e := GeneralMaster(ctx, q, id); e == nil {
+				out["generalMaster"] = m
+			} else {
+				out["generalMaster"] = nil
+			}
+		} else {
+			out["generalMaster"] = nil
+		}
+		out["defaultGeneralMasterItem"] = nil
+	} else {
+		out["generalMaster"] = nil
+		out["defaultGeneralMasterItem"] = nil
+	}
+	out["externalApiSetting"] = nil
+	out["kintoneAppSetting"] = nil
+	out["climberCloudSetting"] = nil
+	out["generalMasterSearchFilters"] = []any{}
+	out["approverEditRestriction"] = nil
+	out["approverEditSetting"] = map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}
+	out["customValidations"] = []any{}
+	out["ticketCopySetting"] = nil
+	out["selectableTicketWorkflows"] = []any{}
+	return out
+}
+func pf08SlipField(f model.SlipField) map[string]any {
+	allowed := f.AllowedExtensions
+	if allowed == nil {
+		allowed = []string{}
+	}
+	statuses := f.AllowedTicketStatus
+	if statuses == nil {
+		statuses = []string{}
+	}
+	opts := f.Options
+	if opts == nil {
+		opts = []string{}
+	}
+	out := map[string]any{"id": f.ID, "fieldType": f.FieldType, "code": f.Code, "title": f.Title, "required": f.Required, "showTotal": f.ShowTotal, "options": opts, "regexpFormat": f.RegexpFormat, "formula": f.Formula, "maxValue": f.MaxValue, "minValue": f.MinValue, "defaultValue": f.DefaultValue, "decimalDigit": f.DecimalDigit, "delimited": f.Delimited, "allowedExtensions": allowed, "prefix": f.Prefix, "suffix": f.Suffix, "approver": f.Approver, "author": f.Author, "hidden": f.Hidden, "readonlyOnUi": f.ReadonlyOnUI, "minLength": f.MinLength, "maxLength": f.MaxLength, "multiple": f.Multiple, "autoLink": f.AutoLink, "useTodayForDefaultValue": f.UseTodayForDefaultValue, "allowedTicketStatus": statuses, "generalMaster": nil, "defaultGeneralMasterItem": nil, "generalMasterSearchFilters": []any{}, "approverEditRestriction": nil, "approverEditSetting": map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}, "customValidations": []any{}, "selectableTicketWorkflows": []any{}}
+	return out
+}

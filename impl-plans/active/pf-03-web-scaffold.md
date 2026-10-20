@@ -1,6 +1,6 @@
 # PF-03 Web Scaffold Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 1 | **Depends On**: - | **Plan ID**: PF-03
 **Design Reference**: design-docs/specs/architecture.md#web-ui-web, #developer-tooling; design-docs/specs/design-auth-admin.md#browser-sessions
 **Created**: 2026-10-20
@@ -151,10 +151,10 @@ ls web/package-lock.json web/yarn.lock web/pnpm-lock.yaml 2>&1                  
 
 ## Done Criteria
 
-- [ ] All files listed exist; every page stub compiles; `bun.lock` present and frozen install passes
-- [ ] typecheck, tests and temp-dir build pass
-- [ ] No non-bun lockfiles
-- [ ] `web/toolchain.json` records bun version, install commands with exit codes, the bun.lock sha256 and resolved package versions
+- [x] All files listed exist; every page stub compiles; `bun.lock` present and frozen install passes
+- [x] typecheck, tests and temp-dir build pass
+- [x] No non-bun lockfiles
+- [x] `web/toolchain.json` records bun version, install commands with exit codes, the bun.lock sha256 and resolved package versions
 
 ## Execution Protocol
 
@@ -162,8 +162,17 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. This plan owns `we
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-03 implementation
+**Intent snapshot**: Create only the PF-03 web scaffold contract: pinned Bun/Solid/Vite setup, SPA routes and session bootstrap, API/admin types and client, pure TypeScript formatting/link/form helpers with tests, 22 page stubs, and the authored toolchain audit manifest. The pre-node snapshot recorded all declared PF-03 paths absent; intent details are preserved at `tmp/punchflow-kickflow-dummy-s460/PF-03/attempt-1/edit-intents.md`.
+**Tasks Completed**: Created all 41 declared web files plus this plan, including the Bun lockfile, type definitions, API client, libraries and tests, 22 compiling page stubs, routing shell, and toolchain manifest with 130 resolved package versions. No Go files, `web/dist/`, or non-bun lockfiles were created. PF-03 acceptance criteria are complete.
+**Verification**:
+- `cd web && bun install 2>&1 | tee /tmp/pf03-install.log` — exit 0 (the first shell wrapper used zsh's reserved `status` variable after Bun had completed; rerun completed cleanly).
+- `cd web && bun install --frozen-lockfile 2>&1 | tee /tmp/pf03-frozen.log` — exit 0.
+- `cd web && bun run typecheck 2>&1 | tee /tmp/pf03-typecheck.log` — exit 0.
+- `cd web && bun test 2>&1 | tee /tmp/pf03-test.log` — exit 0; 6 tests passed, 0 failed. An earlier test run exposed and then resolved a relative-URL issue in its fetch mock.
+- `cd web && bun run build --outDir "${TMPDIR:-/tmp}/pf03-dist" --emptyOutDir 2>&1 | tee /tmp/pf03-build.log` — exit 0; temporary `index.html` produced. No `web/dist/` writes.
+- Declared-file, temporary build output and non-bun lockfile check — exit 0; all 42 authored files exist and `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` are absent.
+- Toolchain manifest digest check — exit 0; bun 1.4.3, lock sha256 `eee300137f6b77ce73ab6491efd1cda132c13fd3548c394bf5ba7270788beee0`, 130 resolved package versions, and install exits 0/0.
+- Earlier typecheck runs exited 2 and were corrected; final-source typecheck above passes. All initial failures and edit intentions are retained in the attempt evidence.
+**Post-edit SHA-256 manifest**: `tmp/punchflow-kickflow-dummy-s460/PF-03/attempt-1/post-edit-sha256.txt`.
+**Reconciliation requests**: None. PF-27 owns plan archival/index reconciliation and serial final integration; formal review remains downstream workflow work.

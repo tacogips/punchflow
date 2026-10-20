@@ -1,6 +1,6 @@
 # PF-04 httpx Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 2 | **Depends On**: PF-01 | **Plan ID**: PF-04
 **Design Reference**: design-docs/specs/design-api-coverage.md#cross-cutting-v1-conventions, #error-code-catalog; design-docs/specs/notes.md INF-01, INF-02, INF-03, INF-07, INF-32, INF-33, INF-38, INF-39; design-docs/specs/design-auth-admin.md (faults)
 **Created**: 2026-10-20
@@ -126,7 +126,7 @@ gofmt -l internal/httpx   # prints nothing
 
 ## Done Criteria
 
-- [ ] Every contract symbol exists; every listed test passes with `-race`; gofmt clean; files < 1000 lines
+- [x] Every contract symbol exists; every listed test passes with `-race`; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 
@@ -134,8 +134,43 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-04 implementation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-04/attempt-1/intent-001.md` records implementation of the six httpx helpers and tests; `intent-002.md` records this plan update; `intent-003.md` records formatting and the test assertion correction; `intent-004.md` records the explicit zero-time rate bucket; `intent-005.md` records this progress update; `intent-007.md` records final verification and completion tracking.
+**Tasks Completed**: Added JSON encode/decode and request limits, pagination/sort helpers, query parsing, middleware, IP fixed-window rate limiting, fault injection, and six focused test files. All PF-04 source files are below 1000 lines.
+**Verification**:
+- `go build ./... 2>&1 | tee /tmp/pf04-build.log` — exit 1. Current shared tree has errors in PF-02-owned `internal/store/read_masters.go`, `internal/store/read_proxies.go`, and `internal/store/webhooks.go`; no PF-04 file is named in the failures.
+- `go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-vet.log` — exit 0.
+- `go test -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-test.log` — exit 0.
+- `go test -race -v ./internal/httpx/... 2>&1 | tee /tmp/pf04-test-verbose.log` — exit 0; 11 top-level tests passed, including 7 JSON subtests.
+- `gofmt -l internal/httpx` (captured in `/tmp/pf04-gofmt.log`) — exit 0, no output.
+- `wc -l internal/httpx/*.go` — largest file `pagination.go`, 110 lines.
+- SHA-256 hashes of the 12 implementation/test files are recorded in `tmp/punchflow-kickflow-dummy-s460/PF-04/attempt-1/final-source-sha256.txt`.
+- Final combined-tree reruns: `go build ./... 2>&1 | tee /tmp/pf04-final-build.log` — exit 0; `go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-final-vet.log` — exit 0; `go test -race -count=1 -v ./internal/httpx/... 2>&1 | tee /tmp/pf04-final-test.log` — exit 0, 11 top-level tests passed; `gofmt -l internal/httpx` — exit 0, no output. Explicit `EXIT_STATUS=0` is appended to each log.
+- Independent post-modification check also passed build, vet, race tests, and gofmt; logs: `/tmp/pf04-postcheck-build.log`, `/tmp/pf04-postcheck-vet.log`, `/tmp/pf04-postcheck-test.log`, `/tmp/pf04-postcheck-gofmt.log`.
+**Reconciliation requests**: The earlier moving-tree build failure listed PF-02-owned `internal/store/read_masters.go`, `internal/store/read_proxies.go`, and `internal/store/webhooks.go`; final combined-tree build now passes, so no PF-04 reconciliation request remains. Formal independent review and downstream final integration remain in later workflow steps.
+
+Implementation Done Criteria are complete. PF-27 owns final combined-tree reconciliation beyond these current passing gates and plan archiving.
+
+### Session: 2026-10-20 PF-04 Step 6 revalidation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-04/attempt-2/intent-001.md` records appending this revalidation session to this plan only.
+**Tasks Completed**: Rechecked PF-04 against its accepted design and contract. The pre-step fanout snapshot matches all 13 declared PF-04 files byte-for-byte; the read-only contract audit found no mismatches. No Go source or test changes were needed. All source files remain below 1000 lines; the largest is `pagination.go` at 110 lines.
+**Verification** (current source fingerprint unchanged across the four gates; full logs end with explicit exit status):
+- `go build ./... 2>&1 | tee /tmp/pf04-build.log` — exit 0; `/tmp/pf04-build.log`.
+- `go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-vet.log` — exit 0; `/tmp/pf04-vet.log`.
+- `go test -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-test.log` — exit 0; `/tmp/pf04-test.log`; Go reported the package result as cached and did not provide test/assertion counts.
+- `go test -race -count=1 -v ./internal/httpx/...` — exit 0; `/tmp/pf04-test-verbose.log`; 19 top-level/subtest assertions passed, 0 failed. An initial output capture is retained at `/tmp/pf04-test-verbose-attempt1.log`; zsh rejected the wrapper's read-only variable name after the test run, so that incomplete capture is superseded by the complete log with explicit `EXIT_STATUS=0`.
+- `gofmt -l internal/httpx` — exit 0 with no files listed; `/tmp/pf04-gofmt.log`.
+- Shared-tree fingerprint before and after verification: 483 files, SHA-256 `cdb4b2c62e5ada5c0eab024a9f9821774995e45cdf4472ab345a151f10888fe3`.
+**Reconciliation requests**: None. Formal independent review and downstream final integration remain owned by later workflow steps.
+
+### Session: 2026-10-20 PF-04 Step 6 current-source revalidation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s460/PF-04/attempt-3/intent-001.md` records this plan-only progress append and its exact intended content.
+**Tasks Completed**: Confirmed PF-01 is accepted for this plan, compared all 13 PF-04 files against `fanoutChangeEvidencePath` (all SHA-256 hashes match), and rechecked the assigned contract. No Go source or test files changed. The largest PF-04 Go file remains `pagination.go` at 110 lines.
+**Verification** (corrected reruns are complete and include `EXIT_STATUS=0`):
+- `go build ./... 2>&1 | tee /tmp/pf04-step6-build-rerun.log` — exit 0.
+- `go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-step6-vet-rerun.log` — exit 0.
+- `go test -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-step6-test-rerun.log` — exit 0; package output was cached, so no test counts were reported.
+- `go test -race -count=1 -v ./internal/httpx/... 2>&1 | tee /tmp/pf04-step6-test-verbose-rerun.log` — exit 0; 19 top-level/subtest assertions passed and 0 failed.
+- `gofmt -l internal/httpx 2>&1 | tee /tmp/pf04-step6-gofmt-rerun.log` — exit 0; no files listed.
+- Initial wrapper attempts at `/tmp/pf04-step6-build.log`, `/tmp/pf04-step6-vet.log`, `/tmp/pf04-step6-test.log`, `/tmp/pf04-step6-test-verbose.log`, and `/tmp/pf04-step6-gofmt.log` ended with zsh's `status` read-only-variable error after invoking the checks. These incomplete captures are superseded by the corrected reruns above; no underlying check failed.
+**Reconciliation requests**: None. Formal independent review, final shared-tree integration, and plan archiving remain owned by later workflow steps.

@@ -1,0 +1,43 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000013",
+    "code": "MASTER",
+    "name": "Master",
+    "defaultSortBy": "code",
+    "initialDisplayCode": false,
+    "initialDisplayCreatedAt": false,
+    "initialDisplayDescription": false,
+    "fields": [
+      {
+        "id": "00000000-0000-4000-8000-000000000014",
+        "code": "VALUE",
+        "title": "Value",
+        "fieldType": "text",
+        "required": false,
+        "fieldOrder": 0,
+        "visible": true,
+        "initialDisplay": false
+      }
+    ],
+    "items": [
+      {
+        "id": "00000000-0000-4000-8000-000000000015",
+        "code": "ITEM1",
+        "name": "One",
+        "inputs": [
+          {
+            "id": "",
+            "fieldCode": "VALUE",
+            "value": "one"
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000017",
+        "code": "ITEM2",
+        "name": "Two",
+        "inputs": null
+      }
+    ]
+  }
+]

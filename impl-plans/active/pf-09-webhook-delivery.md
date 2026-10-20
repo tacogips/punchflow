@@ -1,6 +1,6 @@
 # PF-09 Webhook Delivery Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-09
 **Design Reference**: design-docs/specs/design-webhooks.md (all sections); design-docs/specs/notes.md INF-08, INF-09, INF-10, INF-33
 **Created**: 2026-10-20
@@ -117,7 +117,7 @@ gofmt -l internal/webhook internal/store/webhooks.go   # prints nothing
 
 ## Done Criteria
 
-- [ ] Contract symbols exist (including the `NewPayloads`/`Build` stub); all tests pass with `-race`; gofmt clean
+- [x] Contract symbols exist (including the `NewPayloads`/`Build` stub); all tests pass with `-race`; gofmt clean
 
 ## Execution Protocol
 
@@ -125,8 +125,14 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-09 implementation
+**Intent snapshot**: Created `internal/store/webhooks.go` for webhook CRUD/outbox/attempt operations; created `internal/webhook/service.go`, `dispatcher.go`, `sign.go`, `backoff.go`, and the PF-15 seam `payload.go`; added `sign_test.go`, `service_test.go`, and `dispatcher_test.go`. Pre-edit hashes and per-edit intentions are preserved under `tmp/punchflow-kickflow-dummy-s460/PF-09/attempt-1/`.
+**Tasks Completed**: Implemented filter-based transactional enqueue and targeted enqueue, HMAC signing and verification, capped retry calculation, persisted outbox polling, HTTP delivery with no redirects by default, attempt records, retry exhaustion, success reset, 7-day auto-disable, manual resend, and payload builder stub. Added tests for signature vector, missing-secret header omission, event/workflow/disabled filters, 500/500/200 retry and delay progression, 11-attempt exhaustion, 201/302/404 failure, timeout, 7-day auto-disable, resend with current-secret signature, persisted startup, cancellation, and backoff.
+**Verification**:
+- `go build ./...` exited 0; complete log `/tmp/pf09-build-final.log`.
+- `go vet ./internal/webhook/... ./internal/store/...` exited 0; complete log `/tmp/pf09-vet.log`.
+- `go test -race ./internal/webhook/...` exited 0; complete log `/tmp/pf09-test-final.log`; all package tests passed.
+- `go test -race -count=1 -v ./internal/webhook/...` exited 0; 12 top-level tests and 3 non-200 subtests passed; complete log `/tmp/pf09-test-verbose.log`.
+- `gofmt -l internal/webhook internal/store/webhooks.go` exited 0 and printed no files; complete log `/tmp/pf09-gofmt.log`.
+- Earlier verification attempt: the initial `go test -race ./internal/webhook/...` exited 1 on transient shared-tree compile errors in `internal/store/read_masters.go` and `internal/store/read_proxies.go`, outside PF-09 paths; complete log `/tmp/pf09-test.log`. The initial `go build ./...` exited 0 (`/tmp/pf09-build.log`). After the sibling compile errors resolved, an intermediate race run exposed a test cancellation omission in `TestWebhookPersistAcrossRestart`; the test was corrected and the final uncached verbose race run passed.
+**Reconciliation requests**: None. Formal independent review and serial combined-tree integration remain downstream workflow steps.

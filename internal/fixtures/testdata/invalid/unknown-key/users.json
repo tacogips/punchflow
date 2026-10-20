@@ -1,0 +1,33 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000004",
+    "code": "U1",
+    "email": "admin@example.test",
+    "firstName": "Ada",
+    "lastName": "Admin",
+    "status": "active",
+    "locale": "ja",
+    "userType": "human",
+    "unexpectedKey": true
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000005",
+    "code": "U2",
+    "email": "user@example.test",
+    "firstName": "Sam",
+    "lastName": "User",
+    "status": "active",
+    "locale": "ja",
+    "userType": "human"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000006",
+    "code": "U3",
+    "email": "invited@example.test",
+    "firstName": "Ivy",
+    "lastName": "Invite",
+    "status": "invited",
+    "locale": "ja",
+    "userType": "human"
+  }
+]

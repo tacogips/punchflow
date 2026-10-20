@@ -1,6 +1,6 @@
 # PF-05 Auth Core Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-05
 **Design Reference**: design-docs/specs/design-auth-admin.md#token-authentication, #browser-sessions, #local-login-fallback-dev-only; design-docs/specs/notes.md INF-04, INF-05, INF-06, INF-31, INF-42; design-docs/specs/design-api-coverage.md (middleware order, tenant modes)
 **Created**: 2026-10-20
@@ -134,8 +134,8 @@ gofmt -l internal/auth internal/store/auth.go   # prints nothing
 
 ## Done Criteria
 
-- [ ] Contract symbols and store functions exist with the exact names; `oidc.go` stub compiles and returns nil OIDC for an empty issuer
-- [ ] All tests pass with `-race`; gofmt clean
+- [x] Contract symbols and store functions exist with the exact names; `oidc.go` stub compiles and returns nil OIDC for an empty issuer
+- [x] All tests pass with `-race`; gofmt clean
 
 ## Execution Protocol
 
@@ -143,8 +143,31 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-05 implementation
+**Intent snapshot**: Added `internal/store/auth.go` with the declared token, user, permission, invitation, session, tenant and OIDC-state store contracts. Added PF-05 auth principal, token/session creation, middleware, browser session/local-login handlers, and OIDC stubs under `internal/auth/`, plus focused SQLite-backed tests. No paths outside PF-05 `writePaths` were edited; `go.mod` and `go.sum` remain owned by PF-02.
+**Tasks Completed**: Implemented Bearer PAT/SAT resolution, SAT caller impersonation, session-cookie auth and CSRF checks, account/tenant/IP restrictions, daily last-used updates, role-permission union, local login/logout/session handlers, invited-user activation, and the empty-issuer OIDC seam. Tests cover token format/hash-only persistence, principal permission checks, PAT/SAT behavior, account and tenant errors, allowlist, CSRF, idle/absolute expiry, daily update behavior, local login/cookies/logout, invitation activation, permission union, and disabled OIDC.
+**Verification**:
+- `go build ./...` exit 0; complete log `/tmp/pf05-build.log`.
+- `go vet ./internal/auth/... ./internal/store/...` exit 0; complete log `/tmp/pf05-vet.log`.
+- `go test -race ./internal/auth/...` exit 0; complete log `/tmp/pf05-test.log`.
+- `go test -race -count=1 -v ./internal/auth/...` exit 0; 16 PASS records including subtests, 0 failures; complete log `/tmp/pf05-test-uncached.log`.
+- `gofmt -l internal/auth internal/store/auth.go` exit 0 with no output; complete log `/tmp/pf05-gofmt.log`.
+- `TakeOIDCState` consumes state with one SQLite `DELETE ... RETURNING` statement; its regression test confirms the second consumption returns `store.ErrNotFound`.
+- Required post-modification check agent reran all four commands after the atomic-consumption correction; all exit statuses were 0, logs `/tmp/pf05-postmodify-attempt2-{build,vet,test,gofmt}.log` (test result cached; the uncached verbose run above independently passed on current source).
+- Pre-compact-JSON source hashes for all 11 PF-05 Go files are preserved in `tmp/punchflow-kickflow-dummy-s460/PF-05/attempt-1/source-final.sha256`; final source identity is in the later post-correction manifest below.
+- Earlier shared-tree build errors in `internal/fixtures/load.go:295`, `internal/present/master.go:6`, and `internal/present/role.go:5` cleared before final successful build. Earlier test-fixture expectation failures were corrected; reproduced outputs are preserved in `tmp/punchflow-kickflow-dummy-s460/PF-05/attempt-1/prior-build-shared-tree-failure.log` and `prior-race-test-correction.log`.
+- Final self-check found that the session handler used `json.Encoder.Encode`, adding a trailing newline contrary to INF-33. `writeSessionResponse` now uses `json.Marshal` and writes the compact body; `TestHandlersLocalLoginAndOIDCDisabled` asserts no trailing newline.
+- After that correction, required post-modification checks passed: `go build ./...` exit 0 (`/tmp/pf05-final-postmod-build.log`); `go vet ./internal/auth/... ./internal/store/...` exit 0 (`/tmp/pf05-final-postmod-vet.log`); `go test -race -count=1 -v ./internal/auth/...` exit 0, 16 tests plus 6 subtests passed and 0 failures (`/tmp/pf05-final-postmod-test.log`); `gofmt -l internal/auth internal/store/auth.go` exit 0 with no output (`/tmp/pf05-final-postmod-gofmt.log`).
+- Final source hashes, including the compact-JSON correction, are recorded in `tmp/punchflow-kickflow-dummy-s460/PF-05/attempt-1/source-final-compact-json.sha256`; `shasum -a 256 -c` verified all 11 entries.
+**Reconciliation requests**: None. Independent test-integrity/adversarial review and final shared-tree integration review remain downstream workflow gates.
+
+### Session: 2026-10-20 PF05-TIC-001 test-integrity repair
+**Intent snapshot**: Added JSON `code` assertions for missing/bad bearer tokens and all three SAT caller cases in `internal/auth/middleware_test.go`; no production files changed.
+**Tasks Completed**: Closed PF05-TIC-001 by decoding each error response and asserting `invalid_access_token`, `invalid_caller_id`, or `invalid_header` while retaining the original HTTP status assertions and cases.
+**Verification**:
+- `go test -race -count=1 -v ./internal/auth/...` exit 0; 16 tests and 6 subtests passed, 0 failures; complete log `/tmp/pf05-tic001-test.log`.
+- `go vet ./internal/auth/... ./internal/store/...` exit 0; complete log `/tmp/pf05-tic001-vet.log`.
+- `gofmt -l internal/auth internal/store/auth.go` exit 0 with no output; complete log `/tmp/pf05-tic001-gofmt.log`.
+- `go build ./...` exit 0; complete log `/tmp/pf05-tic001-build.log`.
+- Final 11-file source identity is recorded and verified in `tmp/punchflow-kickflow-dummy-s460/PF-05/attempt-2/source-final.sha256`.
+**Reconciliation requests**: None. Independent re-review of PF05-TIC-001 and PF-27 combined-tree integration remain downstream workflow gates.

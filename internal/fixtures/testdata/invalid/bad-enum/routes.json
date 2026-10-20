@@ -1,0 +1,59 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000018",
+    "code": "ROUTE",
+    "status": "active",
+    "name": "Route",
+    "description": "",
+    "notes": "",
+    "folderCode": "ROOT",
+    "steps": [
+      {
+        "id": "00000000-0000-4000-8000-000000000019",
+        "code": "STEP1",
+        "stepOrder": 1,
+        "title": "Manager approval",
+        "stepType": "user",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [
+          "U1"
+        ],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000020",
+        "code": "STEP2",
+        "stepOrder": 2,
+        "title": "User confirmation",
+        "stepType": "user",
+        "actionType": "confirm",
+        "instruction": null,
+        "requiredApprovalsNumber": 0,
+        "requiredApprovalsPercent": 100,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [
+          "U2"
+        ],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      }
+    ]
+  }
+]

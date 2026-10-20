@@ -1,0 +1,20 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000037",
+    "code": "finance",
+    "name": "Finance",
+    "editable": true
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000038",
+    "code": "general",
+    "name": "General",
+    "editable": true
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000036",
+    "code": "root",
+    "name": "Root",
+    "editable": false
+  }
+]
