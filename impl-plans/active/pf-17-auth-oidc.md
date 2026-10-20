@@ -83,7 +83,7 @@ git diff --quiet -- go.mod go.sum && echo "go.mod unchanged"
 
 ### Done Criteria (session 462)
 
-- [ ] Signatures unchanged; all listed OIDC tests pass uncached with `-race`; PF-05 tests still pass; counts recorded; no go.mod/go.sum change
+- [x] Signatures unchanged; all listed OIDC tests pass uncached with `-race`; PF-05 tests still pass; counts recorded; no go.mod/go.sum change
 
 ## Execution Protocol
 
@@ -91,8 +91,33 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/auth/oid
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-20 PF-17 implementation (session 462)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s462/PF-17/attempt-1/edit-intent-001.md` through `edit-intent-009.md`; pre-edit hashes in `tmp/punchflow-kickflow-dummy-s462/PF-17/attempt-1/pre-edit-sha256.txt`.
+**Tasks Completed**: Replaced the OIDC stub while preserving the public signatures. Added discovery and provider verification; random single-use state/nonce and server-only PKCE verifier; ten-minute state expiry; same-origin returnTo validation; callback code exchange and ID-token signature, issuer, audience, expiry and nonce verification; case-insensitive email lookup with unknown users rejected and operational lookup errors returned as generic 500 pages; invitation activation, inactive-user rejection, session creation and the local-login-equivalent cookie. Added fake issuer and behavioral coverage for PKCE success, session cookie and session read, unknown/expired/replayed state, nonce/audience/expired-token failures, unknown and suspended users, valid invited-user activation, open-redirect fallback, and disabled issuer routes.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf17-s462-build.log'` -> exit=0; complete log `/tmp/pf17-s462-build.log` (empty).
+- `bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-vet.log'` -> exit=0; complete log `/tmp/pf17-s462-vet.log` (empty).
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-test.log'` -> exit=0; complete log `/tmp/pf17-s462-test.log`; PASS=33, FAIL=0, SKIP=0, cached lines=0; `TestOIDC*` PASS=11.
+- `gofmt -l internal/auth` -> exit=0, no files listed.
+- `git diff --quiet -- go.mod go.sum && echo "go.mod unchanged"` -> exit=0, module files unchanged.
+**Reconciliation requests**: None.
+
+### Session: 2026-10-20 PF-17 repair attempt 1 (comm-008208)
+**Finding addressed**: PF17-TI-01. In `internal/auth/oidc_test.go`, the suspended-user token now uses the fixture email `sus@example.test`; case-specific `wantBody` assertions distinguish unknown-email (`no punchflow user for missing@example.test`) from inactive-user rejection (`user is not eligible to log in`). Both 403 subtests remain present. Edit intent and pre-edit hashes: `tmp/punchflow-kickflow-dummy-s462/PF-17/attempt-2/edit-intent-001.md`, `pre-edit-sha256.txt`; plan append intent: `edit-intent-002.md`.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf17-s462-repair-build.log; status=$?; printf "EXIT_STATUS=%s\\n" "$status" | tee -a /tmp/pf17-s462-repair-build.log; exit "$status"'` -> exit=0; complete log `/tmp/pf17-s462-repair-build.log`.
+- `bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-repair-vet.log; status=$?; printf "EXIT_STATUS=%s\\n" "$status" | tee -a /tmp/pf17-s462-repair-vet.log; exit "$status"'` -> exit=0; complete log `/tmp/pf17-s462-repair-vet.log`.
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-repair-test.log; status=$?; printf "EXIT_STATUS=%s\\n" "$status" | tee -a /tmp/pf17-s462-repair-test.log; exit "$status"'` -> exit=0; complete log `/tmp/pf17-s462-repair-test.log`; PASS=33, FAIL=0, SKIP=0, cached lines=0; `TestOIDC*` PASS=11.
+- `gofmt -l internal/auth` -> exit=0, no files listed. `git diff --quiet -- go.mod go.sum` -> exit=0, unchanged.
+- `internal/auth/oidc.go` remains sha256 `2b415a90bddca0057f3f13aced3cda94c95f88be1fe55cfe0ac831b8850f86a8`; PF-05 files `middleware_test.go`, `session_test.go`, `token_test.go` hashes remain `5db49f8c9477f20f69973201421c9a679154e8962e70621b90aacd5af73705cf`, `05df64fd5fb6b1e9e4d9ff6c7124ab84047b1936109baa37d96067d4fbb4f575`, `0f0b51dcd78463197a09f9734628214fb3e95aaa99cd5046f4ccedb30a6ad676`. `go.mod` and `go.sum` hashes are `82d4cfcda01d25848cfea7b1784dd13d5d090ca5f251d28cbcda36970c2a1e8c` and `759e42a16c10aa37c6c542ea9f9fd29fbe4b49820f418633c31e5cf7c6bcd0df`.
+**Review status**: PF17-TI-01 is corrected and verified on the current source. Independent integrity/adversarial re-review remains downstream; no review acceptance is claimed.
+
+### Session: 2026-10-20 PF-17 repair attempt 2 (comm-008212)
+**Finding addressed**: PF17-ADV-01. `internal/auth/oidc.go` now uses private `oidcSafeReturnTo` to reject protocol-relative URLs, backslashes, C0/DEL controls, parse errors, and parsed scheme/host values while preserving safe relative paths and query strings. `TestOIDCOpenRedirectTargetFallsBackToRoot` now has six subtests; each checks the persisted `return_to` and the callback Location for protocol-relative, backslash-host, backslash-separator, tab, absolute URL and `/dashboard?x=1` inputs. Public signatures and callback behavior are unchanged. Attempt edit intents 001-004 and pre-edit hashes are under `tmp/punchflow-kickflow-dummy-s462/PF-17/attempt-3/`.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf17-s462-adv1-build.log; status=$?; printf "EXIT_STATUS=%s\\n" "$status" | tee -a /tmp/pf17-s462-adv1-build.log; exit "$status"'` -> exit=0; complete log `/tmp/pf17-s462-adv1-build.log`.
+- `bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-adv1-vet.log; status=$?; printf "EXIT_STATUS=%s\\n" "$status" | tee -a /tmp/pf17-s462-adv1-vet.log; exit "$status"'` -> exit=0; complete log `/tmp/pf17-s462-adv1-vet.log`.
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-adv1-test.log; status=$?; printf "EXIT_STATUS=%s\\n" "$status" | tee -a /tmp/pf17-s462-adv1-test.log; exit "$status"'` -> exit=0; complete log `/tmp/pf17-s462-adv1-test.log`; PASS=39, FAIL=0, SKIP=0, cached=0; `TestOIDC*` PASS=17.
+- `gofmt -l internal/auth` -> exit=0, no files listed. `git diff --check -- internal/auth/oidc.go internal/auth/oidc_test.go` -> exit=0. `git diff --quiet -- go.mod go.sum` -> exit=0, unchanged.
+- PF-05 test hashes remain unchanged: `middleware_test.go` `5db49f8c9477f20f69973201421c9a679154e8962e70621b90aacd5af73705cf`, `session_test.go` `05df64fd5fb6b1e9e4d9ff6c7124ab84047b1936109baa37d96067d4fbb4f575`, `token_test.go` `0f0b51dcd78463197a09f9734628214fb3e95aaa99cd5046f4ccedb30a6ad676`; `go.mod` `82d4cfcda01d25848cfea7b1784dd13d5d090ca5f251d28cbcda36970c2a1e8c` and `go.sum` `759e42a16c10aa37c6c542ea9f9fd29fbe4b49820f418633c31e5cf7c6bcd0df` unchanged.
+**Review status**: The repair is implemented and verified on this source. Independent test-integrity and adversarial re-review remain downstream; no review acceptance is claimed.

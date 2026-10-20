@@ -2,6 +2,7 @@ package present
 
 import (
 	"context"
+	"fmt"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 	"sort"
@@ -41,11 +42,15 @@ func GeneralMasterItem(ctx context.Context, q store.Querier, id string) (General
 	}
 	ordered := []itemInput{}
 	for fieldID, value := range m.Inputs {
+		inputID, ok := m.InputIDs[fieldID]
+		if !ok || inputID == "" {
+			return nil, fmt.Errorf("present: general master item %s: field %s has no input id", m.ID, fieldID)
+		}
 		field, er := store.GetGeneralMasterField(ctx, q, fieldID)
 		if er != nil {
 			return nil, er
 		}
-		ordered = append(ordered, itemInput{order: field.FieldOrder, body: map[string]any{"id": field.ID, "value": value, "createdAt": pf08Time(m.CreatedAt), "updatedAt": pf08Time(m.UpdatedAt), "field": pf08MasterField(field)}})
+		ordered = append(ordered, itemInput{order: field.FieldOrder, body: map[string]any{"id": inputID, "value": value, "createdAt": pf08Time(m.CreatedAt), "updatedAt": pf08Time(m.UpdatedAt), "field": pf08MasterField(field)}})
 	}
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].order < ordered[j].order })
 	inputs := make([]any, 0, len(ordered))

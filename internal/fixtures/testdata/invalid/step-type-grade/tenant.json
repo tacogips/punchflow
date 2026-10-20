@@ -1,0 +1,14 @@
+{
+  "tenant": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "publicId": "tenant-test",
+    "name": "Test Tenant",
+    "plan": "enterprise",
+    "mode": "normal",
+    "ipAllowlist": [],
+    "allowedEmailDomains": [],
+    "selfServiceProxy": false,
+    "createdAt": "2026-10-20T21:00:00+09:00",
+    "updatedAt": "2026-10-20T21:00:00+09:00"
+  }
+}

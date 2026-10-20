@@ -251,14 +251,21 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 		}
 		for _, it := range m.Items {
 			inputs := map[string]any{}
+			inputIDs := map[string]string{}
 			for _, in := range it.Inputs {
-				inputs[fieldIDs[in.FieldCode]] = in.Value
+				fieldID := fieldIDs[in.FieldCode]
+				inputs[fieldID] = in.Value
+				inputIDs[fieldID] = in.ID
 			}
 			raw, e := jsonValue(inputs)
 			if e != nil {
 				return counts, e
 			}
-			if err = insert("general_master_items", "INSERT INTO general_master_items(id,general_master_id,code,name,description,starts_on,ends_on,inputs,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", it.ID, m.ID, it.Code, it.Name, it.Description, it.StartsOn, it.EndsOn, raw, ms, ms); err != nil {
+			inputIDsRaw, e := jsonValue(inputIDs)
+			if e != nil {
+				return counts, e
+			}
+			if err = insert("general_master_items", "INSERT INTO general_master_items(id,general_master_id,code,name,description,starts_on,ends_on,inputs,input_ids,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", it.ID, m.ID, it.Code, it.Name, it.Description, it.StartsOn, it.EndsOn, raw, inputIDsRaw, ms, ms); err != nil {
 				return counts, err
 			}
 		}

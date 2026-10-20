@@ -250,11 +250,11 @@ func Export(ctx context.Context, q store.Querier) (map[string][]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err = pf06Query(ctx, q, "SELECT id,general_master_id,code,name,description,starts_on,ends_on,inputs FROM general_master_items ORDER BY rowid", func(r *sql.Rows) error {
+	if err = pf06Query(ctx, q, "SELECT id,general_master_id,code,name,description,starts_on,ends_on,inputs,input_ids FROM general_master_items ORDER BY rowid", func(r *sql.Rows) error {
 		var x MasterItemFixture
-		var mid, inputs string
+		var mid, inputs, inputIDsRaw string
 		var desc, starts, ends sql.NullString
-		if e := r.Scan(&x.ID, &mid, &x.Code, &x.Name, &desc, &starts, &ends, &inputs); e != nil {
+		if e := r.Scan(&x.ID, &mid, &x.Code, &x.Name, &desc, &starts, &ends, &inputs, &inputIDsRaw); e != nil {
 			return e
 		}
 		if desc.Valid {
@@ -270,8 +270,21 @@ func Export(ctx context.Context, q store.Querier) (map[string][]byte, error) {
 		if e := json.Unmarshal([]byte(inputs), &values); e != nil {
 			return e
 		}
+		var inputIDs map[string]string
+		if e := json.Unmarshal([]byte(inputIDsRaw), &inputIDs); e != nil {
+			return fmt.Errorf("fixtures: export master item %s input IDs: %w", x.Code, e)
+		}
+		x.Inputs = make([]MasterInputFixture, 0, len(values))
 		for id, v := range values {
-			x.Inputs = append(x.Inputs, MasterInputFixture{FieldCode: fieldCode[mid][id], Value: v})
+			code, ok := fieldCode[mid][id]
+			if !ok {
+				return fmt.Errorf("fixtures: export master item %s: unknown field ID %s", x.Code, id)
+			}
+			inputID, ok := inputIDs[id]
+			if !ok || inputID == "" {
+				return fmt.Errorf("fixtures: export master item %s: missing input ID for field %s", x.Code, code)
+			}
+			x.Inputs = append(x.Inputs, MasterInputFixture{ID: inputID, FieldCode: code, Value: v})
 		}
 		sort.SliceStable(x.Inputs, func(i, j int) bool { return x.Inputs[i].FieldCode < x.Inputs[j].FieldCode })
 		s.GeneralMasters[masterIdx[mid]].Items = append(s.GeneralMasters[masterIdx[mid]].Items, x)

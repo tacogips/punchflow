@@ -1,6 +1,6 @@
 # PF-09 Webhook Delivery Implementation Plan
 
-**Status**: In Progress
+**Status**: Implementation Complete (Formal Review Pending)
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-09
 **Design Reference**: design-docs/specs/design-webhooks.md (all sections); design-docs/specs/notes.md INF-08, INF-09, INF-10, INF-33
 **Created**: 2026-10-20
@@ -134,7 +134,7 @@ Evidence: exit 0; FAIL=0; SKIP=0; PASS >= 15 (12 top-level tests + 3 subtests in
 
 ### Done Criteria (session 462)
 
-- [ ] Delivery statuses are exactly `pending|succeeded|failed`; uncached `-race -v` tests pass with counts recorded; build/vet exit 0; gofmt clean
+- [x] Delivery statuses are exactly `pending|succeeded|failed`; uncached `-race -v` tests pass with counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 
@@ -153,3 +153,14 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 - `gofmt -l internal/webhook internal/store/webhooks.go` exited 0 and printed no files; complete log `/tmp/pf09-gofmt.log`.
 - Earlier verification attempt: the initial `go test -race ./internal/webhook/...` exited 1 on transient shared-tree compile errors in `internal/store/read_masters.go` and `internal/store/read_proxies.go`, outside PF-09 paths; complete log `/tmp/pf09-test.log`. The initial `go build ./...` exited 0 (`/tmp/pf09-build.log`). After the sibling compile errors resolved, an intermediate race run exposed a test cancellation omission in `TestWebhookPersistAcrossRestart`; the test was corrected and the final uncached verbose race run passed.
 **Reconciliation requests**: None. Formal independent review and serial combined-tree integration remain downstream workflow steps.
+
+### Session: 2026-10-20 PF-09 session 462 continuation
+**Intent snapshots**: Per-edit intentions and pre-edit hashes are recorded in `tmp/punchflow-kickflow-dummy-s462/PF-09/attempt-1/edit-intent-001.md` and `edit-intent-002.md`.
+**Tasks Completed**: Confirmed persisted delivery statuses use the PF-02 model constants for exactly `pending`, `succeeded`, and `failed`. Added a `json.Marshal` assertion for the INF-33 escaped `\\u003ca\\u0026b\\u003e` sequence and the absence of raw `<a&b>`. The existing signature-vector body is hand-written escaped JSON (not produced by `json.Marshal`), so it and its expected signature were retained. `internal/webhook/payload.go` was not changed; its PF-15 ownership remains intact.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf09-s462-build.log'; echo "exit=$?"` exited 0; complete log `/tmp/pf09-s462-build.log`; evidence copy `tmp/punchflow-kickflow-dummy-s462/PF-09/attempt-1/logs/pf09-s462-build.log`.
+- `bash -o pipefail -c 'go vet ./internal/webhook/... 2>&1 | tee /tmp/pf09-s462-vet.log'; echo "exit=$?"` exited 0; complete log `/tmp/pf09-s462-vet.log`; evidence copy `tmp/punchflow-kickflow-dummy-s462/PF-09/attempt-1/logs/pf09-s462-vet.log`.
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/webhook/... 2>&1 | tee /tmp/pf09-s462-test.log'; echo "exit=$?"` exited 0; PASS=15, FAIL=0, SKIP=0; complete log `/tmp/pf09-s462-test.log`; evidence copy `tmp/punchflow-kickflow-dummy-s462/PF-09/attempt-1/logs/pf09-s462-test.log`.
+- `gofmt -l internal/webhook internal/store/webhooks.go` exited 0 and printed no files; complete log `/tmp/pf09-s462-gofmt.log`; evidence copy `tmp/punchflow-kickflow-dummy-s462/PF-09/attempt-1/logs/pf09-s462-gofmt.log`.
+- Status scan found no `"delivered"` value; `git diff --quiet -- internal/webhook/payload.go` exited 0. Final source hashes are in `tmp/punchflow-kickflow-dummy-s462/PF-09/attempt-1/source-after.sha256`.
+**Reconciliation requests**: None. Independent formal review and serial combined-tree integration remain downstream workflow steps.

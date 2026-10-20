@@ -1,6 +1,6 @@
 # PF-06 Fixtures Loader Implementation Plan
 
-**Status**: Ready
+**Status**: Completed (implementation complete; formal review pending)
 **Wave**: 2 | **Depends On**: PF-01, PF-02 | **Plan ID**: PF-06
 **Design Reference**: design-docs/specs/architecture.md#fixtures; design-docs/specs/notes.md INF-04, INF-14, INF-18; design-docs/specs/command.md (fixtures subcommands)
 **Created**: 2026-10-20
@@ -167,9 +167,9 @@ The `-run` pattern excludes PF-02's `TestEnumRule*` (it reads `fixtures/default`
 
 ### Done Criteria (session 462)
 
-- [ ] CF-02 load/export half closed: `input_ids` written on load and restored as `inputs[].id` on export; `inputs` never `null`; tests prove it
-- [ ] `testdata/minimal` is canonical and round-trips byte-identically; 15 invalid cases each yield only their target problem
-- [ ] `fixtures_test.go` and `validate_test.go` exist and pass uncached with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
+- [x] CF-02 load/export half closed: `input_ids` written on load and restored as `inputs[].id` on export; `inputs` never `null`; tests prove it
+- [x] `testdata/minimal` is canonical and round-trips byte-identically; 15 invalid cases each yield only their target problem
+- [x] `fixtures_test.go` and `validate_test.go` exist and pass uncached with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Verification (session 460, superseded)
 
@@ -200,3 +200,19 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 - Required `go build`, `go vet`, behavioral test suite, and final `gofmt -l` gates have not been run.
 **Reconciliation requests**:
 - PF-27 must resolve the frozen contract gap before PF-06 can prove byte-identical round-trip for all fixture values: `internal/fixtures/types.go` defines `MasterInputFixture.ID`, but PF-02's `internal/model/master.go` defines `GeneralMasterItem.Inputs` as `map[string]any`, and `internal/store/migrations/0001_init.sql` stores `general_master_items.inputs` as JSON `fieldID -> value`. The ID cannot be recovered by `Export`; the representative exported `general-masters.json` currently loses the original nested input ID. Relevant implementation locations: `internal/fixtures/load.go` (`pf06InsertTx`, mapping `FieldCode` to field ID/value), `internal/fixtures/export.go` (reconstruction), and `internal/fixtures/testdata/minimal/general-masters.json` (input ID emitted empty). Impact: assigned acceptance criterion “Export(Load(minimal)) byte-identical to testdata/minimal” is not satisfied for this value, and integrity/round-trip tests are not yet added. Resume only after PF-27 serially reconciles the storage contract or records an explicit accepted representation decision; then update PF-06 implementation/tests within authorized paths and rerun all four plan verification commands.
+
+
+### Session: 2026-10-20 PF-06 implementation attempt 2 (session 462)
+**Tasks Completed**: Added `input_ids` persistence for master item inputs; export restores each `inputs[].id`, errors on missing IDs/unknown fields, and emits non-nil empty input arrays. Canonicalized `testdata/minimal` through Parse/Validate/Load/Export; added null grade-symbol target. Rebuilt all 15 invalid fixtures from canonical minimal, with one target defect each. Added behavioral tests for round-trip/stability, load/export IDs, null grade symbol, reset, non-empty load, and all 15 validation cases. Test helpers use the plan-local `pf06` prefix.
+**Edit intent/evidence**: Per-edit records and source hashes are under `tmp/punchflow-kickflow-dummy-s462/PF-06/attempt-1/` (`edit-intent-001.md` through `edit-intent-010.md`; source identity before and after final rerun in `final-source-before-rerun.sha256` and `final-source-after-rerun.sha256`).
+**Verification (final source)**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf06-s462-build.log'; echo "exit=$?"` -> exit 0; complete log `/tmp/pf06-s462-build.log` (empty).
+- `bash -o pipefail -c 'go vet ./internal/fixtures/... 2>&1 | tee /tmp/pf06-s462-vet.log'; echo "exit=$?"` -> exit 0; complete log `/tmp/pf06-s462-vet.log` (empty).
+- `bash -o pipefail -c "go test -count=1 -v -run 'Test(Load|Export|Reset|Validate)' ./internal/fixtures/... 2>&1 | tee /tmp/pf06-s462-test.log"; echo "exit=$?"` -> exit 0, PASS=24, FAIL=0, SKIP=0, cached lines=0; complete log `/tmp/pf06-s462-test.log`.
+- `gofmt -l internal/fixtures/parse.go internal/fixtures/validate.go internal/fixtures/load.go internal/fixtures/export.go internal/fixtures/fixtures_test.go internal/fixtures/validate_test.go` -> exit 0, no output; `/tmp/pf06-s462-gofmt.log`.
+- Canonical invalid-value scan on `testdata/minimal` -> exit 1 with no matches (expected); no `active`, `member`, conditional section type, empty grade symbol/input ID, or null inputs.
+- `wc -l internal/fixtures/*.go | sort -n | tail -2` -> largest file `export.go` 534 lines; aggregate 2057, so all individual files are below 1000.
+- The first test run before correcting duplicate-ID path and other-variable fixture produced exit 1, PASS=21, FAIL=3, SKIP=0; preserved at `tmp/punchflow-kickflow-dummy-s462/PF-06/attempt-1/logs/pf06-s462-test-first.log`. Corrected fixture/test then final uncached rerun passed.
+**Prior reconciliation update**: The session-460 PF-27 request to resolve missing input ID storage is superseded: accepted PF-02 added `general_master_items.input_ids`, and PF-06 now writes/reads it with current-source behavioral proof.
+**Final-source identity**: The owned Go files and `testdata/minimal` hashes are identical before and after the final rerun; commands ran while other fanout workers continued changes outside PF-06.
+**Downstream pending**: Formal integrity/adversarial/integration review and review-dependent archive/index updates remain owned by later workflow steps.

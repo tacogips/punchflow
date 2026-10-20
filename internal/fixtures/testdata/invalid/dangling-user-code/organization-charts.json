@@ -11,7 +11,7 @@
         "approveOnly": false,
         "memberships": [
           {
-            "userCode": "MISSING",
+            "userCode": "U1",
             "leader": true,
             "gradeCodes": [
               "G2"

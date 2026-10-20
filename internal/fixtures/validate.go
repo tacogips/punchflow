@@ -94,8 +94,11 @@ func Validate(s *Set) error {
 	userEntries := make([]pf06CodePath, 0, len(s.Users))
 	for i, x := range s.Users {
 		userEntries = append(userEntries, pf06CodePath{x.Code, fmt.Sprintf("[%d].code", i)})
-		if !pf06OneOf(x.Status, model.UserStatusActive, model.UserStatusInvited, model.UserStatusSuspended, model.UserStatusDeactivated) {
+		if !pf06Contains(model.UserStatuses, x.Status) {
 			add(FileUsers, fmt.Sprintf("[%d].status", i), "invalid user status")
+		}
+		if !pf06Contains(model.UserTypes, x.UserType) {
+			add(FileUsers, fmt.Sprintf("[%d].userType", i), "invalid userType")
 		}
 	}
 	checkUnique(FileUsers, userEntries)
@@ -174,7 +177,7 @@ func Validate(s *Set) error {
 	}
 	pf06CheckTree(FileFolders, s.Folders, func(f FolderFixture) string { return f.Code }, func(f FolderFixture) *string { return f.ParentCode }, add)
 	for i, m := range s.GeneralMasters {
-		if !pf06OneOf(m.DefaultSortBy, "", "code", "name", "createdAt") {
+		if !pf06Contains(model.MasterSortKeys, m.DefaultSortBy) {
 			add(FileGeneralMasters, fmt.Sprintf("[%d].defaultSortBy", i), "invalid default sort")
 		}
 		fieldCodes := map[string]bool{}
@@ -183,7 +186,7 @@ func Validate(s *Set) error {
 			p := fmt.Sprintf("[%d].fields[%d]", i, j)
 			fieldCodes[f.Code] = true
 			fieldEntries = append(fieldEntries, pf06CodePath{f.Code, p + ".code"})
-			if !pf06OneOf(f.FieldType, "text", "text_long", "number", "integer", "checkbox", "pull_down", "date") {
+			if !pf06Contains(model.MasterFieldTypes, f.FieldType) {
 				add(FileGeneralMasters, p+".fieldType", "invalid field type")
 			}
 		}
@@ -203,6 +206,9 @@ func Validate(s *Set) error {
 		}
 	}
 	for i, r := range s.Routes {
+		if !pf06Contains(model.RouteStatuses, r.Status) {
+			add(FileRoutes, fmt.Sprintf("[%d].status", i), "invalid status")
+		}
 		if !folderCodes[r.FolderCode] {
 			add(FileRoutes, fmt.Sprintf("[%d].folderCode", i), "unknown folder code")
 		}
@@ -219,22 +225,30 @@ func Validate(s *Set) error {
 			if st.RequiredApprovalsNumber < 0 || st.RequiredApprovalsPercent < 0 || st.RequiredApprovalsPercent > 100 {
 				add(FileRoutes, p, "invalid approval threshold")
 			}
-			if !pf06OneOf(st.StepType, model.StepTypeUser, model.StepTypeTeam, model.StepTypeGrade, model.StepTypeParallel) {
+			if !pf06Contains(model.StepTypes, st.StepType) {
 				add(FileRoutes, p+".stepType", "invalid step type")
 			}
-			if !pf06OneOf(st.ActionType, model.ActionTypeApprove, model.ActionTypeConfirm, model.ActionTypeNone) {
+			if !pf06Contains(model.ActionTypes, st.ActionType) {
 				add(FileRoutes, p+".actionType", "invalid action type")
 			}
+			if st.FallbackType != nil && !pf06Contains(model.FallbackTypes, *st.FallbackType) {
+				add(FileRoutes, p+".fallbackType", "invalid fallbackType")
+			}
+			if st.ManagerSelectionType != "" && !pf06Contains(model.ManagerSelectionTypes, st.ManagerSelectionType) {
+				add(FileRoutes, p+".managerSelectionType", "invalid managerSelectionType")
+			}
 			if st.RouteStepCondition != nil {
-				if !pf06OneOf(st.RouteStepCondition.ConditionType, "always", "conditional", "conditional_skip") {
+				if !pf06Contains(model.StepConditionTypes, st.RouteStepCondition.ConditionType) {
 					add(FileRoutes, p+".routeStepCondition.conditionType", "invalid condition type")
 				}
-				if !pf06OneOf(st.RouteStepCondition.CombinationType, "all", "any") {
+				if !pf06Contains(model.StepCombinationTypes, st.RouteStepCondition.CombinationType) {
 					add(FileRoutes, p+".routeStepCondition.combinationType", "invalid combination type")
 				}
 				for k, cf := range st.RouteStepCondition.RouteStepConditionFields {
 					pf := fmt.Sprintf("%s.routeStepCondition.routeStepConditionFields[%d]", p, k)
-					if !pf06OneOf(cf.FieldKey, "author_grade", "author_team", "text_variable", "number_variable", "checkbox_variable", "general_master_variable") {
+					if cf.FieldKey == "other_variable" {
+						add(FileRoutes, pf+".fieldKey", "other_variable is unsupported")
+					} else if !pf06Contains(model.StepConditionFieldKeys, cf.FieldKey) {
 						add(FileRoutes, pf+".fieldKey", "invalid or unsupported field key")
 					}
 					if !pf06OneOf(cf.Symbol, "equal", "not_equal", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal", "include", "exclude", "is_empty", "is_not_empty", "descendants_or_equal", "not_descendants_or_equal") {
@@ -248,6 +262,9 @@ func Validate(s *Set) error {
 				}
 			}
 			for k, t := range st.Targets {
+				if t.GradeSymbol != nil && !pf06Contains(model.GradeSymbols, *t.GradeSymbol) {
+					add(FileRoutes, fmt.Sprintf("%s.targets[%d].gradeSymbol", p, k), "invalid gradeSymbol")
+				}
 				if t.TeamCode != "" && !teamCodes[t.TeamCode] {
 					add(FileRoutes, fmt.Sprintf("%s.targets[%d].teamCode", p, k), "unknown team code")
 				}
@@ -261,6 +278,9 @@ func Validate(s *Set) error {
 	}
 	for i, w := range s.Workflows {
 		p := fmt.Sprintf("[%d]", i)
+		if !pf06Contains(model.WorkflowStatuses, w.Status) {
+			add(FileWorkflows, p+".status", "invalid status")
+		}
 		if !folderCodes[w.FolderCode] {
 			add(FileWorkflows, p+".folderCode", "unknown folder code")
 		}
@@ -282,6 +302,20 @@ func Validate(s *Set) error {
 		}
 		fields := map[string]bool{}
 		for si, sec := range w.SectionList {
+			sp := fmt.Sprintf("%s.sectionList[%d]", p, si)
+			if !pf06Contains(model.SectionTypes, sec.SectionType) {
+				add(FileWorkflows, sp+".sectionType", "invalid sectionType")
+			}
+			if sec.Conditional {
+				if sec.SectionType != model.SectionTypeForm {
+					add(FileWorkflows, sp+".sectionType", "conditional section must be form")
+				}
+				if sec.CombinationType == "custom" {
+					add(FileWorkflows, sp+".combinationType", "combinationType custom is unsupported")
+				} else if !pf06Contains(model.StepCombinationTypes, sec.CombinationType) {
+					add(FileWorkflows, sp+".combinationType", "invalid combinationType")
+				}
+			}
 			for fi, f := range sec.FormFields {
 				fields[f.Code] = true
 				if f.GeneralMasterCode != "" && !masterCodes[f.GeneralMasterCode] {
@@ -291,7 +325,7 @@ func Validate(s *Set) error {
 		}
 		for j, c := range w.RouteConditions {
 			cp := fmt.Sprintf("%s.routeConditions[%d]", p, j)
-			if !pf06OneOf(c.ConditionType, "always", "field", "field_otherwise") {
+			if !pf06Contains(model.RouteConditionTypes, c.ConditionType) {
 				add(FileWorkflows, cp+".conditionType", "invalid condition type")
 			}
 			if (c.RouteCode == nil) == (c.ErrorMessage == nil) {
@@ -300,18 +334,18 @@ func Validate(s *Set) error {
 			if c.RouteCode != nil && !routeCodes[*c.RouteCode] {
 				add(FileWorkflows, cp+".routeCode", "unknown route code")
 			}
-			if c.ConditionType == "field" && !pf06OneOf(c.CombinationType, "all", "any") {
-				add(FileWorkflows, cp+".combinationType", "invalid combination type")
-			}
-			if c.ConditionType != "field" && c.CombinationType != "" && !pf06OneOf(c.CombinationType, "all", "any") {
-				add(FileWorkflows, cp+".combinationType", "invalid combination type")
+			if c.ConditionType == model.RouteConditionTypeField || c.CombinationType != "" {
+				if c.CombinationType == "custom" {
+					add(FileWorkflows, cp+".combinationType", "combinationType custom is unsupported")
+				} else if !pf06Contains(model.RouteCombinationTypes, c.CombinationType) {
+					add(FileWorkflows, cp+".combinationType", "invalid combination type")
+				}
 			}
 			for k, cf := range c.ConditionFields {
 				fp := fmt.Sprintf("%s.conditionFields[%d]", cp, k)
 				if cf.FieldKey == "other_variable" {
 					add(FileWorkflows, fp+".fieldKey", "other_variable is unsupported")
-				}
-				if !pf06OneOf(cf.FieldKey, "text_variable", "number_variable", "checkbox_variable", "general_master_variable") {
+				} else if !pf06Contains(model.StepConditionFieldKeys, cf.FieldKey) || cf.FieldKey == model.StepConditionFieldKeyAuthorGrade || cf.FieldKey == model.StepConditionFieldKeyAuthorTeam {
 					add(FileWorkflows, fp+".fieldKey", "invalid field key")
 				}
 				if !pf06OneOf(cf.Symbol, "equal", "not_equal", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal", "include", "exclude", "is_empty", "is_not_empty", "descendants_or_equal") {
@@ -320,6 +354,11 @@ func Validate(s *Set) error {
 				if cf.Variable != "" && !fields[cf.Variable] {
 					add(FileWorkflows, fp+".variable", "unknown form field code")
 				}
+			}
+		}
+		for ti, team := range w.AvailableTeams {
+			if team.GradeSymbol != nil && !pf06Contains(model.GradeSymbols, *team.GradeSymbol) {
+				add(FileWorkflows, fmt.Sprintf("%s.availableTeams[%d].gradeSymbol", p, ti), "invalid gradeSymbol")
 			}
 		}
 	}

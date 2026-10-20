@@ -154,9 +154,9 @@ Evidence: exit 0; FAIL=0; SKIP=0; PASS >= 22 (16 tests + 6 subtests in session 4
 
 ### Done Criteria (session 462)
 
-- [ ] CF-03 closed: activation writes `activated` and the uncached auth tests pass with counts recorded
-- [ ] No invented permission, user-status or user-type literal remains in PF-05 files (rg check empty)
-- [ ] build/vet exit 0; gofmt clean
+- [x] CF-03 closed: activation writes `activated` and the uncached auth tests pass with counts recorded
+- [x] No invented permission, user-status or user-type literal remains in PF-05 files (rg check empty)
+- [x] build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 
@@ -192,3 +192,15 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 - `go build ./...` exit 0; complete log `/tmp/pf05-tic001-build.log`.
 - Final 11-file source identity is recorded and verified in `tmp/punchflow-kickflow-dummy-s460/PF-05/attempt-2/source-final.sha256`.
 **Reconciliation requests**: None. Independent re-review of PF05-TIC-001 and PF-27 combined-tree integration remain downstream workflow gates.
+
+
+### Session: 2026-10-20 PF-05 session 462 continuation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s462/PF-05/attempt-1/edit-intent-001.md` records the permission and enum-literal corrections before edits.
+**Tasks Completed**: Replaced invented `user_read` permission in the permission-union test with canonical `user`; corrected test fixture user types from `user` to canonical `normal`; changed the activation assertion to `model.UserStatusActive`. Confirmed `store.ActivateUser` writes `model.UserStatusActive` (`activated`) and did not edit `internal/auth/oidc.go` (PF-17 ownership).
+**Verification**:
+- `go build ./...` exit 0; complete log `/tmp/pf05-s462-build.log`.
+- `go vet ./internal/auth/...` exit 0; complete log `/tmp/pf05-s462-vet.log`.
+- `go test -count=1 -v -race ./internal/auth/...` exit 0; PASS=22, FAIL=0, SKIP=0; complete log `/tmp/pf05-s462-test.log`.
+- `gofmt -l internal/auth internal/store/auth.go` exit 0 with no output.
+- `rg -n '\"active\"|user_read|\"member\"' internal/auth internal/store/auth.go` exit 1 with no matches (expected).
+**Reconciliation requests**: None. Independent integrity/adversarial review, integration review and finalization remain downstream workflow steps.

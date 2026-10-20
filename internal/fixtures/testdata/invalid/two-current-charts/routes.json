@@ -2,7 +2,7 @@
   {
     "id": "00000000-0000-4000-8000-000000000018",
     "code": "ROUTE",
-    "status": "active",
+    "status": "visible",
     "name": "Route",
     "description": "",
     "notes": "",
@@ -27,7 +27,15 @@
         "userCodes": [
           "U1"
         ],
-        "targets": [],
+        "targets": [
+          {
+            "teamCode": "TEAM",
+            "gradeSymbol": null,
+            "gradeCodes": [
+              "G1"
+            ]
+          }
+        ],
         "routeStepCondition": null,
         "subStatus": null
       },

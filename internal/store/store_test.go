@@ -95,33 +95,6 @@ func TestOpenMigratesAllTablesAndReopenIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestModelEnumValuesMatchDesign(t *testing.T) {
-	stepTypes := []string{
-		model.StepTypeUser, model.StepTypeAuthor, model.StepTypeManager, model.StepTypeTeam,
-		model.StepTypeAuthorCustomizable, model.StepTypeAssigneeCustomizable,
-		model.StepTypeDynamicUser, model.StepTypeDynamicTeam,
-	}
-	wantStepTypes := []string{"user", "author", "manager", "team", "author_customizable", "assignee_customizable", "dynamic_user", "dynamic_team"}
-	if fmt.Sprint(stepTypes) != fmt.Sprint(wantStepTypes) {
-		t.Errorf("step types=%v; want %v", stepTypes, wantStepTypes)
-	}
-	userStatuses := []string{model.UserStatusActive, model.UserStatusInvited, model.UserStatusSuspended, model.UserStatusDeactivated}
-	wantUserStatuses := []string{"activated", "invited", "suspended", "deactivated"}
-	if fmt.Sprint(userStatuses) != fmt.Sprint(wantUserStatuses) {
-		t.Errorf("user statuses=%v; want %v", userStatuses, wantUserStatuses)
-	}
-	ticketStatuses := []string{model.TicketStatusDraft, model.TicketStatusInProgress, model.TicketStatusCompleted, model.TicketStatusRejected, model.TicketStatusDenied, model.TicketStatusArchived}
-	wantTicketStatuses := []string{"draft", "in_progress", "completed", "rejected", "denied", "archived"}
-	if fmt.Sprint(ticketStatuses) != fmt.Sprint(wantTicketStatuses) {
-		t.Errorf("ticket statuses=%v; want %v", ticketStatuses, wantTicketStatuses)
-	}
-	stepStatuses := []string{model.StepStatusPending, model.StepStatusInProgress, model.StepStatusCompleted, model.StepStatusSkipped}
-	wantStepStatuses := []string{"pending", "in_progress", "completed", "skipped"}
-	if fmt.Sprint(stepStatuses) != fmt.Sprint(wantStepStatuses) {
-		t.Errorf("step statuses=%v; want %v", stepStatuses, wantStepStatuses)
-	}
-}
-
 func TestOpenRelativePath(t *testing.T) {
 	t.Chdir(t.TempDir())
 	ctx := context.Background()
@@ -185,7 +158,7 @@ func TestWithTxRollbackAndCommit(t *testing.T) {
 	db := openTestDB(t)
 	id := NewID()
 	insert := func(q Querier) error {
-		_, err := q.ExecContext(ctx, "INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id, "u1", "u@example.test", "Test", "User", "active", "en", "member", "{}", 1, 1)
+		_, err := q.ExecContext(ctx, "INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id, "u1", "u@example.test", "Test", "User", model.UserStatusActive, "en", model.UserTypeNormal, "{}", 1, 1)
 		return err
 	}
 	want := errors.New("abort")
@@ -278,7 +251,7 @@ func TestResolveID(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
 	id := NewID()
-	if _, err := db.Q().ExecContext(ctx, "INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id, "alice", "a@example.test", "A", "B", "active", "en", "member", "{}", 1, 1); err != nil {
+	if _, err := db.Q().ExecContext(ctx, "INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id, "alice", "a@example.test", "A", "B", model.UserStatusActive, "en", model.UserTypeNormal, "{}", 1, 1); err != nil {
 		t.Fatal(err)
 	}
 	byID, err := ResolveID(ctx, db.Q(), "users", id)

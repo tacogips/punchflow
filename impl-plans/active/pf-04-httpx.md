@@ -142,7 +142,7 @@ Evidence: exit 0 for each command; FAIL=0, SKIP=0, PASS >= 19 (the session-460 u
 
 ### Done Criteria (session 462)
 
-- [ ] Uncached `-race -v` httpx tests pass, with counts recorded; build and vet exit 0; gofmt clean; no source change, or each change justified with hashes
+- [x] Uncached `-race -v` httpx tests pass, with counts recorded; build and vet exit 0; gofmt clean; no source change, or each change justified with hashes
 
 ## Execution Protocol
 
@@ -190,3 +190,17 @@ Implementation Done Criteria are complete. PF-27 owns final combined-tree reconc
 - `gofmt -l internal/httpx 2>&1 | tee /tmp/pf04-step6-gofmt-rerun.log` — exit 0; no files listed.
 - Initial wrapper attempts at `/tmp/pf04-step6-build.log`, `/tmp/pf04-step6-vet.log`, `/tmp/pf04-step6-test.log`, `/tmp/pf04-step6-test-verbose.log`, and `/tmp/pf04-step6-gofmt.log` ended with zsh's `status` read-only-variable error after invoking the checks. These incomplete captures are superseded by the corrected reruns above; no underlying check failed.
 **Reconciliation requests**: None. Formal independent review, final shared-tree integration, and plan archiving remain owned by later workflow steps.
+
+### Session: 2026-10-20 PF-04 Step 6 current-source verification
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s462/PF-04/attempt-1/edit-intent-001.md` records this plan-only progress update and completion-criteria change.
+**Tasks Completed**: Reverified the assigned PF-04 contract on the current shared tree. No PF-04 Go source or test files changed. The largest PF-04 Go file remains `pagination.go` at 110 lines.
+**Verification** (complete logs include explicit exit status):
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf04-s462-build.log; status=${PIPESTATUS[0]}; echo EXIT_STATUS=$status >> /tmp/pf04-s462-build.log; exit $status'` — exit 0; `/tmp/pf04-s462-build.log`.
+- `bash -o pipefail -c 'go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-s462-vet.log; status=${PIPESTATUS[0]}; echo EXIT_STATUS=$status >> /tmp/pf04-s462-vet.log; exit $status'` — exit 0; `/tmp/pf04-s462-vet.log`.
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-s462-test.log; status=${PIPESTATUS[0]}; echo EXIT_STATUS=$status >> /tmp/pf04-s462-test.log; exit $status'` — exit 0; `/tmp/pf04-s462-test.log`; PASS=19, FAIL=0, SKIP=0.
+- `echo "PASS=$(grep -c -- '--- PASS' /tmp/pf04-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf04-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf04-s462-test.log)` — PASS=19, FAIL=0, SKIP=0.
+- `gofmt -l internal/httpx` — exit 0; no files listed.
+- `wc -l internal/httpx/*.go | sort -n | tail -2` — exit 0; largest Go file is `pagination.go` at 110 lines.
+- Independent repository post-check repeated build, scoped vet, uncached race tests and gofmt; `/tmp/pf04-s462-*-review.log`; exit 0 and tests PASS=19, FAIL=0, SKIP=0.
+- SHA-256 hashes for all PF-04 Go source and test files are recorded in `tmp/punchflow-kickflow-dummy-s462/PF-04/attempt-1/final-source-sha256.txt`.
+**Reconciliation requests**: None. Formal independent review and downstream final integration remain owned by later workflow steps.

@@ -289,12 +289,12 @@ Evidence: every `exit=` is 0 (except the `rg` line, which must print nothing). B
 
 ### Done Criteria (session 462)
 
-- [ ] `enums.go` has the 21 Go lists and constants named above; no invented or non-kickflow constant remains (rg check empty)
-- [ ] `RouteTarget.GradeSymbol` is `*string` `json:"gradeSymbol"`; `WorkflowSection` has `Code`, `Conditional`, `CombinationType` in the stated order
-- [ ] `TestEnumListsMatchOpenAPI` (20 rows), `TestWebhookEventTypesMatchReference` and `TestEnumListsHaveNoDuplicates` pass uncached
-- [ ] `validate.go` uses the Go lists for every enum check listed in task 5; the `TestEnumRule*` cases pass
-- [ ] Store test seeds use canonical values; `TestModelEnumValuesMatchDesign` removed
-- [ ] build/vet exit 0; gofmt clean; every touched Go file < 1000 lines; progress log has exit status, log path and counts for each command
+- [x] `enums.go` has the 21 Go lists and constants named above; no invented or non-kickflow constant remains (rg check empty)
+- [x] `RouteTarget.GradeSymbol` is `*string` `json:"gradeSymbol"`; `WorkflowSection` has `Code`, `Conditional`, `CombinationType` in the stated order
+- [x] `TestEnumListsMatchOpenAPI` (20 rows), `TestWebhookEventTypesMatchReference` and `TestEnumListsHaveNoDuplicates` pass uncached
+- [x] `validate.go` uses the Go lists for every enum check listed in task 5; the `TestEnumRule*` cases pass
+- [x] Store test seeds use canonical values; `TestModelEnumValuesMatchDesign` removed
+- [x] build/vet exit 0; gofmt clean; every touched Go file < 1000 lines; progress log has exit status, log path and counts for each command
 
 Earlier criteria (modules, schema, idempotent migration) were satisfied in session 460. They stay satisfied: do not touch them.
 
@@ -341,3 +341,20 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 **Verification**: `go mod verify` exit 0, all modules verified (`/tmp/pf02-a5-modverify.log`); `go list -m all` exit 0 and includes all five required direct module families (`/tmp/pf02-a5-modules.log`); `go build ./...` exit 0 (`/tmp/pf02-a5-build.log`); `go vet ./...` exit 0 (`/tmp/pf02-a5-vet.log`); focused `go test -count=1 -v ./internal/model/... ./internal/store/... ./internal/fixtures/...` exit 0, 11 store tests passed (`/tmp/pf02-a5-model-store-test.log`); migration regression `go test -count=1 -v ./internal/store/...` exit 0, 11 store tests passed (`/tmp/pf02-a5-store-test.log`); full `go test -count=1 ./...` exit 0 across all packages (`/tmp/pf02-a5-all-test.log`); `gofmt -l internal/model internal/store internal/fixtures` exit 0 with no output (`/tmp/pf02-a5-gofmt.log`); enum grep exit 0 (`/tmp/pf02-a5-enumgrep.log`).
 **Current source hashes**: `tmp/punchflow-kickflow-dummy-s460/PF-02/attempt-5/final-source-sha256.txt`; verification outputs and exit codes are copied into the same attempt directory.
 **Reconciliation requests**: None. Formal independent re-review and workflow finalization remain downstream.
+
+
+### Session: 2026-10-20 PF-02 session 462 implementation
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s462/PF-02/attempt-1/pre-edit-intent.md`; per-edit intent records `edit-intent-001.md` through `edit-intent-010.md`; progress intent `edit-intent-progress.md` in the same attempt directory.
+**Tasks completed**: Replaced invented enum constants with the 21 canonical model lists and constants; added OpenAPI enum conformance, webhook reference and duplicate tests; made RouteTarget gradeSymbol nullable without omitting the JSON property; added conditional/slip section model fields; switched PF-02 fixture enum checks to model lists and added the requested route/workflow/user/fallback/grade/section/combination checks; updated store seeds and the two PF-08 shared test literals. Fixture JSON remains assigned to PF-06/PF-07.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf02-s462-build.log'; echo "exit=$?"` exit 0, log copied to `tmp/punchflow-kickflow-dummy-s462/PF-02/attempt-1/logs/pf02-s462-build.log`.
+- `bash -o pipefail -c 'go vet ./internal/model/... ./internal/store/... ./internal/fixtures/... ./internal/present/... 2>&1 | tee /tmp/pf02-s462-vet.log'; echo "exit=$?"` exit 0, log copied to `tmp/punchflow-kickflow-dummy-s462/PF-02/attempt-1/logs/pf02-s462-vet.log`.
+- `bash -o pipefail -c 'go test -count=1 -v ./internal/model/... ./internal/store/... 2>&1 | tee /tmp/pf02-s462-test-rerun.log'; echo "exit=$?"` exit 0; PASS=54 FAIL=0 SKIP=0; log copied to `tmp/punchflow-kickflow-dummy-s462/PF-02/attempt-1/logs/pf02-s462-test-rerun.log`.
+- `bash -o pipefail -c "go test -count=1 -v -run 'TestEnumRule' ./internal/fixtures/... 2>&1 | tee /tmp/pf02-s462-fixtures-test-rerun.log"; echo "exit=$?"` exit 0; PASS=9 FAIL=0 SKIP=0; log copied to `tmp/punchflow-kickflow-dummy-s462/PF-02/attempt-1/logs/pf02-s462-fixtures-test-rerun.log`.
+- `bash -o pipefail -c 'go mod verify 2>&1 | tee /tmp/pf02-s462-modverify.log'; echo "exit=$?"` exit 0 (`all modules verified`), log copied under attempt logs.
+- `gofmt -l internal/model internal/store internal/fixtures/validate.go internal/fixtures/enum_rules_test.go internal/present/present_test.go` exit 0, no output; log `/tmp/pf02-s462-gofmt.log` copied under attempt logs.
+- Forbidden enum `rg -n` check over `internal/model internal/fixtures/validate.go internal/store` exit 1 with no matches (expected); log `/tmp/pf02-s462-enumgrep.log` copied under attempt logs.
+- `git diff --check` exit 0. Every touched Go file is under 1000 lines (max 517).
+**Prior verification attempt**: Initial uncached model/store command exited 1 (PASS=49 FAIL=5 SKIP=0; parent test plus four excluded-value subtests) because the first conformance assertion included OpenAPI values excluded by the accepted design (`permanently_deleted`, `raised`, `other_variable`, `custom`); complete log `/tmp/pf02-s462-test.log`, copied under attempt logs. The test now subtracts those four documented exclusions and the final-source rerun passes all 20 rows. Initial fixture-rule run exited 0 (PASS=9 FAIL=0 SKIP=0); log `/tmp/pf02-s462-fixtures-test.log`, copied under attempt logs.
+**Final source hashes**: `internal/model/enums.go` 676bfe21; `definition.go` 22030847; `enums_test.go` 28b80a61; `internal/fixtures/validate.go` 6c8acee8; `enum_rules_test.go` 3f93fc6d; `internal/present/present_test.go` ca1d7a36; `internal/store/store_test.go` f9208da8.
+**Review boundary**: PF-02 implementation criteria are complete on this source. Independent review, review-dependent documentation/index updates, commit, and push remain downstream workflow work. No reconciliation requests.

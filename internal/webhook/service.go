@@ -92,7 +92,7 @@ func (s *Service) Enqueue(ctx context.Context, q store.Querier, evs []model.Webh
 			if !pf09Matches(ev.Type, workflowID, hook.EventTypes, hook.WorkflowIDs) {
 				continue
 			}
-			if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: store.NewID(), WebhookID: hook.ID, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: "pending", NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
+			if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: store.NewID(), WebhookID: hook.ID, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: model.WebhookStatusPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
 				return err
 			}
 		}
@@ -113,7 +113,7 @@ func (s *Service) EnqueueTo(ctx context.Context, q store.Querier, ev model.Webho
 			return nil, err
 		}
 		deliveryID := store.NewID()
-		if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: deliveryID, WebhookID: id, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: "pending", NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
+		if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: deliveryID, WebhookID: id, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: model.WebhookStatusPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
 			return nil, err
 		}
 		ids = append(ids, deliveryID)
@@ -136,7 +136,7 @@ func (s *Service) Resend(ctx context.Context, q store.Querier, eventID string) e
 		return err
 	}
 	now := s.clock.Now()
-	if err := store.MarkEventAttempt(ctx, q, eventID, ev.AttemptCount, now, "pending", nil, now); err != nil {
+	if err := store.MarkEventAttempt(ctx, q, eventID, ev.AttemptCount, now, model.WebhookStatusPending, nil, now); err != nil {
 		return err
 	}
 	s.manualMu.Lock()

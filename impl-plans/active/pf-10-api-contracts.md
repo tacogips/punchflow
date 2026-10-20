@@ -191,7 +191,7 @@ The pattern `TestPF10` matches the two PF-10 tests `TestPF10OperationsMatchCover
 
 ### Done Criteria (session 462)
 
-- [ ] 96 operations registered in the handler files named by the coverage matrix; `Operations()` count test passes uncached; engine and files contracts compile unchanged; build/vet exit 0; gofmt clean; counts recorded
+- [x] 96 operations registered in the handler files named by the coverage matrix; `Operations()` count test passes uncached; engine and files contracts compile unchanged; build/vet exit 0; gofmt clean; counts recorded
 
 ## Execution Protocol
 
@@ -208,3 +208,14 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 - `go test ./internal/api/...` — exit 1, `/tmp/pf10-test.log`; blocked compiling PF-08-owned store reads.
 - `gofmt -l internal/api internal/engine internal/files` — exit 0, no output.
 **Reconciliation requests**: PF-04 to make `errorsAs` available in `internal/httpx/json.go`; PF-08 to repair the listed store read files. After those upstream-owned paths compile on the shared tree, rerun all four verification commands and update this criterion only if every required gate passes.
+
+### Session: 2026-10-20 PF-10 re-verification (session 462)
+**Intent snapshot**: Re-verify the existing PF-10 route/API, engine, and files contracts after PF-02; change only this plan's completion record because all checks pass.
+**Tasks Completed**: Confirmed the route table tests against all 96 coverage-matrix operations and dispatch behavior. Handler-only count is 96 across the 16 handler files; the separate `Register` method accounts for the 97th API method in the broad count. Engine and files contracts compile unchanged.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf10-s462-build.log'; printf 'exit=%s\\n' "$?"` — exit 0; log `/tmp/pf10-s462-build.log` (empty).
+- `bash -o pipefail -c 'go vet ./internal/api/... ./internal/engine/... ./internal/files/... 2>&1 | tee /tmp/pf10-s462-vet.log'; printf 'exit=%s\\n' "$?"` — exit 0; log `/tmp/pf10-s462-vet.log` (empty).
+- `bash -o pipefail -c "go test -count=1 -v -run 'TestPF10' ./internal/api/v1/... 2>&1 | tee /tmp/pf10-s462-test.log"; printf 'exit=%s\\n' "$?"` — exit 0, PASS=2, FAIL=0, SKIP=0; log `/tmp/pf10-s462-test.log`; uncached top-level tests `TestPF10OperationsMatchCoverageMatrix` and `TestPF10DispatchPatternsAndCatchAll` both pass.
+- `rg --pcre2 -c '^func \\(a \\*API\\) (?!Register)' internal/api/v1/*.go` — exit 0; counts sum to 96 handlers across 16 files.
+- `gofmt -l internal/api internal/engine internal/files` — exit 0, no output; no formatting changes required.
+**Reconciliation requests**: None.

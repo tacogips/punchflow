@@ -5,10 +5,9 @@
     "email": "admin@example.test",
     "firstName": "Ada",
     "lastName": "Admin",
-    "status": "active",
+    "status": "activated",
     "locale": "ja",
-    "userType": "human",
-    "unexpectedKey": true
+    "userType": "normal"
   },
   {
     "id": "00000000-0000-4000-8000-000000000005",
@@ -16,9 +15,9 @@
     "email": "user@example.test",
     "firstName": "Sam",
     "lastName": "User",
-    "status": "active",
+    "status": "activated",
     "locale": "ja",
-    "userType": "human"
+    "userType": "normal"
   },
   {
     "id": "00000000-0000-4000-8000-000000000006",
@@ -28,6 +27,6 @@
     "lastName": "Invite",
     "status": "invited",
     "locale": "ja",
-    "userType": "human"
+    "userType": "normal"
   }
 ]

@@ -38,7 +38,7 @@ func TestWorkflowPresenterContracts(t *testing.T) {
 	viewer := inTicket["ticketViewers"].([]any)[0]
 	pf08Keys(t, viewer, "id user team grade descendants")
 	section := detail["sectionList"].([]any)[0].(map[string]any)
-	pf08Keys(t, section, "id title sectionType description viewRestriction sectionViewers formFields slipFields conditionFields")
+	pf08Keys(t, section, "id title sectionType description viewRestriction sectionViewers formFields slipFields conditionFields conditional")
 	field := section["formFields"].([]any)[0]
 	slip := section["slipFields"].([]any)[0]
 	pf08Keys(t, slip, "id fieldType code title required showTotal options regexpFormat formula maxValue minValue defaultValue decimalDigit delimited allowedExtensions prefix suffix approver author hidden readonlyOnUi minLength maxLength multiple autoLink useTodayForDefaultValue allowedTicketStatus generalMaster defaultGeneralMasterItem generalMasterSearchFilters approverEditRestriction approverEditSetting customValidations selectableTicketWorkflows")

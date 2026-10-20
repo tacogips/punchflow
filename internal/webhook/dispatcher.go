@@ -119,12 +119,12 @@ func (s *Service) pf09Record(ctx context.Context, ev model.WebhookDelivery, hook
 	now := s.clock.Now()
 	count := ev.AttemptCount + 1
 	success := status != nil && *status == http.StatusOK && message == ""
-	eventStatus := "failed"
+	eventStatus := model.WebhookStatusFailed
 	next := now
 	first := hook.FirstFailureAt
 	disable := false
 	if success {
-		eventStatus = "succeeded"
+		eventStatus = model.WebhookStatusSucceeded
 		first = nil
 	} else {
 		if first == nil {
@@ -132,7 +132,7 @@ func (s *Service) pf09Record(ctx context.Context, ev model.WebhookDelivery, hook
 			first = &v
 		}
 		if count < s.cfg.MaxAttempts {
-			eventStatus = "pending"
+			eventStatus = model.WebhookStatusPending
 			next = now.Add(Backoff(s.cfg.RetryBase, count))
 		}
 		disable = now.Sub(*first) >= 7*24*time.Hour

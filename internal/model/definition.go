@@ -102,8 +102,11 @@ type ExcelTemplate struct {
 }
 type WorkflowSection struct {
 	ID              string           `json:"id"`
+	Code            string           `json:"code,omitempty"`
 	Title           string           `json:"title"`
 	SectionType     string           `json:"sectionType"`
+	Conditional     bool             `json:"conditional,omitempty"`
+	CombinationType string           `json:"combinationType,omitempty"`
 	FormFields      []FormField      `json:"formFields,omitempty"`
 	SlipFields      []SlipField      `json:"slipFields,omitempty"`
 	ConditionFields []ConditionField `json:"conditionFields,omitempty"`
@@ -222,7 +225,7 @@ type RouteStep struct {
 type RouteTarget struct {
 	TeamCode    string   `json:"teamCode,omitempty"`
 	Descendants bool     `json:"descendants,omitempty"`
-	GradeSymbol string   `json:"gradeSymbol,omitempty"`
+	GradeSymbol *string  `json:"gradeSymbol"`
 	GradeCodes  []string `json:"gradeCodes,omitempty"`
 	Variable    string   `json:"variable,omitempty"`
 }

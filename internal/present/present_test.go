@@ -44,12 +44,12 @@ func pf08DB(t *testing.T) (context.Context, *store.DB) {
 	exec("INSERT INTO folders(id,code,name,description,parent_id,editable,created_at,updated_at) VALUES('f1','F1','Root',NULL,NULL,0,?,?),('f2','F2','Child','child','f1',1,?,?)", now, now, now, now)
 	exec("INSERT INTO general_masters(id,code,name,default_sort_by,initial_display_code,initial_display_created_at,initial_display_description,created_at,updated_at) VALUES('gm','GM','Master','code',1,0,0,?,?)", now, now)
 	exec("INSERT INTO general_master_fields(id,general_master_id,code,title,field_type,required,field_order,visible,initial_display,options,created_at,updated_at) VALUES('fld','gm','name','Name','text',1,1,1,0,'[]',?,?)", now, now)
-	exec("INSERT INTO general_master_items(id,general_master_id,code,name,inputs,created_at,updated_at) VALUES('it','gm','I1','Item','{\"fld\":\"value\"}',?,?)", now, now)
+	exec("INSERT INTO general_master_items(id,general_master_id,code,name,inputs,input_ids,created_at,updated_at) VALUES('it','gm','I1','Item','{\"fld\":\"value\"}','{\"fld\":\"in1\"}',?,?)", now, now)
 	wf := model.WorkflowDef{ID: "wf", Code: "WF", Status: "visible", Name: "Workflow", Description: "desc", Notes: "notes", FolderCode: "F1", RouteCode: "ROUTE", CategoryCodes: []string{"CAT"}, TicketNumberFormat: pf08String("WF-{n}"), TitleInputMode: "manual", TicketNumberingTiming: "on_submit", AvailableTeams: []model.WorkflowTeam{{TeamCode: "SALES", Descendants: true, GradeSymbol: pf08String("equal"), GradeCodes: []string{"G1"}}}, Watchers: []model.WorkflowWatcher{{ID: "watcher", WatcherType: "user", UserCode: "U1"}}, TicketViewers: []model.WorkflowViewer{{ID: "viewer", UserCode: "U2"}}, SectionList: []model.WorkflowSection{{ID: "sec", Title: "Details", SectionType: "form", FormFields: []model.FormField{{ID: "ff", Code: "TITLE", Title: "Title", FieldType: "text", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}, Orientation: "vertical"}}}}, RouteConditions: []model.RouteCondition{{ID: "cond", ConditionType: "field", CombinationType: "all", RouteCode: pf08String("ROUTE"), ConditionFields: []model.ConditionField{{ID: "wcf", FieldKey: "grade", Symbol: "equal", Value: "G1"}}}, {ID: "else", ConditionType: "field_otherwise", CombinationType: "all", ErrorMessage: pf08String("no route"), ConditionFields: []model.ConditionField{}}}, ReportFormats: []string{}}
 	wf.SectionList[0].SlipFields = []model.SlipField{{ID: "slip", Code: "TOTAL", Title: "Total", FieldType: "number", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}}
 	wfb, _ := json.Marshal(wf)
 	exec("INSERT INTO workflows(id,code,status,folder_id,definition_json,ticket_number_counter,created_at,updated_at) VALUES('wf','WF','visible','f1',?,2,?,?)", string(wfb), now, now)
-	rd := model.RouteDef{ID: "rt", Code: "ROUTE", Status: "visible", Name: "Route", Description: "route", FolderCode: "F1", Steps: []model.RouteStep{{ID: "s2", Code: "S2", StepOrder: 2, Title: "Second", StepType: "user", ActionType: "approve", UserCodes: []string{"U1"}, Targets: []model.RouteTarget{{TeamCode: "SALES", Descendants: true, GradeSymbol: "equal", GradeCodes: []string{"G1"}}}, RequiredApprovalsNumber: 1, RequiredApprovalsPercent: 100, ManagerSelectionType: "closest"}, {ID: "s1", Code: "S1", StepOrder: 1, Title: "First", StepType: "user", ActionType: "approve", UserCodes: []string{"U1"}, Targets: []model.RouteTarget{{TeamCode: "SALES", Descendants: true, GradeSymbol: "equal", GradeCodes: []string{"G1"}}}, RequiredApprovalsNumber: 1, RequiredApprovalsPercent: 100, ManagerSelectionType: "closest", RouteStepCondition: &model.RouteStepCondition{ID: "sc", ConditionType: "all", CombinationType: "all", RouteStepConditionFields: []model.ConditionField{{ID: "cf", FieldKey: "author_grade", Symbol: "equal", Value: "G1"}}}}}}
+	rd := model.RouteDef{ID: "rt", Code: "ROUTE", Status: "visible", Name: "Route", Description: "route", FolderCode: "F1", Steps: []model.RouteStep{{ID: "s2", Code: "S2", StepOrder: 2, Title: "Second", StepType: "user", ActionType: "approve", UserCodes: []string{"U1"}, Targets: []model.RouteTarget{{TeamCode: "SALES", Descendants: true, GradeSymbol: pf08String("equal"), GradeCodes: []string{"G1"}}}, RequiredApprovalsNumber: 1, RequiredApprovalsPercent: 100, ManagerSelectionType: "closest"}, {ID: "s1", Code: "S1", StepOrder: 1, Title: "First", StepType: "user", ActionType: "approve", UserCodes: []string{"U1"}, Targets: []model.RouteTarget{{TeamCode: "SALES", Descendants: true, GradeSymbol: pf08String("equal"), GradeCodes: []string{"G1"}}}, RequiredApprovalsNumber: 1, RequiredApprovalsPercent: 100, ManagerSelectionType: "closest", RouteStepCondition: &model.RouteStepCondition{ID: "sc", ConditionType: "all", CombinationType: "all", RouteStepConditionFields: []model.ConditionField{{ID: "cf", FieldKey: "author_grade", Symbol: "equal", Value: "G1"}}}}}}
 	rdb, _ := json.Marshal(rd)
 	exec("INSERT INTO routes(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('rt','ROUTE','visible','f1',?,?,?)", string(rdb), now, now)
 	exec("INSERT INTO proxy_applicants(id,user_id,proxy_user_id,workflow_ids,created_at,updated_at) VALUES('pa','u1','u2','[\"wf\"]',?,?)", now, now)
@@ -245,6 +245,95 @@ func TestPresentCoreKeySets(t *testing.T) {
 	empty, e := Users(ctx, q, nil, UserOpts{})
 	if e != nil || empty == nil || len(empty) != 0 {
 		t.Fatalf("empty users=%#v err=%v", empty, e)
+	}
+}
+
+func TestPresentMasterItemInputIDs(t *testing.T) {
+	ctx, db := pf08DB(t)
+	q := db.Q()
+	item, err := GeneralMasterItem(ctx, q, "it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := item["inputs"].([]any)[0].(map[string]any)
+	if input["id"] != "in1" {
+		t.Fatalf("input id=%v, want persisted id in1", input["id"])
+	}
+	if got := input["field"].(map[string]any)["id"]; got != "fld" {
+		t.Fatalf("field id=%v, want fld", got)
+	}
+	if _, err := q.ExecContext(ctx, `UPDATE general_master_items SET input_ids='{}' WHERE id='it'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GeneralMasterItem(ctx, q, "it"); err == nil || !strings.Contains(err.Error(), "field fld has no input id") {
+		t.Fatalf("missing input ID error=%v", err)
+	}
+}
+
+func TestPresentSectionShapes(t *testing.T) {
+	ctx, db := pf08DB(t)
+	sections, err := pf08Sections(ctx, db.Q(), []model.WorkflowSection{
+		{ID: "slip", Code: "lines", Title: "Line items", SectionType: model.SectionTypeSlip},
+		{ID: "conditional", Title: "Conditional", SectionType: model.SectionTypeForm, Conditional: true, CombinationType: "all"},
+		{ID: "plain", Title: "Plain", SectionType: model.SectionTypeForm},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slip := sections[0].(map[string]any)
+	if slip["code"] != "lines" {
+		t.Fatalf("slip code=%v, want lines", slip["code"])
+	}
+	form := sections[1].(map[string]any)
+	if form["conditional"] != true || form["combinationType"] != "all" {
+		t.Fatalf("conditional form shape=%v", form)
+	}
+	plain := sections[2].(map[string]any)
+	if plain["conditional"] != false {
+		t.Fatalf("plain form conditional=%v, want false", plain["conditional"])
+	}
+	if _, ok := plain["combinationType"]; ok {
+		t.Fatalf("non-conditional form unexpectedly has combinationType: %v", plain)
+	}
+}
+
+func TestPresentRouteTargetGradeSymbolNull(t *testing.T) {
+	ctx, db := pf08DB(t)
+	q := db.Q()
+	route, err := store.RouteDefByID(ctx, q, "rt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range route.Steps {
+		for j := range route.Steps[i].Targets {
+			route.Steps[i].Targets[j].GradeSymbol = nil
+		}
+	}
+	definition, err := json.Marshal(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = q.ExecContext(ctx, `UPDATE routes SET definition_json=? WHERE id='rt'`, string(definition)); err != nil {
+		t.Fatal(err)
+	}
+	presented, err := RouteDetail(ctx, q, "rt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := presented["steps"].([]any)[0].(map[string]any)["targets"].([]any)[0].(map[string]any)
+	if _, ok := target["gradeSymbol"]; !ok {
+		t.Fatal("gradeSymbol key is missing")
+	}
+	b, err := json.Marshal(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encoded map[string]json.RawMessage
+	if err = json.Unmarshal(b, &encoded); err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded["gradeSymbol"]) != "null" {
+		t.Fatalf("encoded gradeSymbol=%s, want null", encoded["gradeSymbol"])
 	}
 }
 

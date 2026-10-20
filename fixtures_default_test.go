@@ -47,6 +47,20 @@ func TestDefaultFixturesStrictDecode(t *testing.T) {
 	}
 }
 
+func TestDefaultFixturesValidate(t *testing.T) {
+	fixtureFS, err := fs.Sub(DefaultFixtures, "fixtures/default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := fixturetypes.Parse(fixtureFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixturetypes.Validate(set); err != nil {
+		t.Fatalf("default fixtures validation failed:\n%v", err)
+	}
+}
+
 func TestDefaultFixturePersonasAndDefinitions(t *testing.T) {
 	var tokens []fixturetypes.TokenFixture
 	if err := decodeDefaultFixture(fixturetypes.FileTokens, &tokens); err != nil {

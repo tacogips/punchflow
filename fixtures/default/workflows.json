@@ -2,7 +2,7 @@
   {
     "id": "1f46223b-a6ef-4ee8-884e-d3f1e6b9f13b",
     "code": "expense-claim",
-    "status": "active",
+    "status": "visible",
     "name": "Expense claim",
     "description": "",
     "notes": "",
@@ -227,6 +227,7 @@
       },
       {
         "id": "85c6d790-8035-4b0a-8665-c083383b8d20",
+        "code": "lines",
         "title": "Expense lines",
         "sectionType": "slip",
         "slipFields": [
@@ -384,7 +385,7 @@
   {
     "id": "3d745899-8fed-4d03-8b73-ccba31051acf",
     "code": "leave-request",
-    "status": "active",
+    "status": "visible",
     "name": "Leave request",
     "description": "",
     "notes": "",
@@ -514,23 +515,11 @@
         ]
       },
       {
-        "id": "5ef2305b-4828-4fa1-bae4-e2f85065cabb",
-        "title": "Other reason condition",
-        "sectionType": "conditional",
-        "conditionFields": [
-          {
-            "id": "3c51441f-b546-4720-9668-4b4de3fa790d",
-            "variable": "reason",
-            "fieldKey": "text_variable",
-            "symbol": "equal",
-            "value": "other"
-          }
-        ]
-      },
-      {
         "id": "645beada-10d5-4d14-9eae-46fc49388522",
         "title": "Other details",
         "sectionType": "form",
+        "conditional": true,
+        "combinationType": "all",
         "formFields": [
           {
             "id": "f347063f-7e52-4fd0-8ca9-2cfeed6f6aaa",
@@ -562,6 +551,15 @@
             "autoLink": false,
             "useTodayForDefaultValue": false,
             "allowedTicketStatus": []
+          }
+        ],
+        "conditionFields": [
+          {
+            "id": "3c51441f-b546-4720-9668-4b4de3fa790d",
+            "variable": "reason",
+            "fieldKey": "text_variable",
+            "symbol": "equal",
+            "value": "other"
           }
         ]
       }
@@ -596,7 +594,7 @@
   {
     "id": "296074ee-a3a9-4fa6-b620-f4c8ddc23202",
     "code": "purchase-request",
-    "status": "active",
+    "status": "visible",
     "name": "Purchase request",
     "description": "",
     "notes": "",

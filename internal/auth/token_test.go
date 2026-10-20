@@ -49,7 +49,7 @@ func TestTokenIssuePersistsDigestOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Q().ExecContext(ctx, `INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES('u','U','u@example.test','A','B','activated','ja','user','{}',1,1)`)
+	_, err = db.Q().ExecContext(ctx, `INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES('u','U','u@example.test','A','B','activated','ja','normal','{}',1,1)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestTokenIssuePersistsDigestOnly(t *testing.T) {
 func TestTokenUserPermissionsUnion(t *testing.T) {
 	db, _ := pf05TestDB(t)
 	for _, role := range []struct{ id, permissions string }{
-		{"r1", `[{"permission":"user_read"},{"permission":"integration"}]`},
+		{"r1", `[{"permission":"user"},{"permission":"integration"}]`},
 		{"r2", `[{"permission":"ticket_write"},{"permission":"integration"}]`},
 	} {
 		if _, err := db.Q().ExecContext(context.Background(), "INSERT INTO roles(id,name,permission_list,created_at,updated_at) VALUES(?,?,?,1,1)", role.id, role.id, role.permissions); err != nil {
@@ -86,7 +86,7 @@ func TestTokenUserPermissionsUnion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, permission := range []string{"user_read", "ticket_write", "integration"} {
+	for _, permission := range []string{"user", "ticket_write", "integration"} {
 		if !permissions[permission] {
 			t.Errorf("missing permission %q in %v", permission, permissions)
 		}

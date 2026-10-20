@@ -151,7 +151,7 @@ func InsertWebhookEvent(ctx context.Context, q Querier, v model.WebhookDelivery)
 		v.NextAttemptAt = v.CreatedAt
 	}
 	if v.Status == "" {
-		v.Status = "pending"
+		v.Status = model.WebhookStatusPending
 	}
 	_, err := q.ExecContext(ctx, "INSERT INTO webhook_events(id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.WebhookID, v.EventType, v.TicketID, v.CommentID, v.ActorUserID, v.Body, v.Status, v.AttemptCount, Millis(v.NextAttemptAt), v.LastStatusCode, Millis(v.CreatedAt), Millis(v.UpdatedAt))
 	if err != nil {

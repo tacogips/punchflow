@@ -50,9 +50,9 @@ func GetGeneralMasterField(ctx context.Context, q Querier, id string) (model.Gen
 }
 func GetGeneralMasterItem(ctx context.Context, q Querier, id string) (model.GeneralMasterItem, error) {
 	var x model.GeneralMasterItem
-	var d, starts, ends, inputs pf08SQLNullString
+	var d, starts, ends, inputs, inputIDs pf08SQLNullString
 	var cr, up int64
-	err := q.QueryRowContext(ctx, `SELECT id,general_master_id,code,name,description,starts_on,ends_on,inputs,created_at,updated_at FROM general_master_items WHERE id=?`, id).Scan(&x.ID, &x.GeneralMasterID, &x.Code, &x.Name, &d, &starts, &ends, &inputs, &cr, &up)
+	err := q.QueryRowContext(ctx, `SELECT id,general_master_id,code,name,description,starts_on,ends_on,inputs,input_ids,created_at,updated_at FROM general_master_items WHERE id=?`, id).Scan(&x.ID, &x.GeneralMasterID, &x.Code, &x.Name, &d, &starts, &ends, &inputs, &inputIDs, &cr, &up)
 	if err != nil {
 		return x, pf08NotFound(err)
 	}
@@ -66,6 +66,14 @@ func GetGeneralMasterItem(ctx context.Context, q Querier, id string) (model.Gene
 	}
 	if x.Inputs == nil {
 		x.Inputs = map[string]any{}
+	}
+	if inputIDs.valid {
+		if err = json.Unmarshal([]byte(inputIDs.s), &x.InputIDs); err != nil {
+			return x, fmt.Errorf("store: decode master item input IDs: %w", err)
+		}
+	}
+	if x.InputIDs == nil {
+		x.InputIDs = map[string]string{}
 	}
 	x.CreatedAt = Time(cr)
 	x.UpdatedAt = Time(up)

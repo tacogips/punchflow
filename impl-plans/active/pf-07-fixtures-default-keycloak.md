@@ -151,9 +151,9 @@ Evidence: exit 0; FAIL=0; SKIP=0; `TestDefaultFixturesValidate` PASS; rg prints 
 
 ### Done Criteria (session 462)
 
-- [ ] `fixtures/default` uses only design-table enum values (rg check empty) and passes `fixtures.Validate` (`TestDefaultFixturesValidate` PASS, uncached)
-- [ ] Pinned content unchanged except for the listed enum and section-shape corrections; UUIDs preserved
-- [ ] build/vet exit 0; gofmt clean; counts recorded
+- [x] `fixtures/default` uses only design-table enum values (rg check empty) and passes `fixtures.Validate` (`TestDefaultFixturesValidate` PASS, uncached)
+- [x] Pinned content unchanged except for the listed enum and section-shape corrections plus missing parent links for the two designed child folders; all UUIDs preserved except the intentionally removed obsolete conditional-section UUID
+- [x] build/vet exit 0; gofmt clean; counts recorded
 
 ## Verification (session 460, superseded)
 
@@ -201,3 +201,16 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 - Fixture content check: 14 JSON files valid, 13 realm user e-mails match fixture users, 121 unique IDs, and route approval constraints hold, `/tmp/pf07-content-check.log`.
 **Earlier attempts**: transient shared-tree `go build ./...` and `go test .` failures and the duplicate-ID assertion are preserved under `tmp/punchflow-kickflow-dummy-s460/PF-07/attempt-1/prior-*-failure.log`; all were resolved on current source by shared-tree stabilization or the UUID correction above.
 **Reconciliation requests**: None for PF-07. Final plan archiving and shared index updates remain with PF-27.
+
+### Session: 2026-10-20 (session 462 enum and validation corrections)
+**Tasks Completed**: Updated default users to canonical user types; replaced the Super Admin permission list with the 19 canonical permissions in `model.Permissions` order; changed route/workflow statuses to `visible`; set empty route target grade filters to `null` in `RouteTarget` key order; added the expense slip section code; moved the leave condition field into the conditional `Other details` form section while retaining its ID and removing only the obsolete section ID. Added `TestDefaultFixturesValidate` to parse and validate the embedded fixture set. The required validator test exposed that `finance` and `general` were also missing `parentCode: root`; added those two links to match architecture's root-plus-two-children design. Keycloak files were not changed.
+**Verification**:
+- `go build ./...` exit 0, `/tmp/pf07-s462-build.log` (empty).
+- `go vet .` exit 0, `/tmp/pf07-s462-vet.log` (empty).
+- `go test -count=1 -v -run 'TestDefault|TestKeycloak' .` exit 0, PASS=18 FAIL=0 SKIP=0, 0 cached lines; `TestDefaultFixturesValidate` PASS, `/tmp/pf07-s462-test-final.log`.
+- `gofmt -l fixtures_default_test.go` exit 0, no output, `/tmp/pf07-s462-gofmt-final.log`.
+- PF-07 forbidden-enum `rg` exit 1 with no matches (expected clean), `/tmp/pf07-s462-enumgrep-final.log`.
+- `python3 -I -m json.tool deploy/keycloak/realm-punchflow.json` exit 0, `realm-json-ok`, `/tmp/pf07-s462-realm-json-final.log`.
+- Fixture identity check exit 0: 120 IDs remain, only obsolete section ID `5ef2305b-4828-4fa1-bae4-e2f85065cabb` removed, no IDs added; root and child folder links verified, `/tmp/pf07-s462-content-check.log`.
+**Earlier attempts**: Before adding the two child-folder parent links, the verifier's uncached root test exited 1 (PASS=17 FAIL=1 SKIP=0), with `TestDefaultFixturesValidate` identifying the folders as three roots; it is superseded by the final-source pass above. Evidence: `/tmp/pf07-s462-test.log`. All final-source commands passed.
+**Reconciliation requests**: None. PF-27 owns final combined-tree gate, plan archiving, and shared index updates.

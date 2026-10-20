@@ -5,16 +5,43 @@
     "editable": false,
     "permissionList": [
       {
-        "permission": "audit_read"
+        "permission": "tenant"
       },
       {
-        "permission": "file_read"
-      },
-      {
-        "permission": "file_write"
+        "permission": "billing"
       },
       {
         "permission": "integration"
+      },
+      {
+        "permission": "security"
+      },
+      {
+        "permission": "audit"
+      },
+      {
+        "permission": "stats"
+      },
+      {
+        "permission": "workflow"
+      },
+      {
+        "permission": "route"
+      },
+      {
+        "permission": "pipeline"
+      },
+      {
+        "permission": "workflow_misc"
+      },
+      {
+        "permission": "user"
+      },
+      {
+        "permission": "team"
+      },
+      {
+        "permission": "role"
       },
       {
         "permission": "master"
@@ -23,43 +50,16 @@
         "permission": "master_read"
       },
       {
-        "permission": "org_read"
-      },
-      {
-        "permission": "org_write"
-      },
-      {
-        "permission": "proxy_read"
-      },
-      {
-        "permission": "proxy_write"
-      },
-      {
-        "permission": "role_read"
-      },
-      {
-        "permission": "role_write"
-      },
-      {
-        "permission": "ticket_admin"
-      },
-      {
         "permission": "ticket_read"
       },
       {
         "permission": "ticket_write"
       },
       {
-        "permission": "user_read"
+        "permission": "label"
       },
       {
-        "permission": "user_write"
-      },
-      {
-        "permission": "workflow_read"
-      },
-      {
-        "permission": "workflow_write"
+        "permission": "automation"
       }
     ],
     "memberCodes": [

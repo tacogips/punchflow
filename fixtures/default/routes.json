@@ -2,7 +2,7 @@
   {
     "id": "0c372e08-66fb-42ab-9a9d-6fb55f46ea07",
     "code": "expense-large",
-    "status": "active",
+    "status": "visible",
     "name": "Large expense",
     "description": "",
     "notes": "",
@@ -50,7 +50,7 @@
           {
             "teamCode": "finance",
             "descendants": false,
-            "gradeSymbol": "",
+            "gradeSymbol": null,
             "gradeCodes": []
           }
         ],
@@ -108,7 +108,7 @@
   {
     "id": "9d6e0593-02ae-452c-972b-7337f030b257",
     "code": "expense-standard",
-    "status": "active",
+    "status": "visible",
     "name": "Standard expense",
     "description": "",
     "notes": "",
@@ -156,7 +156,7 @@
           {
             "teamCode": "finance",
             "descendants": false,
-            "gradeSymbol": "",
+            "gradeSymbol": null,
             "gradeCodes": []
           }
         ],
@@ -168,7 +168,7 @@
   {
     "id": "329dd8fb-94ca-48ba-b53e-dc7c0aafe14c",
     "code": "leave",
-    "status": "active",
+    "status": "visible",
     "name": "Leave approval",
     "description": "",
     "notes": "",
@@ -237,7 +237,7 @@
           {
             "teamCode": "hr",
             "descendants": false,
-            "gradeSymbol": "",
+            "gradeSymbol": null,
             "gradeCodes": []
           }
         ],
@@ -270,7 +270,7 @@
   {
     "id": "a8f648a9-317a-4b0c-9dae-6fc898e00369",
     "code": "purchase",
-    "status": "active",
+    "status": "visible",
     "name": "Purchase approval",
     "description": "",
     "notes": "",
@@ -316,6 +316,7 @@
         "userCodes": [],
         "targets": [
           {
+            "gradeSymbol": null,
             "variable": "reviewer"
           }
         ],
@@ -384,6 +385,7 @@
         "userCodes": [],
         "targets": [
           {
+            "gradeSymbol": null,
             "variable": "approving-team"
           }
         ],

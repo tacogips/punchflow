@@ -170,9 +170,9 @@ Evidence: exit 0; FAIL=0; SKIP=0; the 3 new tests appear as `--- PASS`. (`intern
 
 ### Done Criteria (session 462)
 
-- [ ] CF-02 read/present half closed: `inputs[].id` is the persisted input ID; a missing ID is an error; tests prove both
-- [ ] Section JSON carries `code` (slip) and `conditional`/`combinationType` (form); `gradeSymbol` null renders as `null`
-- [ ] Uncached present tests pass with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
+- [x] CF-02 read/present half closed: `inputs[].id` is the persisted input ID; a missing ID is an error; tests prove both
+- [x] Section JSON carries `code` (slip) and `conditional`/`combinationType` (form); `gradeSymbol` null renders as `null`
+- [x] Uncached present tests pass with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 
@@ -185,3 +185,15 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`.
 **Tasks Completed**: Added schema-shaped non-ticket presenters and `store.Querier` read helpers for users, organization, roles, categories/folders, general masters, definitions/routes, proxies and audit logs. Added exact JSON key-set tests across every presenter, plus seeded SQLite behavior checks for relationships, null/empty values, ordering, timestamp format and not-found handling. No files outside PF-08 writePaths were changed.
 **Verification**: `go build ./...` exit 0 (`/tmp/pf08-build.log`); `go vet ./internal/present/... ./internal/store/...` exit 0 (`/tmp/pf08-vet.log`); `go test ./internal/present/...` exit 0 (`/tmp/pf08-test.log`); `go test ./internal/present/... ./internal/store/...` exit 0 (`/tmp/pf08-store-present-test.log`); `gofmt -l internal/present internal/store` exit 0, no output (`/tmp/pf08-gofmt.log`). All PF-08 Go files are below 1000 lines.
 **Reconciliation requests**: None. Formal independent review and combined-tree integration review remain downstream workflow steps.
+
+### Session: 2026-10-20 PF-08 continuation (session 462)
+**Tasks Completed**: `store.GetGeneralMasterItem` now reads `input_ids`; `GeneralMasterItem` emits each persisted input ID and returns an error when an ID is absent. Form sections expose `conditional` (and `combinationType` only when true); slip sections expose `code`. Added tests for persisted-vs-field IDs, missing IDs, conditional/plain/slip section JSON and `gradeSymbol: null`. Preserved PF-02's `pf08String("equal")` edits in the shared presenter test file.
+**Verification**: `go build ./...` exit 0 (`tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-2/logs/pf08-s462-build.log`); `go vet ./internal/present/... ./internal/store/...` exit 0 (`tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-2/logs/pf08-s462-vet.log`); `go test -count=1 -v ./internal/present/...` exit 0, PASS=5 FAIL=0 SKIP=0 cached lines=0 (`tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-2/logs/pf08-s462-test.log`); scoped `gofmt -l` exit 0 with empty output (`/tmp/pf08-s462-gofmt.log`); line count exit 0, largest present file 362 (<1000) (`/tmp/pf08-s462-lines.log`).
+**Superseded attempt**: Initial uncached present test run exit 1, PASS=4 FAIL=1 SKIP=0 because a test compared a typed nil `*string` to a nil interface; complete log: `tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-1/logs/pf08-s462-test-first.log`. The assertion now checks marshaled JSON `null`; the final-source rerun above passes.
+**Reconciliation requests**: None. Independent integrity, adversarial and combined-tree review remain downstream workflow steps.
+
+### Session: 2026-10-20 PF-08 implementation verification continuation (attempt 3)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-3/edit-intent-001.md`.
+**Tasks Completed**: No source change was needed. Re-ran PF-08's assigned verification on the current shared tree after the earlier typed-nil assertion failure had been corrected. The three required focused cases (`TestPresentMasterItemInputIDs`, `TestPresentSectionShapes`, `TestPresentRouteTargetGradeSymbolNull`) pass.
+**Verification**: `bash -o pipefail -c 'go build ./... 2>&1 | tee tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-3/logs/pf08-s462-build.log; rc=$?; echo EXIT_STATUS=$rc; exit $rc'` exit 0; `bash -o pipefail -c 'go vet ./internal/present/... ./internal/store/... 2>&1 | tee tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-3/logs/pf08-s462-vet.log; rc=$?; echo EXIT_STATUS=$rc; exit $rc'` exit 0; `bash -o pipefail -c 'go test -count=1 -v ./internal/present/... 2>&1 | tee tmp/punchflow-kickflow-dummy-s462/PF-08/attempt-3/logs/pf08-s462-test.log; rc=$?; echo EXIT_STATUS=$rc; exit $rc'` exit 0, PASS=5 FAIL=0 SKIP=0 CACHED=0; scoped `gofmt -l` exit 0, no paths printed; `wc -l internal/present/*.go | sort -n | tail -2` exit 0, largest file `present_test.go` at 362 lines; `git diff --check` exit 0.
+**Reconciliation requests**: None. Independent integrity, adversarial and combined-tree review remain downstream workflow steps.

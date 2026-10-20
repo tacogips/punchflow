@@ -2,7 +2,7 @@
   {
     "id": "00000000-0000-4000-8000-000000000021",
     "code": "WF",
-    "status": "active",
+    "status": "visible",
     "name": "Workflow",
     "description": "",
     "notes": "",
@@ -33,16 +33,26 @@
         "conditionType": "field",
         "combinationType": "all",
         "combinationExpression": "",
+        "routeCode": "ROUTE",
         "errorMessage": null,
         "conditionFields": [
           {
-            "id": "00000000-0000-4000-8000-000000000028",
+            "id": "00000000-0000-4000-8000-000000000032",
+            "variable": "",
             "fieldKey": "other_variable",
             "symbol": "equal",
-            "variable": "amount"
+            "value": "1"
           }
-        ],
-        "routeCode": "ROUTE"
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000031",
+        "conditionType": "always",
+        "combinationType": "",
+        "combinationExpression": "",
+        "routeCode": "ROUTE",
+        "errorMessage": null,
+        "conditionFields": []
       }
     ],
     "ticketNumberingTiming": "",

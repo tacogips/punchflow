@@ -38,7 +38,7 @@ func TestSessionActivationRequiresValidInvitation(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err = a.ActivateOnLogin(context.Background(), db.Q(), user)
-	if err != nil || user.Status != "activated" {
+	if err != nil || user.Status != model.UserStatusActive {
 		t.Fatalf("activation user=%+v err=%v", user, err)
 	}
 	user, err = store.UserByID(context.Background(), db.Q(), "sus")

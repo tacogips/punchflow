@@ -21,7 +21,17 @@ func pf08Sections(ctx context.Context, q store.Querier, sections []model.Workflo
 		for _, f := range s.ConditionFields {
 			cfs = append(cfs, pf08WorkflowConditionField(ctx, q, f))
 		}
-		out = append(out, map[string]any{"id": s.ID, "title": s.Title, "sectionType": s.SectionType, "description": nil, "viewRestriction": false, "sectionViewers": []any{}, "formFields": fields, "slipFields": slips, "conditionFields": cfs})
+		section := map[string]any{"id": s.ID, "title": s.Title, "sectionType": s.SectionType, "description": nil, "viewRestriction": false, "sectionViewers": []any{}, "formFields": fields, "slipFields": slips, "conditionFields": cfs}
+		switch s.SectionType {
+		case model.SectionTypeForm:
+			section["conditional"] = s.Conditional
+			if s.Conditional {
+				section["combinationType"] = s.CombinationType
+			}
+		case model.SectionTypeSlip:
+			section["code"] = s.Code
+		}
+		out = append(out, section)
 	}
 	return out, nil
 }

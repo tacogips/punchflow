@@ -26,7 +26,7 @@ func pf05TestDB(t *testing.T) (*store.DB, *kftime.FakeClock) {
 		t.Fatal(err)
 	}
 	for _, u := range []struct{ id, email, status string }{{"u1", "one@example.test", "activated"}, {"u2", "two@example.test", "activated"}, {"00000000-0000-4000-8000-000000000001", "caller@example.test", "activated"}, {"inv", "inv@example.test", "invited"}, {"sus", "sus@example.test", "suspended"}} {
-		_, err = db.Q().ExecContext(ctx, `INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES(?,?,?,'A','B',?,'ja','user','{}',?,?)`, u.id, u.id, u.email, u.status, store.Millis(now), store.Millis(now))
+		_, err = db.Q().ExecContext(ctx, `INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES(?,?,?,'A','B',?,'ja','normal','{}',?,?)`, u.id, u.id, u.email, u.status, store.Millis(now), store.Millis(now))
 		if err != nil {
 			t.Fatal(err)
 		}
