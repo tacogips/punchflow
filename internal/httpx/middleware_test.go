@@ -45,7 +45,7 @@ func TestLengthRequiredRawHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 		status, err := bufio.NewReader(conn).ReadString('\n')
-		conn.Close()
+		_ = conn.Close()
 		if err != nil {
 			t.Fatal(err)
 		}

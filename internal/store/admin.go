@@ -24,7 +24,7 @@ func AdminListTokens(ctx context.Context, q Querier, userID string, offset, limi
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list admin tokens: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]model.APIToken, 0)
 	for rows.Next() {
 		var t model.APIToken

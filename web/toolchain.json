@@ -143,5 +143,28 @@
     "vitefu": "1.1.3",
     "yallist": "3.1.1"
   },
-  "recordedAt": "2026-10-20T09:59:43.440Z"
+  "recordedAt": "2026-10-20T09:59:43.440Z",
+  "finalizeS466": {
+    "bunVersion": "1.4.3",
+    "commands": [
+      {
+        "cmd": "bun install --frozen-lockfile",
+        "exitCode": 0
+      },
+      {
+        "cmd": "bun run typecheck",
+        "exitCode": 0
+      },
+      {
+        "cmd": "bun test",
+        "exitCode": 0,
+        "output": "25 pass, 0 fail, 51 expect() calls, 25 tests across 7 files"
+      },
+      {
+        "cmd": "bun run build",
+        "exitCode": 0
+      }
+    ],
+    "bunLockSha256": "eee300137f6b77ce73ab6491efd1cda132c13fd3548c394bf5ba7270788beee0"
+  }
 }

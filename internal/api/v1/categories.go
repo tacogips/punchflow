@@ -143,7 +143,7 @@ func pf20CategoryUsed(ctx context.Context, q store.Querier, id string) (bool, er
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var raw []byte
 		if err = rows.Scan(&raw); err != nil {

@@ -260,7 +260,7 @@ func pf15SectionVisible(s model.WorkflowSection, values map[string]any) bool {
 		case "is_empty":
 			results = append(results, actual == nil || (reflect.TypeOf(actual) == reflect.TypeOf("") && actual.(string) == ""))
 		case "is_not_empty":
-			results = append(results, actual != nil && !(reflect.TypeOf(actual) == reflect.TypeOf("") && actual.(string) == ""))
+			results = append(results, actual != nil && (reflect.TypeOf(actual) != reflect.TypeOf("") || actual.(string) != ""))
 		default:
 			results = append(results, true)
 		}

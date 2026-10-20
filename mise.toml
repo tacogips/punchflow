@@ -86,7 +86,7 @@ run = "go run ./cmd/punchflow serve --enable-local-login --enable-admin-reset"
 
 [tasks.test]
 description = "Run tests"
-run = "go test ./... && mise run web:test"
+run = "go test -count=1 ./... && mise run web:test"
 
 [tasks.test-coverage]
 description = "Run tests with coverage"

@@ -37,7 +37,7 @@ func runFixtures(ctx context.Context, args []string, stdout, stderr interface{ W
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	switch command {
 	case "load":
 		if _, err := fixtures.Load(ctx, db, fixtureFS, kftime.SystemClock{}); err != nil {

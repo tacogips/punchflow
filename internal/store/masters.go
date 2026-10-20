@@ -30,13 +30,13 @@ func GeneralMasterList(ctx context.Context, q Querier, offset, limit int, sortBy
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, 0, err
 		}
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return nil, 0, err
 	}
 	if err = rows.Close(); err != nil {
@@ -74,13 +74,13 @@ func GeneralMasterItemsList(ctx context.Context, q Querier, masterID string, off
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, 0, err
 		}
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return nil, 0, err
 	}
 	if err = rows.Close(); err != nil {
@@ -129,16 +129,16 @@ func pf20WriteMasterFields(ctx context.Context, q Querier, masterID string, fiel
 	for rows.Next() {
 		var id, code string
 		if err = rows.Scan(&id, &code); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		old[code] = id
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return err
 	}
-	rows.Close()
+	_ = rows.Close()
 	keep := map[string]bool{}
 	for _, f := range fields {
 		id := f.ID

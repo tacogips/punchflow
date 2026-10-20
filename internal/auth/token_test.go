@@ -44,7 +44,7 @@ func TestTokenIssuePersistsDigestOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	_, err = db.Q().ExecContext(ctx, `INSERT INTO tenant(id,public_id,name,plan,mode,created_at,updated_at) VALUES('t','t','Tenant','enterprise','normal',1,1)`)
 	if err != nil {
 		t.Fatal(err)

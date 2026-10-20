@@ -99,7 +99,11 @@ func pf23UploadFile(t *testing.T, env *testutil.Env, data []byte, includeFile bo
 
 func pf23Request(t *testing.T, env *testutil.Env, method, path string, body []byte, contentType string) *testutil.Response {
 	t.Helper()
-	request, err := http.NewRequestWithContext(t.Context(), method, env.URL+path, bytes.NewReader(body))
+	requestURL := path
+	if !strings.HasPrefix(path, "http://") && !strings.HasPrefix(path, "https://") {
+		requestURL = env.URL + path
+	}
+	request, err := http.NewRequestWithContext(t.Context(), method, requestURL, bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}

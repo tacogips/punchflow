@@ -70,7 +70,7 @@ func EngActiveProxyApplicant(ctx context.Context, q Querier, clientUserID, proxy
 	if err != nil {
 		return false, fmt.Errorf("store: query engine proxy applicants: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var starts, ends *string
 		var workflows string

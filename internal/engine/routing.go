@@ -92,9 +92,10 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 			}
 			if len(userIDs) == 0 {
 				fb, result = true, *step.FallbackType
-				if *step.FallbackType == model.FallbackSkip {
+				switch *step.FallbackType {
+				case model.FallbackSkip:
 					skip = true
-				} else if *step.FallbackType == model.FallbackNoFallback {
+				case model.FallbackNoFallback:
 					return kferr.ValidationFailed(map[string][]string{"base": {"step has no assignees"}})
 				}
 			}

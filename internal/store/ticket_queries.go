@@ -177,7 +177,7 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list ticket query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -202,7 +202,7 @@ func TicketQueryLinks(ctx context.Context, q Querier, ticketID string, offset, l
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list ticket links: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -253,7 +253,7 @@ func TicketQueryViewers(ctx context.Context, q Querier, ticketID string, offset,
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list ticket viewers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string

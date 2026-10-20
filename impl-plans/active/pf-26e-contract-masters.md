@@ -1,6 +1,6 @@
 # PF-26e Contract Scenarios: Categories, Folders and General Masters Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: A (s466; parallel with PF-26a..PF-26d, PF-26f) | **Depends On**: none (all dependencies accepted at `a2a82de`) | **Plan ID**: PF-26e
 **Design Reference**: design-docs/specs/design-api-coverage.md "Live scenario partition (session 466)" (rules 1-8, repair-eligibility table), operation matrix rows #44-#46, #48-#50, #74 and #76-#82; design-docs/specs/architecture.md "PF-26 split and final-run rule (session 466)"
 **Created**: 2026-10-21
@@ -87,7 +87,7 @@ Subtest names are `TestContractLiveMasters/<operationId>`, and error cases are `
 1. `createCategory`: POST `/v1/categories` with a name -> 200. Keep the id as K. Error `createCategory/error_missing_permission`: as Employee -> 403 `missing_permission` (needs `workflow_misc`).
 2. `updateCategory`: PATCH `/v1/categories/{K}` with a new name -> 200.
 3. `deleteCategory`: DELETE `/v1/categories/{K}` -> 200. Error `deleteCategory/error_resource_not_found`: DELETE K again -> 404.
-4. `createFolder`: POST `/v1/folders` with a name, code `pf26e-folder` and `parentId` = id of the fixture folder `root` (resolve it with `GET /v1/folders/root`) -> 200.
+4. `createFolder`: POST `/v1/folders` with a name, code `pf26e-folder` and `parentFolderId` = id of the fixture folder `root` (resolve it with `GET /v1/folders/root`) -> 200.
 5. `updateFolder`: PATCH `/v1/folders/pf26e-folder` with a new name -> 200. Error `updateFolder/error_resource_not_editable`: PATCH `/v1/folders/root` -> 403 `resource_not_editable` (row #50).
 6. `deleteFolder`: DELETE `/v1/folders/pf26e-folder` (empty, no workflows) -> 200.
 7. `createGeneralMaster`: POST `/v1/generalMasters` with code `pf26e-master`, a name, and one `text` field with code `note` -> 200. Error `createGeneralMaster/error_missing_permission`: as Employee -> 403.
@@ -130,10 +130,10 @@ Conditional guard (required for each package with an edited file): `bash -o pipe
 
 ## Done Criteria
 
-- [ ] `TestContractLiveMasters` passes with 14 operation subtests and 5 error subtests. The inventory check passes.
-- [ ] Every verification line shows exit 0, with log path and counts. FAIL=0, SKIP=0.
-- [ ] Production edits have transfer-candidate records and passing guards. Other defects are reconciliation requests.
-- [ ] `go build ./...` exits 0 at the end of every attempt.
+- [x] `TestContractLiveMasters` passes with 14 operation subtests and 5 error subtests. The inventory check passes.
+- [x] Every verification line shows exit 0, with log path and counts. FAIL=0, SKIP=0.
+- [x] Production edits have transfer-candidate records and passing guards. Other defects are reconciliation requests.
+- [x] `go build ./...` exits 0 at the end of every attempt.
 
 ## Execution Protocol
 
@@ -145,9 +145,26 @@ Follow `impl-plans/README.md` "Shared Execution Protocol" rules 1-16 (fresh read
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Transfer candidates**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 — PF-26e implementation
+**Intent snapshot**: Created `internal/contract/scenarios_masters_test.go` for the 14 assigned categories, folders and general-master operations. Repaired `internal/store/read_classification.go` after the assigned root-folder lookup exposed a single-connection nested-query deadlock. Intent records and fresh reads are in `tmp/punchflow-kickflow-dummy-s466/PF-26e/attempt-1/`.
+**Tasks Completed**: Added schema-validated live scenarios, five schema-validated error cases, pagination and `Link rel="next"` checks, timestamps, operation inventory/self-check, and stable general-master item input-ID assertion. The API request field is `parentFolderId` per the OpenAPI spec and existing handler (correcting the original step's `parentId` typo). Fixed `GetFolderChildren` to close the IDs cursor before hydrating child records.
+**Verification**:
+- `go build ./...`: exit 0; `/tmp/pf26e-s466-build-after-repair.log` (copied to `tmp/punchflow-kickflow-dummy-s466/PF-26e/attempt-1/verification-build-after-repair.log`).
+- `go vet ./internal/contract/...`: exit 0; `/tmp/pf26e-s466-vet-final2.log` (copied to the attempt evidence directory).
+- `go test -count=1 -v -race -run '^TestContractLiveMasters$' ./internal/contract/...`: exit 0; PASS=20, FAIL=0, SKIP=0; 19 passing operation/error subtests; `/tmp/pf26e-s466-contract-pass.log` (copied to the attempt evidence directory).
+- `go test -count=1 -v -race ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `/tmp/pf26e-s466-guard-store.log` (copied to the attempt evidence directory).
+- `test -z "$(gofmt -l internal/contract/scenarios_masters_test.go)"`: exit 0.
+- `test "$(wc -l < internal/contract/scenarios_masters_test.go)" -lt 1000`: exit 0; 280 lines.
+- `go build ./...` immediately after the store source write: exit 0.
+- Post-test-write `go vet ./internal/contract/...`: exit 0; `/tmp/pf26e-s466-vet-final.log`.
+
+**Prior attempts (resolved before final verification)**: The first shared-tree vet was blocked by a transient duplicate helper in PF-26c, and the first build found PF-26c's `.go` snapshot under `tmp/`; both sibling-tree conditions cleared. The first contract attempt stalled on the root-folder prerequisite; its diagnostic stack is in `tmp/punchflow-kickflow-dummy-s466/PF-26e/attempt-1/verification-contract-stalled.log` and showed `GetFolderChildren` querying `GetFolder` before closing rows. The production correction passed the store guard and the uncached PF-26e contract rerun.
+
+**Transfer candidates**:
+- `{path: "internal/store/read_classification.go", fromPlan: "PF-08", toPlan: "PF-26e", declaringManifest: "impl-plans/active/punchflow-kickflow-dummy-s462-dispatch.json", reason: "TestContractLiveMasters root-folder GET hung because GetFolderChildren held the only SQLite connection through an open rows cursor while calling GetFolder; it now closes rows before the nested lookups.", guardVerification: "go test -count=1 -v -race ./internal/store/...; exit 0; PASS=10 FAIL=0 SKIP=0; /tmp/pf26e-s466-guard-store.log"}`
+
+**Reconciliation requests**: None outstanding. The s466 dispatch manifest remains unchanged for integration review to record the transfer.
+
+**Final post-adjustment verification**: The last test-file edit also schema-validates the root-folder GET prerequisite and second general-master-item setup response. On this source (`scenarios_masters_test.go` SHA-256 `c954f206d683dbf31140043884847e7d7eef02a2bb2bec777bcd1a16846d3896`; `read_classification.go` SHA-256 `f4ee1d2cf8a5cfb4540cf949947b91d0a74f15a07a2d9851c7f5374d259f6f6`), `go build ./...` exited 0 (`/tmp/pf26e-s466-build-final2.log`), `go vet ./internal/contract/...` exited 0 (`/tmp/pf26e-s466-vet-final3.log`), `go test -count=1 -v -race -run '^TestContractLiveMasters$' ./internal/contract/...` exited 0 with PASS=20, FAIL=0, SKIP=0 and 19 operation/error subtests (`/tmp/pf26e-s466-contract-final2.log`), and the uncached store guard exited 0 with PASS=10, FAIL=0, SKIP=0 (`/tmp/pf26e-s466-guard-store-final.log`). The scenario file is gofmt-clean and 279 lines. Logs are copied into the attempt evidence directory. Read-only go-coding review found no issue; post-change check-and-test verification passed. Formal integration-review disposition and dispatch-manifest transfer recording remain downstream.
+
+The independent post-adjustment verifier repeated build, vet, contract and store-guard commands on the same source hashes above; all exited 0. Its logs are `/tmp/pf26e-s466-attempt-2-build.log`, `/tmp/pf26e-s466-attempt-2-vet.log`, `/tmp/pf26e-s466-attempt-2-contract.log` (20 PASS, 0 FAIL, 0 SKIP; 19 operation/error subtests) and `/tmp/pf26e-s466-attempt-2-guard-store.log` (10 PASS, 0 FAIL, 0 SKIP). Review decision: the read-only go-coding review reported no findings; formal integration review is pending downstream.

@@ -143,7 +143,7 @@ func (e *Env) DoRaw(t *testing.T, req *http.Request) *Response {
 	if err != nil {
 		t.Fatalf("send test request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read test response body: %v", err)

@@ -38,7 +38,7 @@ func AuditLogList(ctx context.Context, q Querier, offset, limit int, userID stri
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list audit logs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.AuditLog{}
 	for rows.Next() {
 		var item model.AuditLog

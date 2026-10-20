@@ -18,12 +18,13 @@ func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, de
 	fieldByID, fieldByCode := map[string]model.FormField{}, map[string]model.FormField{}
 	slipByID, slipByCode := map[string]model.WorkflowSection{}, map[string]model.WorkflowSection{}
 	for _, section := range def.SectionList {
-		if section.SectionType == model.SectionTypeForm {
+		switch section.SectionType {
+		case model.SectionTypeForm:
 			for _, f := range section.FormFields {
 				fieldByID[f.ID] = f
 				fieldByCode[f.Code] = f
 			}
-		} else if section.SectionType == model.SectionTypeSlip {
+		case model.SectionTypeSlip:
 			slipByID[section.ID] = section
 			slipByCode[section.Code] = section
 		}

@@ -114,7 +114,7 @@ func UserPermissions(ctx context.Context, q Querier, userID string) (map[string]
 	if err != nil {
 		return nil, fmt.Errorf("store: query user permissions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[string]bool{}
 	for rows.Next() {
 		var raw string

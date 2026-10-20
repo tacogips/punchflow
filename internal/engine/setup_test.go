@@ -46,7 +46,7 @@ func pf14Setup(t *testing.T) *pf14TestEnv {
 	for rows.Next() {
 		var id, code string
 		if err := rows.Scan(&id, &code); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			t.Fatal(err)
 		}
 		users[code] = id
@@ -66,7 +66,7 @@ func pf14Setup(t *testing.T) *pf14TestEnv {
 	for rows.Next() {
 		var id, code string
 		if err := rows.Scan(&id, &code); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			t.Fatal(err)
 		}
 		teams[code] = id

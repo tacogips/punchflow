@@ -57,7 +57,7 @@ func UserList(ctx context.Context, q Querier, filter UserListFilter, offset, lim
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list users: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -218,7 +218,7 @@ func UserTeamIDs(ctx context.Context, q Querier, userID string, offset, limit in
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list user teams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -243,7 +243,7 @@ func UserRoleIDs(ctx context.Context, q Querier, userID string, offset, limit in
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list user roles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string

@@ -31,7 +31,7 @@ func runToken(ctx context.Context, args []string, stdout, stderr interface{ Writ
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	authn := auth.NewAuthenticator(db, kftime.SystemClock{})
 	kind, userID := model.TokenKindPAT, ""
 	if *service != "" {

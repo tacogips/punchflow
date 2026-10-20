@@ -42,7 +42,7 @@ func (a *API) uploadFile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequest)
 	parseErr := r.ParseMultipartForm(8 << 20)
 	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
 	}
 	if parseErr != nil {
 		var maxErr *http.MaxBytesError
@@ -58,7 +58,7 @@ func (a *API) uploadFile(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("Missing file"))
 		return
 	}
-	defer part.Close()
+	defer func() { _ = part.Close() }()
 	contentType := header.Header.Get("Content-Type")
 	var saved model.File
 	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
@@ -114,8 +114,16 @@ func (a *API) getFile(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvisibleTicket())
 		return
 	}
+	fileURL := a.d.Files.SignedURL(file)
+	if strings.HasPrefix(fileURL, "/") {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		fileURL = scheme + "://" + r.Host + fileURL
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"url": a.d.Files.SignedURL(file), "filename": file.Filename, "checksum": file.Checksum,
+		"url": fileURL, "filename": file.Filename, "checksum": file.Checksum,
 		"byteSize": file.ByteSize, "contentType": file.ContentType, "createdAt": kftime.Format(file.CreatedAt),
 	})
 }

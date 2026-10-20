@@ -105,9 +105,6 @@ func pf08EmptyStrings(v []string) []string {
 	}
 	return v
 }
-func pf08ConditionField(f model.ConditionField) map[string]any {
-	return map[string]any{"id": f.ID, "variable": f.Variable, "fieldKey": f.FieldKey, "symbol": f.Symbol, "value": f.Value, "generalMaster": nil, "generalMasterItem": nil, "formField": nil, "grade": nil, "team": nil}
-}
 
 func pf08Categories(ctx context.Context, q store.Querier, codes []string) []any {
 	out := []any{}

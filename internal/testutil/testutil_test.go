@@ -47,7 +47,7 @@ func TestReceiverRecordsCopiesAndUsesResponseSequence(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		response.Body.Close()
+		_ = response.Body.Close()
 		wantStatus := []int{http.StatusServiceUnavailable, http.StatusAccepted, http.StatusAccepted}[i]
 		if response.StatusCode != wantStatus {
 			t.Fatalf("response %d status = %d, want %d", i, response.StatusCode, wantStatus)

@@ -288,8 +288,8 @@ Session-466 changes:
 
 ### Done Criteria (session 466)
 
-- [ ] Verification lines 1-16 (`-s466-` logs; line 10 as rewritten above) passed in one final uninterrupted run, each with exit 0, log path and counts. Full gate: FAIL=0, SKIP=0, zero `(cached)`, every package `ok`, and 15 required PASS lines including `TestContractOperationCoverage`.
-- [ ] `internal/contract/coverage_test.go` exists and passes (96 unique operations equal to `apiv1.Operations()`).
+- [ ] Verification lines 1-16 (`-s466-` logs; line 10 as rewritten above) passed in one final uninterrupted run, each with exit 0, log path and counts. The run stopped at line 12 (`mise run lint`) because of foreign-file diagnostics; lines 13-16 remain unrun.
+- [x] `internal/contract/coverage_test.go` exists and passes (96 unique operations equal to `apiv1.Operations()`).
 - [ ] CF closing notes and the PF-26 split note appended to `notes.md`. `mise.toml` `test` is uncached. Both toolchain files have a `finalizeS466` key and are valid JSON.
 - [ ] 36 plan files and the s460..s465 manifests are in `impl-plans/completed/`. `impl-plans/README.md` is updated. The s466 manifest is untouched in `active/`.
 
@@ -305,8 +305,26 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15), excep
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests resolved/routed**: -
+### Session: 2026-10-21 (session 466, PF-27 implementation)
+**Intent snapshot**: Add `internal/contract/coverage_test.go` to assert the 22 `liveReadScenarios` and six PF-26 operation inventories are duplicate-free and exactly equal `apiv1.Operations()`; update this plan's progress log with implementation and final-gate evidence. The downstream review-dependent docs, archive moves, and README index updates remain for their workflow steps.
+**Tasks Completed**: All six PF-26 predecessors were accepted. Added the aggregate 96-operation inventory test and `repo_invariants_test.go`; changed only the `mise.toml` test run to `go test -count=1 ./... && mise run web:test`; ran `go mod tidy` and `go mod verify`; appended `finalizeS466` records to both toolchain manifests. Go module tidy promoted `go-oidc`, `jsonschema/v6`, `oauth2`, `yaml.v3` and `modernc/sqlite` to direct requirements and refreshed transitive go.sum entries. The final full Go gate and uncached mise test pass, but the required lint command failed on foreign files; work stops at that reconciliation boundary.
+**Verification**:
+- Focused coverage guard: `go test -count=1 -v -race -run '^TestContractOperationCoverage$' ./internal/contract/...` exit 0; PASS=1, FAIL=0, SKIP=0; `/tmp/pf27-s466-step6-coverage.log` and `tmp/punchflow-kickflow-dummy-s466/PF-27/attempt-1/coverage.log`.
+- Coverage vet: `go vet ./internal/contract/...` exit 0; `/tmp/pf27-s466-step6-vet-contract.log`.
+- `go vet .` exit 0; `/tmp/pf27-s466-step6-vet-root.log` and `.../vet-root-r2.log`.
+- First `TestRepoInvariants` run exposed wrapped `os.Stat` not-exist errors; its log is `.../attempt-1/invariants.log` (exit 1, PASS=3, FAIL=2, SKIP=0). Replaced direct `fs.ErrNotExist` equality with `os.IsNotExist`; retry `go test -count=1 -v -run '^TestRepoInvariants$' .` exited 0, PASS=5, FAIL=0, SKIP=0 at `/tmp/pf27-s466-step6-invariants-r2.log` and `.../attempt-1/invariants-r2.log`.
+- Attempt 2 ordered checks: web install/typecheck/test/build exit 0 (Bun 25 pass, 0 fail; `/tmp/pf27-s466-attempt-2-web.log`); `mise run build` exit 0 (`...-mise-build.log`); `go mod tidy` exit 0 (`...-tidy.log`); `go mod verify` exit 0, “all modules verified” (`...-modverify.log`); `go build ./...` exit 0 (`...-build.log`); `go vet ./...` exit 0 (`...-vet.log`). Full `go test -count=1 -v -race ./...` exit 0, PASS=793, FAIL=0, SKIP=0, cached=0 (`...-test.log`). All 15 required named top-level tests passed, including `TestRepoInvariants`, `TestContractOperationCoverage` and six `TestContractLive*`; package summaries are in `.../packages.log`.
+- `mise run test` exit 0 and uncached; Bun summary 25 pass, 0 fail (`/tmp/pf27-s466-attempt-2-mise-test.log`).
+- `mise run lint` exit 1; complete log `/tmp/pf27-s466-attempt-2-mise-lint.log`. `golangci-lint run ./...` found 40 diagnostics (24 errcheck, 1 ineffassign, 10 staticcheck, 5 unused) and the task stopped before `go vet ./...` / web typecheck. The ordered gate stopped here as required; verification lines 13-16 were not run. Full attempt-2 logs are copied under `tmp/punchflow-kickflow-dummy-s466/PF-27/attempt-2/`.
+- Toolchain JSON validation: `jq -e '.finalizeS466' go-toolchain.json` and same for `web/toolchain.json` both exited 0. Go version `go1.25.4 darwin/arm64`; Bun `1.4.3`; bun.lock SHA-256 `eee300137f6b77ce73ab6491efd1cda132c13fd3548c394bf5ba7270788beee0`.
+- Hashes: mise.toml before `ae06bfa549ad47fb22631fac69b4ce27a2ac717e8054ed98f6f964cfb2d31eef`, after `452223bf9701d6bd4ef3d7a4aedf9040c2963440fe27003cdeaf82bbf8ae7e00`; go.mod after tidy `ee9df89830fb0ac16f7a7e121b3a71e93567fb5746ff161e2038bfe4d1e7de6f`, go.sum `b8a47c6606ec32aaa02f025d68e6494097cb2c9020ab114248307e402869030f`; go-toolchain.json `c5fbcbcabc0ac888b7c5db46ca5cd4740004f8401723a1a83ec047dd49611692`; web/toolchain.json `24255d992503c95871b083d14e4e9689a726c06c3591f3f75029ff4e11aaef10`.
+**Reconciliation requests** (required resume boundary; ownership resolved using s466/s465/s462/s460 indexes):
+- `mise run lint` `/tmp/pf27-s466-attempt-2-mise-lint.log` reports sibling-owned diagnostics: PF-26b (`internal/api/v1/files.go:45,61`, `internal/files/download.go:61`, `internal/api/v1/comments_test.go:173`); PF-26a (`internal/engine/update.go:89`, `internal/engine/conditions.go:88,118,122`, `internal/engine/forms.go:21`, `internal/engine/routing.go:95`, `internal/api/v1/tickets.go:332`, `internal/engine/actions.go:554`, `internal/engine/create.go:160`); PF-26f (`internal/store/roles.go:16`). These are outside PF-27 writePaths.
+- Accepted-plan diagnostics from the same lint command: PF-02 (`internal/store/db.go:61,66`, `internal/store/migrate.go:48,52`, `internal/store/store_test.go:89,116,149`); PF-04 (`internal/httpx/middleware_test.go:48`); PF-05 (`internal/store/auth.go:117`); PF-06 (`internal/fixtures/validate.go:387`); PF-08 (`internal/present/workflow.go:108`); PF-09 (`internal/webhook/dispatcher.go:99`); PF-16 (`internal/fixtures/default_roundtrip_test.go:78`, `internal/fixtures/export.go:506-516`, `internal/testutil/env.go:146`, `internal/testutil/testutil_test.go:50`, `internal/admin/admin.go:41`); PF-17 (`internal/auth/oidc_fake_test.go:67`); PF-21 (`internal/store/audit_queries.go:41`); PF-24 (`internal/store/admin.go:27`). `internal/cli/serve_smoke_test.go:105` is frozen by the s466 rule. The historical generated `tmp/punchflow-kickflow-dummy-s462/PF-06/attempt-1/generate/main.go:21` has no listed plan owner. These paths require integration routing; PF-27 did not edit them.
+- PF-26b transfer candidates to record at integration review: `internal/api/v1/files.go`, `internal/api/v1/files_test.go`; PF-26e transfer candidate: `internal/store/read_classification.go`. No outstanding reconciliation request was reported by PF-26a..PF-26f before this PF-27 lint run.
+**Reconciliation requests resolved/routed**: None resolved in PF-27 because all lint diagnostics are outside PF-27-owned files. Integration review must route the listed lint findings, then resume the ordered final verification from line 1. Review-dependent CF closing notes, PF-26 split note, README index update, plan archival and formal review remain downstream and were not edited here.
+
+### Session: 2026-10-21 (session 466, PF-27 resume)
+**Tasks Completed**: Rechecked the existing attempt-2 lint report and confirmed its diagnostics remain outside PF-27's writePaths; no routed repairs or new review findings were supplied in this step. Ran the required final shared-tree compile check after resuming; `go build ./...` exited 0. The implementation handoff remains incomplete until integration routes and resolves the listed foreign-file lint findings, after which the ordered verification must restart from line 1.
+**Verification**: `go build ./...` exit 0; `/tmp/pf27-s466-step6-resume-build.log`; copied to `tmp/punchflow-kickflow-dummy-s466/PF-27/attempt-3/build.log`.
+**Reconciliation requests**: Existing attempt-2 `mise run lint` requests remain outstanding as detailed above; no additional request was discovered or resolved.

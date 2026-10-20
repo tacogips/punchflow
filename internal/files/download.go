@@ -58,7 +58,7 @@ func (s *Store) pf23ServeDownload(w http.ResponseWriter, r *http.Request, db *st
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
-	defer content.Close()
+	defer func() { _ = content.Close() }()
 	w.Header().Set("Content-Type", file.ContentType)
 	w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(file.Filename))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", file.ByteSize))

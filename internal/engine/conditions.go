@@ -85,7 +85,7 @@ func pf14Compare(actual any, symbol string, expected any) bool {
 	case "equal", "equals", "=", "==":
 		return reflect.DeepEqual(actual, expected) || a == b
 	case "not_equal", "not_equals", "!=", "<>":
-		return !(reflect.DeepEqual(actual, expected) || a == b)
+		return !reflect.DeepEqual(actual, expected) && a != b
 	case "contains":
 		return strings.Contains(a, b)
 	case "include", "exclude":
@@ -115,11 +115,11 @@ func pf14Compare(actual any, symbol string, expected any) bool {
 	case "is_empty":
 		return actual == nil || a == "" || pf14bEmptyArray(actual)
 	case "is_not_empty":
-		return !(actual == nil || a == "" || pf14bEmptyArray(actual))
+		return actual != nil && a != "" && !pf14bEmptyArray(actual)
 	case "descendants_or_equal":
 		return reflect.DeepEqual(actual, expected) || a == b
 	case "not_descendants_or_equal":
-		return !(reflect.DeepEqual(actual, expected) || a == b)
+		return !reflect.DeepEqual(actual, expected) && a != b
 	case "greater_than", ">":
 		af, av := pf14Float(actual)
 		bf, bv := pf14Float(expected)

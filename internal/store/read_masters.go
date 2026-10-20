@@ -108,7 +108,7 @@ func GetGeneralMasterFields(ctx context.Context, q Querier, masterID string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("store: query master fields: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.GeneralMasterField{}
 	for rows.Next() {
 		var x model.GeneralMasterField

@@ -45,11 +45,11 @@ func (d *DB) migrate(ctx context.Context) error {
 			return fmt.Errorf("store: begin migration %d: %w", version, e)
 		}
 		if _, e = tx.ExecContext(ctx, string(body)); e != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("store: apply migration %d: %w", version, e)
 		}
 		if _, e = tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(?,strftime('%s','now')*1000)", version); e != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("store: record migration %d: %w", version, e)
 		}
 		if e = tx.Commit(); e != nil {

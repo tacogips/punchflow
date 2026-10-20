@@ -411,7 +411,7 @@ func pf06Query(ctx context.Context, q store.Querier, query string, fn func(*sql.
 	if err != nil {
 		return fmt.Errorf("fixtures: export query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		if err := fn(rows); err != nil {
 			return fmt.Errorf("fixtures: export row: %w", err)
@@ -503,21 +503,21 @@ func WriteDir(dir string, files map[string][]byte) error {
 		}
 		temp := tmp.Name()
 		if _, err = tmp.Write(files[name]); err != nil {
-			tmp.Close()
-			os.Remove(temp)
+			_ = tmp.Close()
+			_ = os.Remove(temp)
 			return err
 		}
 		if err = tmp.Sync(); err != nil {
-			tmp.Close()
-			os.Remove(temp)
+			_ = tmp.Close()
+			_ = os.Remove(temp)
 			return err
 		}
 		if err = tmp.Close(); err != nil {
-			os.Remove(temp)
+			_ = os.Remove(temp)
 			return err
 		}
 		if err = os.Rename(temp, filepath.Join(dir, name)); err != nil {
-			os.Remove(temp)
+			_ = os.Remove(temp)
 			return err
 		}
 	}

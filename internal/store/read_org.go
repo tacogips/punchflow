@@ -83,7 +83,7 @@ func GetTeamChildren(ctx context.Context, q Querier, id string) ([]model.Team, e
 	if e != nil {
 		return nil, fmt.Errorf("store: query team children: %w", e)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var v string
@@ -102,7 +102,7 @@ func GetTeamMemberships(ctx context.Context, q Querier, teamID string) ([]model.
 	if e != nil {
 		return nil, fmt.Errorf("store: query memberships: %w", e)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TeamMembership{}
 	for rows.Next() {
 		var x model.TeamMembership

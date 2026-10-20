@@ -23,7 +23,7 @@ func TestSaveSignedURLAndDownload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if _, err := db.Q().ExecContext(ctx, `INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES('uploader','uploader','uploader@example.test','Upload','User','active','en','employee','{}',0,0)`); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestSaveRejectsOversize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	fileStore := New(t.TempDir(), []byte("key"), "", kftime.SystemClock{}, 3)
 	if _, err := fileStore.Save(ctx, db.Q(), "uploader", "large.bin", "", strings.NewReader("four")); err == nil {
 		t.Fatal("oversize upload succeeded")

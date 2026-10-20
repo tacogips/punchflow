@@ -384,15 +384,16 @@ func Validate(s *Set) error {
 		if t.Token == "" {
 			add(FileTokens, p+".token", "token is required")
 		}
-		if t.Kind == model.TokenKindPAT {
+		switch t.Kind {
+		case model.TokenKindPAT:
 			if t.UserCode == "" || !userCodes[t.UserCode] {
 				add(FileTokens, p+".userCode", "pat requires a valid userCode")
 			}
-		} else if t.Kind == model.TokenKindSAT {
+		case model.TokenKindSAT:
 			if t.UserCode != "" {
 				add(FileTokens, p+".userCode", "sat must not have userCode")
 			}
-		} else {
+		default:
 			add(FileTokens, p+".kind", "invalid token kind")
 		}
 	}

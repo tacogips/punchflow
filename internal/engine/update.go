@@ -86,7 +86,7 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		hasUpdate = true
 	}
 	if in.Inputs != nil || in.SlipItems != nil {
-		inputValues := []FieldInput{}
+		var inputValues []FieldInput
 		slipValues := []SlipItemInput{}
 		if in.Inputs != nil {
 			if approver {

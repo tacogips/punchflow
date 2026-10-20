@@ -13,14 +13,15 @@ import (
 // RoleList returns role IDs and the total count in deterministic order.
 func RoleList(ctx context.Context, q Querier, offset, limit int, sortField string, desc bool) ([]string, int, error) {
 	order := "name ASC, id ASC"
-	if sortField == "createdAt" {
+	switch sortField {
+	case "createdAt":
 		order = "created_at"
 		if desc {
 			order += " DESC"
 		} else {
 			order += " ASC"
 		}
-	} else if sortField == "name" {
+	case "name":
 		order = "name"
 		if desc {
 			order += " DESC"
@@ -36,7 +37,7 @@ func RoleList(ctx context.Context, q Querier, offset, limit int, sortField strin
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list roles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -130,7 +131,7 @@ func RoleMemberIDs(ctx context.Context, q Querier, roleID string, offset, limit 
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list role members: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string

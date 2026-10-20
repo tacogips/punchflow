@@ -14,7 +14,7 @@ func ProxyListApplicants(ctx context.Context, q Querier, offset, limit int) ([]m
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list proxy applicants: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -42,7 +42,7 @@ func ProxyListApprovers(ctx context.Context, q Querier, offset, limit int) ([]mo
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list proxy approvers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string

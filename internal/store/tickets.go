@@ -53,7 +53,7 @@ func EngTicketInputs(ctx context.Context, q Querier, ticketID string) ([]model.T
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine inputs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketInput{}
 	for rows.Next() {
 		var x model.TicketInput
@@ -113,7 +113,7 @@ func EngTicketSteps(ctx context.Context, q Querier, ticketID string) ([]model.Ti
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine steps: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketStep{}
 	for rows.Next() {
 		var x model.TicketStep
@@ -163,7 +163,7 @@ func EngStepAssignees(ctx context.Context, q Querier, stepID string) ([]model.Ti
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine assignees: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketAssignee{}
 	for rows.Next() {
 		var x model.TicketAssignee

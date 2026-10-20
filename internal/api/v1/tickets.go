@@ -329,11 +329,3 @@ func pf22RemoteIP(r *http.Request) *string {
 	}
 	return &host
 }
-func pf22TicketStatusValid(value string) bool {
-	for _, v := range model.TicketStatuses {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}

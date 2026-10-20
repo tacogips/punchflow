@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -551,4 +550,3 @@ func (e *Engine) pf14Archive(ctx context.Context, tx *store.Tx, a Actor, id stri
 	}
 	return []model.WebhookEvent{pf14Event(model.WebhookEventTicketArchived, id, a.UserID)}, nil
 }
-func pf14ActionError(message string) error { return fmt.Errorf("engine: %s", message) }

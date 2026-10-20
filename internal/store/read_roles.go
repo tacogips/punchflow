@@ -35,7 +35,7 @@ func GetRoleUserIDs(ctx context.Context, q Querier, id string) ([]string, error)
 	if err != nil {
 		return nil, fmt.Errorf("store: query role memberships: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []string{}
 	for rows.Next() {
 		var v string

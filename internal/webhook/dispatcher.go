@@ -96,7 +96,7 @@ func (s *Service) pf09Deliver(ctx context.Context, ev model.WebhookDelivery, hoo
 	if err != nil {
 		return s.pf09Record(ctx, ev, hook, manual, headers, nil, err.Error(), s.clock.Now().Sub(started), started)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, pf09ResponseLimit))
 	if readErr != nil {
 		err = readErr

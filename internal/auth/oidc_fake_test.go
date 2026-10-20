@@ -64,7 +64,7 @@ func (f *pf17FakeIssuer) jwks(w http.ResponseWriter, _ *http.Request) {
 	e := big.NewInt(int64(f.key.PublicKey.E)).Bytes()
 	f.writeJSON(w, map[string]any{"keys": []map[string]string{{
 		"kty": "RSA", "use": "sig", "alg": "RS256", "kid": "pf17-test-key",
-		"n": base64.RawURLEncoding.EncodeToString(f.key.PublicKey.N.Bytes()),
+		"n": base64.RawURLEncoding.EncodeToString(f.key.N.Bytes()),
 		"e": base64.RawURLEncoding.EncodeToString(e),
 	}}})
 }

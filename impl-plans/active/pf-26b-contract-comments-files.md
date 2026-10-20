@@ -1,6 +1,6 @@
 # PF-26b Contract Scenarios: Comments and Files Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress (implementation complete; pending Step 7 review and PF-27 archival)
 **Wave**: A (s466; parallel with PF-26a, PF-26c..PF-26f) | **Depends On**: none (all dependencies accepted at `a2a82de`) | **Plan ID**: PF-26b
 **Design Reference**: design-docs/specs/design-api-coverage.md "Live scenario partition (session 466)" (rules 1-8, repair-eligibility table), operation matrix rows #71, #72 and #91-#95, INF-26, INF-30, INF-37; design-docs/specs/architecture.md "PF-26 split and final-run rule (session 466)"
 **Created**: 2026-10-21
@@ -122,10 +122,10 @@ Conditional guard (required for each package with an edited file): `bash -o pipe
 
 ## Done Criteria
 
-- [ ] `TestContractLiveCommentsFiles` passes with 7 operation subtests and 4 error subtests (uploadFile, getFile, getComment, updateComment). The inventory check passes.
-- [ ] Every verification line shows exit 0, with log path and counts. FAIL=0, SKIP=0.
-- [ ] Production edits have transfer-candidate records and passing guards. Other defects are reconciliation requests.
-- [ ] `go build ./...` exits 0 at the end of every attempt.
+- [x] `TestContractLiveCommentsFiles` passes with 7 operation subtests and 4 error subtests (uploadFile, getFile, getComment, updateComment). The inventory check passes.
+- [x] Every verification line shows exit 0, with log path and counts. FAIL=0, SKIP=0.
+- [x] Production edits have transfer-candidate records and passing guards. Other defects are reconciliation requests.
+- [x] `go build ./...` exits 0 at the end of every attempt.
 
 ## Execution Protocol
 
@@ -137,9 +137,27 @@ Follow `impl-plans/README.md` "Shared Execution Protocol" rules 1-16 (fresh read
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Transfer candidates**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (s466 Step 6)
+**Intent snapshot**: Add one scenario file for the seven assigned comments/files operations and update this progress record. Repair only defects exposed by these scenarios within PF-26b repair-eligible paths.
+**Tasks Completed**:
+- Added `internal/contract/scenarios_comments_files_test.go` with the exact seven-operation inventory; HTTP multipart upload and attached-file ticket setup; schema, timestamp, pagination, error-body and Link checks; four error subtests; and soft-delete follow-up.
+- Fixed `getFile` to return an absolute download URI when `PublicBaseURL` is empty. Updated its same-basename request helper test to preserve absolute HTTP(S) URLs.
+- Confirmed the scenario file is 360 lines and all changed Go files are gofmt clean.
+**Verification** (final source; complete logs in `/tmp` and `tmp/punchflow-kickflow-dummy-s466/PF-26b/attempt-1/`):
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf26b-s466-build.log'` — exit 0.
+- `bash -o pipefail -c 'go vet ./internal/contract/... 2>&1 | tee /tmp/pf26b-s466-vet.log'` — exit 0.
+- `bash -o pipefail -c "go test -count=1 -v -race -run '^TestContractLiveCommentsFiles$' ./internal/contract/... 2>&1 | tee /tmp/pf26b-s466-contract.log"` — exit 0; PASS=12, FAIL=0, SKIP=0; 11 operation/error subtests passed.
+- `test "$(grep -c -- '--- PASS: TestContractLiveCommentsFiles/' /tmp/pf26b-s466-contract.log)" -ge 11` — exit 0.
+- `bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf26b-s466-vet-apiv1.log'` — exit 0.
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/api/v1/... 2>&1 | tee /tmp/pf26b-s466-guard-apiv1.log'` — exit 0; PASS=41, FAIL=0, SKIP=0.
+- `test -z "$(gofmt -l internal/contract/scenarios_comments_files_test.go internal/api/v1/files.go internal/api/v1/files_test.go)"` — exit 0.
+- `test "$(wc -l < internal/contract/scenarios_comments_files_test.go)" -lt 1000` — exit 0.
+- Final `go build ./...` — exit 0.
+**Transfer candidates**:
+- `{path: internal/api/v1/files.go, fromPlan: PF-23, toPlan: PF-26b, declaringManifest: impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json, reason: getFile returned a relative URL that failed the assigned OpenAPI URI validation when PublicBaseURL was empty, guardVerification: go test -count=1 -v -race ./internal/api/v1/... (exit 0; PASS=41, FAIL=0, SKIP=0)}`.
+- `{path: internal/api/v1/files_test.go, fromPlan: PF-23, toPlan: PF-26b, declaringManifest: impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json, reason: adapt the existing request helper to the corrected absolute getFile URL, guardVerification: go test -count=1 -v -race ./internal/api/v1/... (exit 0; PASS=41, FAIL=0, SKIP=0)}`.
+- Hashes: `internal/contract/scenarios_comments_files_test.go` `f9471d86251bb556f9a7725f61ef9ec022f4f0ea65a08544313f702743d8ec35`; `internal/api/v1/files.go` before `d2ab73e144ba619b49345e58ee104b63f68bb882d7a13191cd6c2a0c7cc2d398`, after `5eae25ec20a1f8b8a30217d0291f9469fa0f39e5dc355f610c3328ba88424e52`; `internal/api/v1/files_test.go` before `75bf6fba0b07ccd3c94db203c92afea8b80389ad1c83324b9f6939b2a8e26e1b`, after `fc5815a0d0f1fb89885f68093c48c4e3f0c0c2c6e59f3fdf6826a5e12cee36f0`.
+**Reconciliation requests**: None.
+**Independent post-modification check**: The `check-and-test-after-modify` agent reran build, both vets, the focused contract test, and the api/v1 package guard against the same source hashes; all exited 0 (contract PASS=12/FAIL=0/SKIP=0; api/v1 PASS=41/FAIL=0/SKIP=0). Logs: `/tmp/pf26b-s466-check-build.log`, `/tmp/pf26b-s466-check-vet-contract.log`, `/tmp/pf26b-s466-check-vet-apiv1.log`, `/tmp/pf26b-s466-check-contract.log`, `/tmp/pf26b-s466-check-apiv1.log`.
+**Prior failed attempts**: Initial contract attempts exposed (1) top-level teams listing omits the nested sales team, (2) ticket setup omitted fields required by the in-progress form contract, and (3) `getFile` emitted a relative URI. The first package guard then showed the existing `pf23Request` helper doubled an absolute URL. Each issue was corrected within PF-26b writePaths; the prior terminal captures are in `tmp/punchflow-kickflow-dummy-s466/PF-26b/attempt-1/prior-terminal-captures/` as historical debugging context, not passing evidence. The final-source focused contract and package guard logs above pass.
+**Downstream pending**: Step 7 review and PF-27 full gate, documentation/index work and plan archival remain outside Step 6.

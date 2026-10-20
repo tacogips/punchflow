@@ -36,7 +36,7 @@ func GradeList(ctx context.Context, q Querier, offset, limit int, sortBy string,
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list grades: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -114,7 +114,7 @@ func GradeInUse(ctx context.Context, q Querier, id string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("store: list membership grades: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {

@@ -95,21 +95,28 @@ func GetFolderChildren(ctx context.Context, q Querier, id string) ([]model.Folde
 	if err != nil {
 		return nil, fmt.Errorf("store: query folder children: %w", err)
 	}
-	defer rows.Close()
-	out := []model.Folder{}
+	defer func() { _ = rows.Close() }()
+	childIDs := []string{}
 	for rows.Next() {
 		var childID string
 		if err = rows.Scan(&childID); err != nil {
 			return nil, err
 		}
+		childIDs = append(childIDs, childID)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate folder children: %w", err)
+	}
+	if err = rows.Close(); err != nil {
+		return nil, fmt.Errorf("store: close folder children rows: %w", err)
+	}
+	out := make([]model.Folder, 0, len(childIDs))
+	for _, childID := range childIDs {
 		x, e := GetFolder(ctx, q, childID)
 		if e != nil {
 			return nil, e
 		}
 		out = append(out, x)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: iterate folder children: %w", err)
 	}
 	return out, nil
 }

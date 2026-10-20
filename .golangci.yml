@@ -1,0 +1,15 @@
+version: "2"
+
+# Default linters are kept. Only git-ignored scratch/evidence directories and
+# third-party web dependencies are excluded from analysis.
+linters:
+  exclusions:
+    paths:
+      - ^tmp/
+      - ^web/node_modules/
+
+formatters:
+  exclusions:
+    paths:
+      - ^tmp/
+      - ^web/node_modules/

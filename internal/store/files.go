@@ -57,7 +57,7 @@ func FileAttachmentTicketIDs(ctx context.Context, q Querier, signedID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("store: query file attachment tickets: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string

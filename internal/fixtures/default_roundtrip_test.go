@@ -32,7 +32,7 @@ func TestDefaultRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if _, err := fixtures.Load(ctx, db, defaults, kftime.SystemClock{}); err != nil {
 		t.Fatalf("load default fixtures: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestDefaultRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer secondDB.Close()
+	defer func() { _ = secondDB.Close() }()
 	if _, err := fixtures.Load(ctx, secondDB, secondFS, kftime.SystemClock{}); err != nil {
 		t.Fatalf("load first export: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestTenantTimestampFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	assertTenantTimestamps := func(label string) {
 		t.Helper()
 		var created, updated int64

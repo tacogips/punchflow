@@ -52,7 +52,7 @@ func TicketViewers(ctx context.Context, q Querier, id string) ([]model.TicketVie
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket viewers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketViewer{}
 	for rows.Next() {
 		var x model.TicketViewer
@@ -73,7 +73,7 @@ func TicketInputs(ctx context.Context, q Querier, id string) ([]model.TicketInpu
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket inputs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketInput{}
 	for rows.Next() {
 		var x model.TicketInput
@@ -99,7 +99,7 @@ func TicketSlipItems(ctx context.Context, q Querier, id string) ([]model.TicketS
 	if err != nil {
 		return nil, fmt.Errorf("store: query slip items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketSlipItem{}
 	for rows.Next() {
 		var x model.TicketSlipItem
@@ -122,7 +122,7 @@ func TicketSteps(ctx context.Context, q Querier, id string) ([]model.TicketStep,
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket steps: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketStep{}
 	for rows.Next() {
 		var x model.TicketStep
@@ -148,7 +148,7 @@ func TicketAssignees(ctx context.Context, q Querier, stepID string) ([]model.Tic
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket assignees: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TicketAssignee{}
 	for rows.Next() {
 		var x model.TicketAssignee
@@ -216,7 +216,7 @@ func TicketAttachments(ctx context.Context, q Querier, ticketID string, commentI
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket attachments: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.File{}
 	for rows.Next() {
 		var x model.File
@@ -237,7 +237,7 @@ func ProxyUserIDs(ctx context.Context, q Querier, userID, workflowID, today stri
 	if err != nil {
 		return nil, fmt.Errorf("store: query proxy approvers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []string{}
 	for rows.Next() {
 		var id string

@@ -34,7 +34,7 @@ func WorkflowList(ctx context.Context, q Querier, offset, limit int, status, fol
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return nil, 0, err
 	}
 	if err = rows.Close(); err != nil {
@@ -101,13 +101,13 @@ func pf20ListDefinitionIDs(ctx context.Context, q Querier, table string, offset,
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, 0, err
 		}
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return nil, 0, err
 	}
 	if err = rows.Close(); err != nil {

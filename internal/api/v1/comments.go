@@ -47,14 +47,14 @@ func (a *API) listComments(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			kferr.Write(w, kferr.Internal())
 			return
 		}
 		ids = append(ids, id)
 	}
 	err = rows.Err()
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return

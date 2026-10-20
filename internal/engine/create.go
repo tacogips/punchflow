@@ -157,9 +157,3 @@ func mustActiveChart(ctx context.Context, tx *store.Tx) string {
 	}
 	return id
 }
-func pf14ErrorContext(err error, what string) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("engine: %s: %w", what, err)
-}

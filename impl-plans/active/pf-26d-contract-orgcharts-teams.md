@@ -1,6 +1,6 @@
 # PF-26d Contract Scenarios: Organization Charts and Teams Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: A (s466; parallel with PF-26a..PF-26c, PF-26e, PF-26f) | **Depends On**: none (all dependencies accepted at `a2a82de`) | **Plan ID**: PF-26d
 **Design Reference**: design-docs/specs/design-api-coverage.md "Live scenario partition (session 466)" (rules 1-8, repair-eligibility table), operation matrix rows #28-#31 and #33-#42, INF-23; design-docs/specs/architecture.md "PF-26 split and final-run rule (session 466)"
 **Created**: 2026-10-21
@@ -126,10 +126,10 @@ Conditional guard (required for each package with an edited file): `bash -o pipe
 
 ## Done Criteria
 
-- [ ] `TestContractLiveOrgChartsTeams` passes with 14 operation subtests and 4 error subtests. The inventory check passes.
-- [ ] Every verification line shows exit 0, with log path and counts. FAIL=0, SKIP=0.
-- [ ] Production edits have transfer-candidate records and passing guards. Other defects are reconciliation requests.
-- [ ] `go build ./...` exits 0 at the end of every attempt.
+- [x] `TestContractLiveOrgChartsTeams` passes with 14 operation subtests and 4 error subtests. The inventory check passes.
+- [x] Every verification line shows exit 0, with log path and counts. FAIL=0, SKIP=0.
+- [x] Production edits have transfer-candidate records and passing guards. Other defects are reconciliation requests. No production edits or reconciliation requests were needed.
+- [x] `go build ./...` exits 0 at the end of every attempt.
 
 ## Execution Protocol
 
@@ -141,9 +141,14 @@ Follow `impl-plans/README.md` "Shared Execution Protocol" rules 1-16 (fresh read
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Transfer candidates**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (s466 attempt 1)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/intent.md`; pre-node snapshot copied from the runtime's `fanoutChangeEvidencePath` to `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/pre-node-snapshot.json`.
+**Tasks Completed**: Added `internal/contract/scenarios_orgcharts_teams_test.go` with exactly 14 operation IDs, ordered create/get/update/mutate/delete coverage, response and error schema checks, timestamp and pagination checks, a `rel="next"` assertion, and inventory self-check. Exercised four `validation_failed` cases. No production defect was exposed; no repair-eligible production file was edited. Source SHA-256: `2654f6abd59b350da9291c49510e3a15a05b02202b555b8e47a0c4ab09e4ef18`.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf26d-s466-build.log'; printf 'exit=%s\n' "$?"` — exit 0; log `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/build.log` (empty diagnostics).
+- `bash -o pipefail -c 'go vet ./internal/contract/... 2>&1 | tee /tmp/pf26d-s466-vet.log'; printf 'exit=%s\n' "$?"` — exit 0; log `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/vet.log` (empty diagnostics).
+- `bash -o pipefail -c "go test -count=1 -v -race -run '^TestContractLiveOrgChartsTeams$' ./internal/contract/... 2>&1 | tee /tmp/pf26d-s466-contract.log"; printf 'exit=%s\n' "$?"` — exit 0; log `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/contract.log`; 19 PASS lines total, including 18 passing operation/error subtests; FAIL=0, SKIP=0.
+- Count guard on `/tmp/pf26d-s466-contract.log` — exit 0; log `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/counts.log`; `PASS=19 FAIL=0 SKIP=0 SUBTEST_PASS=18` (minimum 18).
+- `test -z "$(gofmt -l internal/contract/scenarios_orgcharts_teams_test.go)"` and `test "$(wc -l < internal/contract/scenarios_orgcharts_teams_test.go)" -lt 1000` — both exit 0; combined output log `tmp/punchflow-kickflow-dummy-s466/PF-26d/attempt-1/mechanical.log`; 233 source lines.
+**Transfer candidates**: None; production files were not edited.
+**Reconciliation requests**: None.

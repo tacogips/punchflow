@@ -170,9 +170,10 @@ func pf23CreateExpenseTicket(t *testing.T, env *testutil.Env, actorCode, teamCod
 		}
 		for _, field := range section.FormFields {
 			value := any(nil)
-			if field.Code == "amount" {
+			switch field.Code {
+			case "amount":
 				value = 100
-			} else if field.Code == "purpose" {
+			case "purpose":
 				value = "Test expense"
 			}
 			raw, marshalErr := json.Marshal(value)

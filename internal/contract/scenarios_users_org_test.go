@@ -50,19 +50,19 @@ func TestContractScenarios(t *testing.T) {
 	}
 }
 
+var liveReadScenarios = []struct{ operationID, path string }{
+	{"getCurrentUser", "/v1/user"}, {"listUsers", "/v1/users"}, {"getUser", "/v1/users/sales-rep"},
+	{"listGrades", "/v1/grades"}, {"getGrade", "/v1/grades/manager"}, {"listProxyApplicants", "/v1/proxyApplicants"},
+	{"listProxyApprovers", "/v1/proxyApprovers"}, {"listOrganizationCharts", "/v1/organizationCharts"},
+	{"getCurrentOrganizationChart", "/v1/organizationChart"}, {"listCategories", "/v1/categories"},
+	{"listFolders", "/v1/folders"}, {"getFolder", "/v1/folders/finance"}, {"listRoutes", "/v1/routes"},
+	{"getRoute", "/v1/routes/expense-standard"}, {"listWorkflows", "/v1/workflows"},
+	{"getWorkflow", "/v1/workflows/expense-claim"}, {"listTickets", "/v1/tickets"}, {"listTasks", "/v1/tickets/tasks"},
+	{"listGeneralMasters", "/v1/generalMasters"}, {"getGeneralMaster", "/v1/generalMasters/cost-centers"},
+	{"listRoles", "/v1/roles"}, {"listAuditLogs", "/v1/auditLogs"},
+}
+
 func TestContractLiveReadScenarios(t *testing.T) {
-	type scenario struct{ operationID, path string }
-	cases := []scenario{
-		{"getCurrentUser", "/v1/user"}, {"listUsers", "/v1/users"}, {"getUser", "/v1/users/sales-rep"},
-		{"listGrades", "/v1/grades"}, {"getGrade", "/v1/grades/manager"}, {"listProxyApplicants", "/v1/proxyApplicants"},
-		{"listProxyApprovers", "/v1/proxyApprovers"}, {"listOrganizationCharts", "/v1/organizationCharts"},
-		{"getCurrentOrganizationChart", "/v1/organizationChart"}, {"listCategories", "/v1/categories"},
-		{"listFolders", "/v1/folders"}, {"getFolder", "/v1/folders/finance"}, {"listRoutes", "/v1/routes"},
-		{"getRoute", "/v1/routes/expense-standard"}, {"listWorkflows", "/v1/workflows"},
-		{"getWorkflow", "/v1/workflows/expense-claim"}, {"listTickets", "/v1/tickets"}, {"listTasks", "/v1/tickets/tasks"},
-		{"listGeneralMasters", "/v1/generalMasters"}, {"getGeneralMaster", "/v1/generalMasters/cost-centers"},
-		{"listRoles", "/v1/roles"}, {"listAuditLogs", "/v1/auditLogs"},
-	}
 	env := testutil.New(t)
 	ops := make(map[string]apiv1.Operation)
 	for _, op := range apiv1.Operations() {
@@ -70,7 +70,7 @@ func TestContractLiveReadScenarios(t *testing.T) {
 	}
 	spec := loadSpec(t)
 	c := schemaCompiler(t, spec)
-	for _, item := range cases {
+	for _, item := range liveReadScenarios {
 		item := item
 		t.Run(item.operationID, func(t *testing.T) {
 			op, ok := ops[item.operationID]

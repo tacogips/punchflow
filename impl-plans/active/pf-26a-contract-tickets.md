@@ -90,7 +90,7 @@ Local helpers (behavior, not code):
 - `pf26aCheckError(t, resp, status, code)`:
   - call `testutil.AssertError`;
   - validate the body against `file:///kickflow-openapi.json#/components/schemas/ErrorResponse`;
-  - decode it into a map and check that its keys are a subset of `code`, `message` and `errors`, that `errors` is present if and only if status is 422, and that `doc_url` is never present.
+  - decode it into a map and check that its keys are a subset of `code`, `message` and `errors`, that `errors` is present only for status 422 (it is optional on 422), and that `doc_url` is never present.
 - Inventory check:
   - At the start, assert `len(liveTicketsOperations) == 13` and that every id exists in `apiv1.Operations()`.
   - Record `ok := t.Run(id, ...)` per id.
@@ -111,11 +111,11 @@ Subtest names are `TestContractLiveTickets/<operationId>`, and error cases are `
 9. `listTicketLinks`: Employee GET `/v1/tickets/{D1}/links` -> 200 (an empty array is valid).
 10. `createViewer`: Employee POST `/v1/tickets/{D1}/viewers` with `{"userId": <engineer id>}` -> 200. Add a second viewer with `{"teamId": <finance team id>}` as setup. Error `createViewer/error_invalid_parameter`: a body with both `userId` and `teamId` -> 400 `invalid_parameter`.
 11. `listViewers`: Employee GET `/v1/tickets/{D1}/viewers` -> 200, with pagination headers if the spec declares `perPage`. Link check: GET `...?perPage=1` (Total is 2) -> the `Link` header contains `rel="next"`. If `listViewers` declares no `perPage`, do the Link check on any other paginated operation you call and note the choice in the progress log.
-12. `deleteViewer`: Employee DELETE `/v1/tickets/{D1}/viewers/{viewerId}` (id from the step-10 response) -> 200, checked by `pf26aCheck` (empty-body rule from the spec).
+12. `deleteViewer`: Employee DELETE `/v1/tickets/{D1}/viewers/{viewerId}` (id from the step-11 schema-validated list response; `createViewer` has an empty 200 body per the spec) -> 200, checked by `pf26aCheck` (empty-body rule from the spec).
 13. `archiveTicket`: Employee POST `/v1/tickets/{D1}/archive` -> 200, status `archived`. Error `archiveTicket/error_invalid_state`: archiving D1 again -> 422 `invalid_state` (INF-24). The 422 body may carry `errors`; the helper allows it.
 
 Pitfalls:
-- Decode ids from responses (`{"id": ...}`); viewer ids come from the createViewer response.
+- Decode ids from responses (`{"id": ...}`); viewer ids come from the schema-validated listViewers response because createViewer returns an empty body per the OpenAPI spec.
 - The `Integration` persona sends `X-Caller-Id` taken from the `testutil.Env.CallerFor` field (a string field, not a method). This plan does not use it.
 - Approving A may complete only the first step. Do not assert `completed`.
 - Do not assert hand-written key lists. Schema validation is the field-name check (design rule 4).
@@ -149,10 +149,10 @@ Conditional guard (required, and must pass, for each package in which you edited
 
 ## Done Criteria
 
-- [ ] `TestContractLiveTickets` passes with 13 operation subtests and 5 error subtests (getTicket, updateTicketForm, approveTicket, createViewer, archiveTicket). The inventory check passes.
-- [ ] Every verification line shows exit 0, with log path and counts in the Progress Log. FAIL=0, SKIP=0.
-- [ ] Every production edit has a transfer-candidate record and a passing package guard. Every non-eligible defect is a reconciliation request.
-- [ ] `go build ./...` exits 0 at the end of every attempt.
+- [x] `TestContractLiveTickets` passes with 13 operation subtests and 5 error subtests (getTicket, updateTicketForm, approveTicket, createViewer, archiveTicket). The inventory check passes.
+- [x] Every verification line shows exit 0, with log path and counts in the Progress Log. FAIL=0, SKIP=0.
+- [x] Every production edit has a transfer-candidate record and a passing package guard. Every non-eligible defect is a reconciliation request. (No production edits or reconciliation requests were needed.)
+- [x] `go build ./...` exits 0 at the end of every attempt.
 
 ## Execution Protocol
 
@@ -164,9 +164,20 @@ Follow `impl-plans/README.md` "Shared Execution Protocol" rules 1-16: fresh read
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Transfer candidates**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s466/PF-26a/attempt-1/intent-scenarios.md`; edit intents: `edit-intent-003.md` through `edit-intent-006.md`.
+**Tasks Completed**: Added `internal/contract/scenarios_tickets_test.go` with all 13 ticket operations and five named error subtests. Success responses validate against the operation's OpenAPI 200 schema (or empty-body contract); errors validate against `ErrorResponse`; JST timestamps, pagination headers, one `Link rel="next"`, and inventory are checked. `createViewer` is checked as an empty response per the spec; the viewer ID is read from the validated list response. No production files were modified.
+**Verification** (final source, scenario SHA-256 `ed62c38a689190766df315d3e81e0982f2f974d9a6bbe9e08e348d64d66c12ad`; complete logs also copied under `tmp/punchflow-kickflow-dummy-s466/PF-26a/attempt-1/`):
+- `go build ./...`: exit 0; `/tmp/pf26a-s466-build.log`.
+- `go vet ./internal/contract/...`: exit 0; `/tmp/pf26a-s466-vet.log`.
+- `go test -count=1 -v -race -run '^TestContractLiveTickets$' ./internal/contract/...`: exit 0; PASS=19, FAIL=0, SKIP=0; 13 operation plus 5 nested error PASS lines; `/tmp/pf26a-s466-contract.log`.
+- `test "$(grep -c -- '--- PASS: TestContractLiveTickets/' /tmp/pf26a-s466-contract.log)" -ge 18`: exit 0.
+- `test -z "$(gofmt -l internal/contract/scenarios_tickets_test.go)"`: exit 0.
+- `test "$(wc -l < internal/contract/scenarios_tickets_test.go)" -lt 1000`: exit 0; 385 lines.
+- Structural evidence `/tmp/pf26a-s466-structure.log`: PASS=19, FAIL=0, SKIP=0; subtest-count, gofmt, and line-limit checks each exit 0.
+- The final build was run after vet and test and exited 0.
+**Prior attempts**: The initial contract failure is preserved at `/tmp/pf26a-s466-contract-attempt1-failed.log` and `tmp/punchflow-kickflow-dummy-s466/PF-26a/attempt-1/prior-contract-failed.log`; it exposed the incorrect requirement that every 422 contain `errors`. The helper now allows omission on 422 and still rejects `errors` on other statuses. The initial post-format vet attempt failed on sibling in-flight `internal/contract/scenarios_masters_test.go:138:51` (`undefined: compiler`); final vet passed after the sibling file was completed. A passing intermediate focused run lacked separately named error subtests; those were added and the final run reports all 18 named subtests passing.
+**Plan wording reconciliations**: The OpenAPI createViewer 200 has no response content, so viewer IDs come from listViewers. `errors` is optional for 422 and forbidden on other statuses, matching the accepted criterion and the observed schema-valid response.
+**Transfer candidates**: None; no production edits.
+**Reconciliation requests**: None.
+**Plan hashes**: pre-edit `8be77002dc38c03e4d3223b77d9121b7c63ef29bdc95d45bfbb94100fc6400b5`; final post-edit hash is reported in Step 6 evidence.

@@ -28,13 +28,13 @@ func CategoryList(ctx context.Context, q Querier, offset, limit int, sortBy stri
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, 0, err
 		}
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return nil, 0, err
 	}
 	if err = rows.Close(); err != nil {
@@ -98,13 +98,13 @@ func FolderList(ctx context.Context, q Querier, offset, limit int, sortBy string
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, 0, err
 		}
 		ids = append(ids, id)
 	}
 	if err = rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return nil, 0, err
 	}
 	if err = rows.Close(); err != nil {

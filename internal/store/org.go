@@ -15,7 +15,7 @@ func OrgChartList(ctx context.Context, q Querier, offset, limit int) ([]model.Or
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list org charts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
@@ -75,7 +75,7 @@ func TeamList(ctx context.Context, q Querier, chartID string, parentID *string, 
 	if e != nil {
 		return nil, 0, e
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string

@@ -86,7 +86,7 @@ func TestOpenMigratesAllTablesAndReopenIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer again.Close()
+	defer func() { _ = again.Close() }()
 	if err = again.migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestOpenRelativePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer check.Close()
+	defer func() { _ = check.Close() }()
 	var version, fk, migrations int
 	var journal string
 	if err = check.Q().QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 1 {
@@ -146,7 +146,7 @@ func TestOpenMemoryPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	var version int
 	if err := db.Q().QueryRowContext(context.Background(), "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 1 {
 		t.Fatalf("memory migration version=%d err=%v", version, err)

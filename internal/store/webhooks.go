@@ -21,7 +21,7 @@ func ListWebhooks(ctx context.Context, q Querier, offset, limit int) ([]model.We
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list webhooks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]model.Webhook, 0)
 	for rows.Next() {
 		v, err := pf09ScanWebhook(rows)
@@ -121,7 +121,7 @@ func EnabledWebhooks(ctx context.Context, q Querier) ([]model.Webhook, error) {
 	if err != nil {
 		return nil, fmt.Errorf("store: list enabled webhooks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]model.Webhook, 0)
 	for rows.Next() {
 		v, err := pf09ScanWebhook(rows)
@@ -166,7 +166,7 @@ func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int) 
 	if err != nil {
 		return nil, fmt.Errorf("store: query due webhook events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]model.WebhookDelivery, 0)
 	for rows.Next() {
 		v, err := pf09ScanDelivery(rows)
@@ -200,7 +200,7 @@ func ListWebhookEvents(ctx context.Context, q Querier, webhookID string, offset,
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list webhook events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]model.WebhookDelivery, 0)
 	for rows.Next() {
 		v, err := pf09ScanDelivery(rows)
@@ -256,7 +256,7 @@ func ListWebhookAttempts(ctx context.Context, q Querier, eventID string) ([]mode
 	if err != nil {
 		return nil, fmt.Errorf("store: list webhook attempts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]model.WebhookAttempt, 0)
 	for rows.Next() {
 		var v model.WebhookAttempt

@@ -7,7 +7,6 @@ import (
 
 	"punchflow/internal/auth"
 	"punchflow/internal/httpx"
-	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
 	"punchflow/internal/store"
 	"punchflow/internal/webhook"
@@ -36,8 +35,4 @@ func New(d Deps) *API { return &API{d: d} }
 type Operation struct {
 	Name, Method, Pattern string
 	Handle                func(a *API, w http.ResponseWriter, r *http.Request)
-}
-
-func (a *API) unavailable(w http.ResponseWriter, _ *http.Request) {
-	kferr.Write(w, kferr.Internal())
 }

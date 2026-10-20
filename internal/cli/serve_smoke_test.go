@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -102,7 +101,7 @@ func TestServeSmoke(t *testing.T) {
 			t.Errorf("serve exit code = %d", code)
 		}
 	case <-time.After(15 * time.Second):
-		t.Fatal(fmt.Sprintf("serve did not stop; db=%s", filepath.Join(tmp, "pf.sqlite")))
+		t.Fatalf("serve did not stop; db=%s", filepath.Join(tmp, "pf.sqlite"))
 	}
 	_ = reader.Close()
 }

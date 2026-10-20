@@ -29,7 +29,7 @@ func EngActiveMemberships(ctx context.Context, q Querier, userID, teamID string)
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine memberships: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []model.TeamMembership{}
 	for rows.Next() {
 		var x model.TeamMembership
@@ -73,7 +73,7 @@ func EngLeadersOfTeam(ctx context.Context, q Querier, teamID string) ([]string, 
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine team leaders: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []string{}
 	for rows.Next() {
 		var id string
@@ -120,7 +120,7 @@ func EngActiveProxyApprovers(ctx context.Context, q Querier, targetUserID, proxy
 	if err != nil {
 		return false, fmt.Errorf("store: query engine proxy approvers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var starts, ends *string
 		var raw string
