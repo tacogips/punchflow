@@ -1,10 +1,10 @@
 # PF-18 /v1 Users and Grades Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 4 | **Depends On**: PF-08, PF-16 | **Plan ID**: PF-18
 **Design Reference**: design-docs/specs/design-api-coverage.md rows 1-18; design-docs/references/kickflow-api.md section 3 "Users", "Grades" and section 4 schemas; notes.md INF-02, INF-03, INF-24, INF-29, INF-42
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -167,8 +167,8 @@ Evidence: exit 0; FAIL=0; SKIP=0; PASS covers every case in the Tests section.
 
 ### Done Criteria (session 465)
 
-- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
-- [ ] Pre/post hashes of `users.go` and `grades.go`; every source write followed by a logged compile gate with exit 0
+- [x] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
+- [x] Pre/post hashes of `users.go` and `grades.go`; every source write followed by a logged compile gate with exit 0
 
 ## Execution Protocol
 
@@ -187,3 +187,63 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). `user
 **Tasks Completed**: None
 **Verification**: -
 **Reconciliation requests**: -
+
+### Session: 2026-10-21 (s465 attempt 1)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-1/edit-intent-001.txt`; source hashes before/after in `pre-edit-hashes.txt` and `post-edit-hashes.txt`.
+**Tasks Completed**: Began PF-18. Implemented `getCurrentUser` and `getUser`; 15 remaining handlers, both store files, and required test files are not implemented. Plan remains In Progress; session-465 completion criteria are unchecked.
+**Verification**:
+- `go build ./...` after the first users.go write: exit 1 due to incorrect Principal field; complete log `build-after-users.log`. Corrected against fresh `internal/auth/principal.go` read.
+- `go build ./...` after correction: exit 0; log `build-after-users-repair.log`.
+- `go vet ./internal/api/v1/...`: exit 0; `vet.log`.
+- PF10 guard: exit 1 during a concurrent PF-21 edit, `internal/store/roles.go:68: undefined: boolInt`; log `pf10guard.log`. The shared-tree build later passed, but no successful PF10 guard rerun was recorded.
+- Scoped uncached race tests: exit 0 but `testing: warning: no tests to run`; positive behavioral evidence is absent. Log `test.log`.
+- `gofmt -l` over declared PF-18 files: exit 0; three declared files do not exist yet (recorded in line-count log).
+- Stub scan: exit 0 with matches; expected no-match proof fails, so handlers remain.
+- Final `go build ./...`: exit 0; `final-build.log`.
+**Reconciliation requests**: Transient shared-tree failure in `internal/store/roles.go:68` owned by PF-21; do not edit. A later build succeeded. No completed behavioral test suite exists.
+
+**Verification follow-up**: Re-ran the PF10 guard after the shared PF-21 compile issue cleared: exit 0, PASS=2, FAIL=0, SKIP=0; `pf10guard-rerun.log`. Correction to the earlier gofmt note: five declared but not-yet-created paths were omitted (users_status.go, users_test.go, grades_test.go, store/users.go, store/grades.go); `file-line-counts.log` records their absence. No PF-18 behavior tests were created or matched.
+
+### Session: 2026-10-21 (s465 attempt 2)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-2/plan-progress-intent.txt`; per-write intents `edit-intent-001.txt` through `edit-intent-014.txt`, plus store and formatting intent files in the same directory. Pre-node snapshot: `pre-node-snapshot.json`.
+**Tasks Completed**: Implemented all 18 user and grade operations. Added user and grade store queries/mutations, status transitions, lookup, membership lists, grade defaults/deletion guards, audit records, and httptest coverage. The focused suite covers users, current-user, grades, status transitions, permissions, pagination, validation, and audit behavior. No PF-18 reconciliation request remains.
+**Transient failures repaired**: The first compile gates caught duplicate stub declarations, an unused import, and a temporary missing `grades.go` during its replacement; each was corrected immediately and a subsequent compile gate passed. The first race suite had four failing assertions caused by test assumptions that did not match the seeded fixture (grade count, employee identity, and in-use grade); test setup/expectations were corrected against the current fixture and the final suite passes. These failed attempts are historical and are not treated as passing evidence.
+**Final verification (current source)**:
+- `go build ./...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-2/build-final.log`.
+- `go vet ./internal/api/v1/...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-2/vet-final.log`.
+- `go test -count=1 -v -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/...`: exit 0, PASS=8, FAIL=0, SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-2/test-final-current.log`.
+- `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2, FAIL=0, SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-2/pf10guard-final-current.log`.
+- `test -z "$(gofmt -l internal/api/v1/users.go internal/api/v1/users_status.go internal/api/v1/grades.go internal/api/v1/users_test.go internal/api/v1/grades_test.go internal/store/users.go internal/store/grades.go)"`: exit 0; no files listed.
+- `rg -n 'not implemented' internal/api/v1/users.go internal/api/v1/users_status.go internal/api/v1/grades.go; rg_rc=$?; test $rg_rc -eq 1`: exit 0; no stub message remains.
+- Each PF-18 Go file is below 1000 lines; line counts are 42, 539, 246, 167, 101, 275, and 156 respectively.
+- Independent check-and-test rerun: build and vet exit 0; scoped race suite PASS=8/FAIL=0/SKIP=0; PF10 guard PASS=2/FAIL=0/SKIP=0. Logs `/tmp/pf18-check-build.log`, `/tmp/pf18-check-vet.log`, `/tmp/pf18-check-test.log`, `/tmp/pf18-check-pf10guard.log`.
+**Source hashes**: before editing, `users.go` `97406943017563516fce0b78f8a5e6540dc5d482f8eb4ae0a25e3e6b6bd96584`, `grades.go` `68710a97dda86ee0d46ba8add9d63b4e6707e3553e918e5ae8848f0f65bc2f49` (`pre-source-hashes.json`); after editing, `users.go` `4297a5ae0f5cb6b53e85ef6171b0627ab2d70007a45b19147c6267dda6b70ff9`, `grades.go` `5dcb2503564509172d32cc8b82c6a2d9570a69796afa5a3a3ef72b6a16fd97a1f` (`post-source-hashes.txt`).
+**Compile gates**: Every non-test source write was followed by `go build ./...`; each test write was followed by `go vet ./internal/api/v1/...`. Attempt logs are preserved in the attempt-2 directory; final gates above pass.
+**Downstream**: Formal integration/adversarial review and final workflow commit are downstream steps; they are not PF-18 implementation gaps.
+
+### Session: 2026-10-21 (s465 attempt 3, PF18-ADV-01)
+**Intent snapshots**: `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-3/intent-users-status.txt`, `intent-users-test.txt`, and `plan-edit-intent.txt`.
+**Finding addressed**: Removed the reinvite exclusion around `store.UserSetStatus` in `pf18TransitionUser`. Reinvite now persists `invited` and clears `deactivated_at` while retaining invitation creation, audit logging, and invalid-state checks.
+**Regression**: `TestUserReinviteDeactivatedAndInvalidState` asserts delete response deactivated/non-null `deactivatedAt`, reinvite response invited/null `deactivatedAt`, persisted DB status invited with NULL deactivation timestamp, a `user.reinvite` audit row, and 422 `invalid_state` when reinviting the activated Admin fixture. Existing tests remain unchanged.
+**Verification (current source)**:
+- `go build ./...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-3/build.log`.
+- `go vet ./internal/api/v1/...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-3/vet.log`.
+- `go test -count=1 -v -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/...`: exit 0, PASS=9, FAIL=0, SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-3/test.log`.
+- `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2, FAIL=0, SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-3/pf10guard.log`.
+- `test -z "$(gofmt -l internal/api/v1/users.go internal/api/v1/users_status.go internal/api/v1/grades.go internal/api/v1/users_test.go internal/api/v1/grades_test.go internal/store/users.go internal/store/grades.go)"`: exit 0; complete result `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-3/gofmt.log`.
+- Compile gate after the production-source edit: `go build ./...` exit 0; log `build-after-status.log`. Vet gate after the test edit: `go vet ./internal/api/v1/...` exit 0; log `vet-after-test.log`.
+**Post-fix hashes**: `users_status.go` `cbfcb8e3d61ca4706eaa0d2f4baaa89b2c76acb0f38fa2706c9e3ea597feef7f`; `users_test.go` `da1f11ff56f840ff9e35bc446c47cd4f5368df8418d79e65bc6be01d19ce30d9`; both recorded in `post-fix-source-hashes.txt`. File sizes: users_status.go 537 lines, users_test.go 216 lines.
+**Status**: PF18-ADV-01 is implemented and its regression passes; assigned PF-18 work remains Completed. Independent adversarial re-review is downstream and acceptance is not claimed in this implementation record.
+
+### Session: 2026-10-21 (s465 attempt 4, current-tree re-verification)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-4/plan-edit-intent.txt`. No Go source was edited in this attempt.
+**Tasks Completed**: Re-verified the PF-18 implementation and PF18-ADV-01 regression on the current shared tree. A focused read-only review found no defect in reinvite persistence or invalid-state handling. No implementation work remains; formal review, combined-tree integration acceptance and finalization remain downstream.
+**Verification (current source; complete logs and exit records under `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-4/`)**:
+- `go build ./...`: exit 0; `build.log`, `build.exit`.
+- `go vet ./internal/api/v1/...`: exit 0; `vet.log`, `vet.exit`.
+- `go test -count=1 -v -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/...`: exit 0, PASS=9, FAIL=0, SKIP=0; `race.log`, `race.exit`, `race.counts`.
+- `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2, FAIL=0, SKIP=0; `pf10.log`, `pf10.exit`, `pf10.counts`.
+- Declared PF-18 Go-file `gofmt -l` check: exit 0, no output; `gofmt.log`, `gofmt.exit`.
+- `not implemented` scan over users.go, users_status.go and grades.go: no matches; expected no-match wrapper exit 0; `no-stub.log`, `no-stub.exit`.
+- Current SHA-256 values: users.go `4297a5ae0f5cb6b53e85ef6171b0627ab2d70007a45b19147c6267dda6b70ff9`; grades.go `5dcb2503564509172d32cc8b82c6a2d9570a69796afa5a3a3ef72b6a16fd97a1`; users_status.go `cbfcb8e3d61ca4706eaa0d2f4baaa89b2c76acb0f38fa2706c9e3ea597feef7f`; users_test.go `da1f11ff56f840ff9e35bc446c47cd4f5368df8418d79e65bc6be01d19ce30d9`; grades_test.go `29fc5e9b214b38279de9ecb658dfaf414540d28df7effa74bc44c339237c6f1d`; store/users.go `02f018526fbfd632f9f358c459387fd12810b9b403223a47432cd75f8a605f12`; store/grades.go `64c06921a1b485535d45d8aa810e210b000ed4bea581bb83ec42407fb21c6bc4`.
+**Evidence capture note**: The first build wrapper attempt could not record `$?` because zsh reserves `status`; the Go build itself completed, then the wrapper failed. The command was rerun using a writable variable; the final complete log and exit record report build exit 0. This was not a source or Go build failure.

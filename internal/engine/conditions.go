@@ -12,6 +12,13 @@ import (
 
 func pf14InputValues(def model.WorkflowDef, inputs []FieldInput) map[string]any {
 	byID, byCode := map[string]any{}, map[string]any{}
+	idToCode := map[string]string{}
+	for _, section := range def.SectionList {
+		for _, field := range section.FormFields {
+			idToCode[field.ID] = field.Code
+		}
+	}
+	explicitCodes := map[string]bool{}
 	for _, input := range inputs {
 		var value any
 		if len(input.Value) > 0 {
@@ -31,6 +38,14 @@ func pf14InputValues(def model.WorkflowDef, inputs []FieldInput) map[string]any 
 		}
 		byID[input.FormFieldID] = value
 		byCode[input.FormFieldCode] = value
+		if input.FormFieldCode != "" {
+			explicitCodes[input.FormFieldCode] = true
+		}
+		if input.FormFieldCode == "" && input.FormFieldID != "" {
+			if code := idToCode[input.FormFieldID]; code != "" && !explicitCodes[code] {
+				byCode[code] = value
+			}
+		}
 	}
 	values := make(map[string]any, len(byID)+len(byCode))
 	for k, v := range byID {
@@ -41,7 +56,6 @@ func pf14InputValues(def model.WorkflowDef, inputs []FieldInput) map[string]any 
 			values[k] = v
 		}
 	}
-	_ = def
 	return values
 }
 
@@ -74,6 +88,38 @@ func pf14Compare(actual any, symbol string, expected any) bool {
 		return !(reflect.DeepEqual(actual, expected) || a == b)
 	case "contains":
 		return strings.Contains(a, b)
+	case "include", "exclude":
+		found := false
+		switch values := actual.(type) {
+		case []any:
+			for _, value := range values {
+				if reflect.DeepEqual(value, expected) || fmt.Sprint(value) == b {
+					found = true
+					break
+				}
+			}
+		case []string:
+			for _, value := range values {
+				if value == b {
+					found = true
+					break
+				}
+			}
+		default:
+			found = reflect.DeepEqual(actual, expected) || a == b
+		}
+		if strings.ToLower(symbol) == "exclude" {
+			return !found
+		}
+		return found
+	case "is_empty":
+		return actual == nil || a == "" || pf14bEmptyArray(actual)
+	case "is_not_empty":
+		return !(actual == nil || a == "" || pf14bEmptyArray(actual))
+	case "descendants_or_equal":
+		return reflect.DeepEqual(actual, expected) || a == b
+	case "not_descendants_or_equal":
+		return !(reflect.DeepEqual(actual, expected) || a == b)
 	case "greater_than", ">":
 		af, av := pf14Float(actual)
 		bf, bv := pf14Float(expected)
@@ -97,6 +143,11 @@ func pf14Compare(actual any, symbol string, expected any) bool {
 	default:
 		return false
 	}
+}
+
+func pf14bEmptyArray(value any) bool {
+	rv := reflect.ValueOf(value)
+	return (rv.Kind() == reflect.Array || rv.Kind() == reflect.Slice || rv.Kind() == reflect.Map) && rv.Len() == 0
 }
 
 func pf14Float(v any) (bool, float64) {

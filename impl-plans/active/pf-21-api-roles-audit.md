@@ -1,10 +1,10 @@
 # PF-21 /v1 Admin Roles and Audit Logs Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 4 | **Depends On**: PF-08, PF-16 | **Plan ID**: PF-21
 **Design Reference**: design-docs/specs/design-api-coverage.md rows 83-90 and 96; design-docs/references/kickflow-api.md section 3 "Admin roles", "Audit logs", section 1.8; notes.md INF-29, INF-43, DIV-08
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -147,8 +147,8 @@ rg -n 'not implemented' internal/api/v1/roles.go internal/api/v1/audit_logs.go  
 
 ### Done Criteria (session 465)
 
-- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; `rg -l 'audit_read' internal/api/v1/roles_test.go` lists the file; gofmt check exit 0
-- [ ] Pre/post hashes of the transferred files; every source write followed by a logged compile gate with exit 0
+- [x] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; `rg -l 'audit_read' internal/api/v1/roles_test.go` lists the file; gofmt check exit 0
+- [x] Pre/post hashes of the transferred files; every source write followed by a logged compile gate with exit 0
 
 ## Execution Protocol
 
@@ -162,8 +162,35 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). Handl
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (s465 attempt 1)
+**Intent snapshot**: Implement PF-21 roles and audit handlers, Role*/AuditLog* store queries, httptest coverage, and this progress record. PF-16 was accepted in the runtime dependency set. No paths outside the plan declarations were edited.
+**Tasks Completed**: Implemented 8 role operations and listAuditLogs. Permission values are checked against `model.Permissions`; role permission target IDs are validated and persisted in API form; role mutations write audit records transactionally. Added success and error tests for role CRUD/memberships, pagination, guards, permission enum/target validation, audit filters and permissions.
+**Source hashes**: transferred files before edits: `roles.go` 3e9d4a55cf8eba09a9f35fa49130995d995ceec4329ff159b63eb40a4b3e6b77; `audit_logs.go` b9a5b98b04ca3ba54c49f9508776a4cac521cf5662f5ab1b3df9e22ff7b132ad. Final: `roles.go` 9c27edb07102e4617e7308fef77e4bd5cfcfe2b1aefb37bc482f9eba3ed294e6; `audit_logs.go` 6ccc40453cdcd4752a2a83d1de7020dda760733e4fb49384b09e1d2cd9a521c7; `roles_test.go` a30d0f742cd961189de7bd6841cddd82297bca7ee2b0140e873d5c491b618fb6; `audit_logs_test.go` 00974f494e2f85fe8d63fc9e56580f9b6d596041c27a9fbebbc022475723ace1; `store/roles.go` dc4e145a92ce19d6dbec064cdd65dc3ebab3e554f8b57dfe1d747885c3df79ae; `store/audit_queries.go` a19dd9ef1bef067c58d6e85a3a449c205977f9aea1588fa86bfec0f1e38e64e9.
+**Verification**:
+- `go build ./...`: exit 0, `/tmp/pf21-s465-build-after-prefix-fix.log` (copied to `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-1/`). Earlier compile gate after the first `roles.go` write failed on missing `boolInt`; corrected with a local bool conversion and the immediate retry passed. Earlier shared-tree builds also saw transient PF-19/PF-20 compile errors; final current-tree build passed.
+- `go vet ./internal/api/v1/...`: exit 0, `/tmp/pf21-s465-vet-final2.log` (copied to attempt-1).
+- PF-10 guard `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2 FAIL=0 SKIP=0, `/tmp/pf21-s465-pf10guard-final2.log` (copied to attempt-1).
+- PF-21 race tests `go test -count=1 -v -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/...`: exit 0, PASS=5 FAIL=0 SKIP=0, `/tmp/pf21-s465-test-final2.log` (copied to attempt-1). An earlier attempt failed two assertions due to a decimal-only fixture UUID and unsupported RFC3339-Z query shape; tests now use a test-local alphabetic UUID and supported date-only inputs, and the final run passes. The private audit helper was renamed `pf21AuditStringPtr` to satisfy the shared-package identifier prefix rule, then all final checks were rerun.
+- Gofmt selected-file check: exit 0; stub-message proof `rg ...; test $? -eq 1`: exit 0 with no matches; `rg -l 'audit_read' internal/api/v1/roles_test.go`: exit 0 and listed the required file.
+**Reconciliation requests**: None pending. Transient sibling compile errors were in PF-19 `internal/api/v1/proxies.go` and PF-20 `internal/api/v1/general_masters.go`; later shared-tree build/vet/test gates passed without PF-21 changes to those files.
+
+### Session: 2026-10-21 (s465 attempt 2; PF21-TI-01)
+**Intent**: Added plan-listed regression coverage without production changes. `TestRoleMembershipAndSelfEditGuards` now asserts Admin PATCH and DELETE of the non-editable Super Admin role return 403 `resource_not_editable`, followed by a 200 GET proving the role remains. `TestAuditLogRoleMutationsAndFilters` asserts Employee audit access is 403 before membership, adds `sales-rep` to the API-created audit role, then asserts Employee audit access is 200. Existing assertions, including the literal `audit_read` negative case, remain.
+**Source hash**: `internal/api/v1/roles_test.go` b8159940fbb0ac16e238a958d875b6571732a9213c6e8a0e9beace7f29c9d0ec (`tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-2/roles-test.sha256`).
+**Verification**:
+- `go vet ./internal/api/v1/...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-2/vet.log`.
+- `go test -count=1 -v -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/...`: exit 0, PASS=5 FAIL=0 SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-2/test.log`.
+- `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2 FAIL=0 SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-2/pf10guard.log`.
+- `test -z "$(gofmt -l internal/api/v1/roles_test.go)"`: exit 0; log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-2/gofmt.log`. `rg -l 'audit_read' internal/api/v1/roles_test.go` listed the file.
+- Required `go build ./...`: exit 1; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-2/build.log`. Failure is outside PF-21 scope in PF-19-owned `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-2/teams_mutated.go` (`undefined: API`). No sibling path was edited. PF-21 remains In Progress pending the PF-19 owner repair and a passing build rerun.
+
+### Session: 2026-10-21 (s465 attempt 3; PF21-TI-01 verification)
+**Intent**: Re-ran the implementation gates on current source after PF-19's temporary mutation artifact was excluded from Go package discovery. The attempt-2 build failure is historical and resolved; no PF-21 source or test edits were needed in this attempt. PF21-TI-01 regression coverage remains in `roles_test.go`: PATCH/DELETE of the non-editable Super Admin role assert 403 `resource_not_editable` and confirm the role survives; the audit role test asserts Employee access is denied before membership and allowed after the API grants `sales-rep` membership.
+**Source hash**: `internal/api/v1/roles_test.go` b8159940fbb0ac16e238a958d875b6571732a9213c6e8a0e9beace7f29c9d0ec (`tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-3/source-sha256.txt`); matches attempt 2.
+**Verification**:
+- `go build ./...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-3/build.log`.
+- `go vet ./internal/api/v1/...`: exit 0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-3/vet.log`.
+- `go test -count=1 -v -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/...`: exit 0, PASS=5 FAIL=0 SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-3/test.log`.
+- `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2 FAIL=0 SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-21/attempt-3/pf10guard.log`.
+- `test -z "$(gofmt -l internal/api/v1/roles.go internal/api/v1/audit_logs.go internal/api/v1/roles_test.go internal/api/v1/audit_logs_test.go internal/store/roles.go internal/store/audit_queries.go)"`: exit 0. `rg -l 'audit_read' internal/api/v1/roles_test.go`: exit 0 and lists the required file.
+**Completion**: All PF-21 implementation criteria pass on current source. Formal independent review remains downstream.

@@ -212,8 +212,8 @@ The manifest `verification` array for PF-15 (logs `/tmp/pf15-s464-*.log`), copie
 
 ### Done Criteria (session 465)
 
-- [ ] Every manifest verification line passes: build/vet exit 0; present and webhook tests exit 0, FAIL=0, SKIP=0, PASS>0 (webhook PASS includes the PF-09 tests); gofmt check exit 0
-- [ ] `payload.go` hash recorded; any edit followed by a logged compile gate; the progress log has exit status, log path and counts for each line
+- [x] Every manifest verification line passes: build/vet exit 0; present and webhook tests exit 0, FAIL=0, SKIP=0, PASS>0 (webhook PASS includes the PF-09 tests); gofmt check exit 0
+- [x] `payload.go` hash recorded; any edit followed by a logged compile gate; the progress log has exit status, log path and counts for each line
 
 ## Execution Protocol
 
@@ -257,4 +257,11 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). `inte
 **Payload hash**: `internal/webhook/payload.go` remains `e2dcc4806ac3249358abf88dd810aa1a3087c26ae19b4ff167baac14f4bf64d7`.
 **Verification**: `go build -o /dev/null ./...` exit 0 (`attempt-3/build.log`); `go vet ./internal/webhook/...` exit 0 (`attempt-3/vet.log`); `go test -count=1 -v -run 'Test(Ticket|Comment|Viewer|WebhookTenant)' ./internal/present/...` exit 0, PASS=2 FAIL=0 SKIP=0 (`attempt-3/present-test.log`); `go test -count=1 -v -race ./internal/webhook/...` exit 0, PASS=29 FAIL=0 SKIP=0, including PF-09 webhook signing/service/dispatcher package coverage (`attempt-3/webhook-test.log`); `gofmt -l internal/webhook/payload_test.go` printed no paths. The gate-disabled overlay mutation command `go test -count=1 -overlay attempt-3/payload-gate-disabled-overlay.json -run '^TestPayloadsBuildSupportedEventsAndEscaping$' -v ./internal/webhook/` exited 1 as expected and failed on all three accepted removed events (`attempt-3/mutation-test.log`); this demonstrates the repaired assertion detects a disabled gate. The overlay source is isolated to `attempt-3/payload-mutated.go`; repository `payload.go` is unchanged.
 **Post-modification agent check**: `.claude/agents/check-and-test-after-modify.md` invoked as `/root/check_after_modify`; `go build -o /dev/null ./...`, webhook vet and uncached webhook race package checks exit 0. Agent report confirms PASS=29 FAIL=0 SKIP=0; logs at `attempt-3/build.log`, `attempt-3/vet.log`, and `attempt-3/webhook-test.log`.
+**Reconciliation requests**: None.
+
+### Session: 2026-10-21 (s465 attempt 4)
+**Intent snapshot**: Re-verify the delivered PF-15 source on the s465 shared tree; make no source behavior changes unless a PF-15 verification line fails. Plan progress edit intent is preserved at `tmp/punchflow-kickflow-dummy-s465/PF-15/attempt-4/progress-edit-intent.txt`.
+**Tasks Completed**: Revalidated the ticket/comment/viewer/tenant presenters, ticket read surface and webhook payload builder against the s465 acceptance criteria. The `NewPayloads()` and `Build` signatures remain unchanged. The table test covers all 13 accepted event types; removed and unknown types are rejected; payload HTML escaping and JST millisecond timestamps are asserted.
+**Payload hash**: `internal/webhook/payload.go` SHA-256 `e2dcc4806ac3249358abf88dd810aa1a3087c26ae19b4ff167baac14f4bf64d7` (matches the expected session-465 hash; source unchanged in this attempt).
+**Verification**: `go build ./...` exit 0 (`/tmp/pf15-s465-build.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-15/attempt-4/build.log`); `go vet ./internal/present/... ./internal/webhook/...` exit 0 (`/tmp/pf15-s465-vet.log`, copied to `attempt-4/vet.log`); uncached scoped presenter tests exit 0, PASS=2 FAIL=0 SKIP=0 (`/tmp/pf15-s465-present-test.log`, copied to `attempt-4/present-test.log`); uncached whole webhook race tests exit 0, PASS=29 FAIL=0 SKIP=0 (`/tmp/pf15-s465-webhook-test.log`, copied to `attempt-4/webhook-test.log`; includes PF-09 signing, service and dispatcher tests); pass/fail/skip counts command exit 0 (`/tmp/pf15-s465-counts.log`, copied to `attempt-4/counts.log`); gofmt clean check exit 0 (`/tmp/pf15-s465-gofmt.log`, copied to `attempt-4/gofmt.log`).
 **Reconciliation requests**: None.

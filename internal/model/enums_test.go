@@ -46,9 +46,11 @@ func TestEnumListsMatchOpenAPI(t *testing.T) {
 		{"Permissions", Permissions, "RoleDetail", []string{"permissionList", "permission"}, nil},
 		{"MasterFieldTypes", MasterFieldTypes, "GeneralMasterField", []string{"fieldType"}, nil},
 		{"MasterSortKeys", MasterSortKeys, "GeneralMaster", []string{"defaultSortBy"}, nil},
+		{"FormFieldSizes", FormFieldSizes, "FormField", []string{"size"}, nil},
+		{"ForcedPublicTypes", ForcedPublicTypes, "TicketSummary", []string{"forcedPublicType"}, nil},
 	}
-	if len(rows) != 20 {
-		t.Fatalf("enum rows=%d; want 20", len(rows))
+	if len(rows) != 22 {
+		t.Fatalf("enum rows=%d; want 22", len(rows))
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -80,6 +82,7 @@ func TestEnumListsHaveNoDuplicates(t *testing.T) {
 		"RouteCombinationTypes": RouteCombinationTypes, "SectionTypes": SectionTypes, "RouteStatuses": RouteStatuses,
 		"WorkflowStatuses": WorkflowStatuses, "UserStatuses": UserStatuses, "UserTypes": UserTypes,
 		"Permissions": Permissions, "MasterFieldTypes": MasterFieldTypes, "MasterSortKeys": MasterSortKeys,
+		"FormFieldSizes": FormFieldSizes, "ForcedPublicTypes": ForcedPublicTypes,
 		"WebhookEventTypes": WebhookEventTypes,
 	}
 	for name, values := range lists {

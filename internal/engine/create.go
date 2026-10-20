@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"punchflow/internal/kferr"
+	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
@@ -26,6 +27,11 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		return "", nil, kferr.InvalidParameter("Invalid ticket status")
 	}
 	now := e.clock.Now()
+	if in.ProxyClientUserID != nil {
+		if err = pf14cValidateProxyClient(ctx, tx, a.UserID, *in.ProxyClientUserID, workflow.ID, kftime.FormatDate(now)); err != nil {
+			return "", nil, err
+		}
+	}
 	authorTeam, err := store.GetTeam(ctx, tx, in.AuthorTeamID)
 	if err != nil {
 		return "", nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
@@ -78,7 +84,7 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		return "", nil, err
 	}
 	author := a.UserID
-	t := model.Ticket{ID: id, WorkflowID: workflow.ID, Status: in.Status, AuthorID: &author, AuthorTeamID: &authorTeam.ID, AuthorTeamSnapshot: snapshot, ProxyClientUserID: in.ProxyClientUserID, Title: in.Title, CreatedAt: now, UpdatedAt: now}
+	t := model.Ticket{ID: id, WorkflowID: workflow.ID, Status: in.Status, AuthorID: &author, AuthorTeamID: &authorTeam.ID, AuthorTeamSnapshot: snapshot, ProxyClientUserID: in.ProxyClientUserID, Title: in.Title, ForcedPublicType: model.ForcedPublicTypeFollowWorkflow, CreatedAt: now, UpdatedAt: now}
 	if err = store.EngInsertTicket(ctx, tx, t); err != nil {
 		return "", nil, err
 	}
@@ -106,6 +112,21 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		events = append(events, pf14Event(model.WebhookEventTicketOpened, id, a.UserID))
 	}
 	return id, events, nil
+}
+
+func pf14cValidateProxyClient(ctx context.Context, q store.Querier, actorID, clientID, workflowID, date string) error {
+	registered, err := store.EngActiveProxyApplicant(ctx, q, clientID, actorID, workflowID, date)
+	if err != nil {
+		return fmt.Errorf("engine: validate proxy client registration: %w", err)
+	}
+	active, err := store.EngUserActive(ctx, q, clientID)
+	if err != nil {
+		return fmt.Errorf("engine: validate proxy client status: %w", err)
+	}
+	if !registered || !active {
+		return kferr.ValidationFailed(map[string][]string{"proxyClientUserId": {"is invalid"}})
+	}
+	return nil
 }
 
 func pf14ValidateCreateCompleteness(def model.WorkflowDef, inputs []FieldInput) error {

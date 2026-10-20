@@ -150,8 +150,8 @@ rg -n 'not implemented' internal/api/v1/comments.go internal/api/v1/files.go int
 
 ### Done Criteria (session 465)
 
-- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard, files and API tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
-- [ ] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
+- [x] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard, files and API tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
+- [x] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
 
 ## Execution Protocol
 
@@ -165,8 +165,21 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). `inte
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (s465, PF-23 implementation)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-23/attempt-1/intent-snapshot.md` (per-edit intentions 1-20; dispatch snapshot: `tmp/riela-fanout/49444EA1-727B-466F-BA6C-A2DD10EB6248/2DD38E7E-7FC6-4B9E-9124-13D294CF4902.json`)
+**Tasks Completed**:
+- Implemented the 7 comment/file operations, comment-created/updated receiver delivery, signed downloads, attached-file visibility and multipart upload.
+- Added store, API httptest and file-package tests, including `comment_deleted` absence, file-reference attachment, signature tampering and expiry.
+- All changes remain within PF-23's declared paths; no reconciliation requests.
+**Verification** (final-source logs under `/tmp`; complete copies under `tmp/punchflow-kickflow-dummy-s465/PF-23/attempt-1/`):
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf23-s465-build-final.log'; echo "exit=$?"` — exit 0.
+- `bash -o pipefail -c 'go vet ./internal/api/v1/... ./internal/files/... 2>&1 | tee /tmp/pf23-s465-vet-final.log'; echo "exit=$?"` — exit 0.
+- `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...` — exit 0, PASS=2 FAIL=0 SKIP=0; `/tmp/pf23-s465-pf10guard-final.log`.
+- `go test -count=1 -v -race ./internal/files/...` — exit 0, PASS=2 FAIL=0 SKIP=0; `/tmp/pf23-s465-files-final.log`.
+- `go test -count=1 -v -race -run 'Test(Comment|Comments|File|Files|Upload)' ./internal/api/v1/...` — exit 0, PASS=5 FAIL=0 SKIP=0; `/tmp/pf23-s465-test-final.log`.
+- `test -z "$(gofmt -l internal/api/v1/comments.go internal/api/v1/files.go internal/api/v1/comments_test.go internal/api/v1/files_test.go internal/files/files.go internal/files/download.go internal/files/files_test.go internal/store/files.go)"` — exit 0.
+- The must-pass `not implemented` check exits 0 (rg no-match handled); all 8 Go files are below 1000 lines. Full logs: `stub-check-final.log`, `gofmt-final.log`, `line-counts.txt`.
+- Every production write had a logged `go build ./...` gate; every test write had its package `go vet` gate. Final source hashes: `final-source-hashes.txt`; transferred-file pre-hashes: `pre-existing-hashes.txt`.
+- Earlier test-authoring failures were corrected: uploader FK setup, a single-connection transaction deadlock, original-token expiry assertion, and test fixtures/permissions/content type. Those attempts are retained as prior logs; the final-source suites above pass uncached.
+**Reconciliation requests**: None.
+**Implementation status**: Complete for PF-23. Formal review, serial integration review, and PF-27 final gate are downstream workflow steps.

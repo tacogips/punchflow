@@ -1,6 +1,6 @@
 # PF-26 Contract Test and Serve Smoke Test Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 5 | **Depends On**: PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-23, PF-24 | **Plan ID**: PF-26
 **Design Reference**: design-docs/specs/design-api-coverage.md#contract-test; design-docs/specs/architecture.md#testing-and-verification (smoke row)
 **Created**: 2026-10-20
@@ -161,3 +161,47 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15).
 **Tasks Completed**: None
 **Verification**: -
 **Reconciliation requests**: -
+
+### Session: 2026-10-21 (session 465, attempt 1)
+**Intent snapshot**: Implement the OpenAPI contract inventory/schema compiler and end-to-end `serve` smoke test within PF-26's declared paths.
+**Tasks Completed**:
+- Added OpenAPI YAML loading, route/operationId comparison for all 96 operations, and response-schema compilation subtests for every operation.
+- Added webhook-schema compilation subtests for the 13 canonical event names.
+- Added recursive JST timestamp validation helper for scenario response assertions.
+- Added `TestServeSmoke`, which starts and joins `cli.Run`, then checks `/healthz`, authenticated `/v1/user`, and `/`.
+**Still Incomplete**:
+- The 96 scenario subtests currently compile response schemas but do not execute representative HTTP requests or validate actual responses against those schemas; the timestamp helper is not yet applied to response bodies.
+- The 13 webhook subtests compile shared schemas but do not emit events, validate delivered payloads, assert the exact received event set, or verify signatures.
+- The smoke test does not yet exercise seeded employee ticket creation.
+**Verification**:
+- `go build ./...`: final exit 0, `/tmp/pf26-s465-build-final.log`; copied to `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/build-final.log`.
+- `go vet ./internal/contract/... ./internal/cli/...`: final exit 0, `/tmp/pf26-s465-vet-final.log`; copied to `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/vet-final.log`.
+- Contract test first attempt failed on the spec path; second failed on lowercase method matching and incorrect JSON Schema resource registration. These superseded logs are copied under `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/`.
+- Final contract schema/inventory suite: exit 0, PASS=208, FAIL=0, SKIP=0; 205 `TestContract` subtests PASS. Log: `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/contract-final.log`.
+- Final `TestServeSmoke`: exit 0, PASS=1, FAIL=0, SKIP=0. Log: `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/smoke-final.log`.
+- `test -z "$(gofmt -l internal/contract internal/cli/serve_smoke_test.go)"`: exit 0; files are gofmt clean.
+**Reconciliation requests**: None observed. The remaining gap is PF-26's own test implementation, not a production handler failure.
+
+### Session: 2026-10-21 (session 465, continuation 1)
+**Intent snapshot**: Continue from the preserved PF-26 tree; add live response validation for seeded read operations, actual webhook delivery/schema/signature checks, and employee ticket creation in the serve smoke test.
+**Tasks Completed**:
+- Added live schema-validated GET scenarios for 22 seeded operations, including status, response schema and timestamp assertions; list responses must include Page, Per-Page and Total headers.
+- Added an end-to-end webhook contract test that fires, delivers and signature-verifies all 13 event types and checks their exact received eventType set.
+- Extended `TestServeSmoke` to POST an in-progress expense-claim ticket using the seeded employee token and assert its returned status.
+- Corrected the timestamp walker so boolean `initialDisplayCreatedAt` fields are not treated as timestamps.
+**Reconciliation requests** (unresolved; integration review must route repairs to the owners, then PF-26 reruns its full contract suite):
+- PF-07 owns fixture values in `fixtures/default/workflows.json`; PF-08 owns workflow presentation in `internal/present/workflow_form.go` and `workflow.go`. `GET /v1/workflows/{workflowId}` fails schema validation at `sectionList[].formFields[].size` (`medium`, schema allows `full|half`) and `routeConditions[].conditionFields[].value` (number, schema allows null/string); `formField` is null where the schema rejects null. Route a joint fixture/presenter disposition to PF-07/PF-08. Evidence: `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/contract-cont1-final.log`, `TestContractLiveReadScenarios/getWorkflow`.
+- PF-15 owns ticket/comment presentation (`internal/present/ticket.go`, `ticket_detail.go`, `comment.go`): 12 non-ping events are delivered and signature-valid, but payload validation fails at `/data/ticket/forcedPublicType` (emitted value outside `follow_workflow|forced_public|forced_private`) and repeated `/data/ticket/.../formField/size` values (`medium`, schema allows `full|half`). Evidence: same log, `TestContractWebhookPayloads` subtests for ticket and comment events. The ping payload passes its schema.
+- Resolution for both requests: owning plans must repair the fixture/presenter output within their declared paths, after which PF-26 reruns contract tests. PF-26 did not edit these foreign files.
+**Still Incomplete**:
+- Representative live response scenarios remain absent for 74 operations; only 22 seeded read operations currently execute through HTTP. The test suite also does not yet cover mutation request scenarios across all operations.
+- Webhook delivery, event-set and signature assertions run, but 12 payload schemas remain failing pending PF-15 repair.
+- `/v1/workflows/{workflowId}` response schema remains failing pending PF-07 fixture and/or PF-08 presenter disposition.
+**Verification**:
+- Final scoped contract command `go test -count=1 -v -race ./internal/contract/...`: exit 1, PASS=230, FAIL=15, SKIP=0; 227 `TestContract` subtests PASS. Failures are the workflow schema mismatch and 12 webhook payload schema mismatches plus parent test failures. Complete log: `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/contract-cont1-final.log`.
+- Corrected `TestServeSmoke`: exit 0, PASS=1, FAIL=0, SKIP=0; log `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/smoke-teamfix.log`.
+- Post-edit `go vet ./internal/contract/...` and `go vet ./internal/cli/...`: exit 0 (commands completed before the contract-cont1 final run).
+- Final `go build ./...`: exit 0, `/tmp/pf26-s465-build-cont1-final.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/build-cont1-final.log`.
+- Final `go vet ./internal/contract/... ./internal/cli/...`: exit 0, `/tmp/pf26-s465-vet-cont1-final.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-1/vet-cont1-final.log`.
+- `test -z "$(gofmt -l internal/contract internal/cli/serve_smoke_test.go)"` and `git diff --check -- internal/contract internal/cli/serve_smoke_test.go impl-plans/active/pf-26-contract-smoke.md`: both exit 0.
+**Review decision**: No formal test-integrity, adversarial or integration review has run. Current contract failures are owner-routed repair requests, not accepted results.

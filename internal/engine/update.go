@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 
 	"punchflow/internal/kferr"
+	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
 
 func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id string, in UpdateInput) ([]model.WebhookEvent, error) {
+	return e.pf14cUpdate(ctx, tx, a, id, in, false)
+}
+
+func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id string, in UpdateInput, partial bool) ([]model.WebhookEvent, error) {
 	t, err := e.pf14Guard(ctx, tx, a, id)
 	if err != nil {
 		return nil, err
@@ -20,7 +25,7 @@ func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id strin
 		_, _, err = e.pf14CanAct(ctx, tx, a, t)
 		if err == nil {
 			approver = true
-		} else if !author {
+		} else {
 			return nil, err
 		}
 	}
@@ -72,6 +77,11 @@ func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id strin
 				return nil, kferr.InvalidParameter("Invalid proxy client")
 			}
 		}
+		if proxy != nil {
+			if err = pf14cValidateProxyClient(ctx, tx, a.UserID, *proxy, t.WorkflowID, kftime.FormatDate(now)); err != nil {
+				return nil, err
+			}
+		}
 		t.ProxyClientUserID = proxy
 		hasUpdate = true
 	}
@@ -79,13 +89,37 @@ func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id strin
 		inputValues := []FieldInput{}
 		slipValues := []SlipItemInput{}
 		if in.Inputs != nil {
-			inputValues = *in.Inputs
+			if approver {
+				if err = pf14cValidateApproverPatch(def, *in.Inputs); err != nil {
+					return nil, err
+				}
+				existing, er := store.EngTicketInputs(ctx, tx, id)
+				if er != nil {
+					return nil, er
+				}
+				inputValues = pf14cMergeInputs(def, pf14cInputsFromRows(def, existing), *in.Inputs)
+			} else if partial {
+				existing, er := store.EngTicketInputs(ctx, tx, id)
+				if er != nil {
+					return nil, er
+				}
+				inputValues = pf14cMergeInputs(def, pf14cInputsFromRows(def, existing), *in.Inputs)
+			} else {
+				if err = pf14ValidateCreateCompleteness(def, *in.Inputs); err != nil {
+					return nil, err
+				}
+				inputValues = *in.Inputs
+			}
 		} else {
 			existing, er := store.EngTicketInputs(ctx, tx, id)
 			if er != nil {
 				return nil, er
 			}
-			inputValues = pf14InputsFromRows(def, existing)
+			if partial {
+				inputValues = pf14cInputsFromRows(def, existing)
+			} else {
+				inputValues = pf14InputsFromRows(def, existing)
+			}
 		}
 		if in.SlipItems != nil {
 			slipValues = *in.SlipItems
@@ -225,8 +259,118 @@ func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id strin
 }
 
 func (e *Engine) pf14UpdateForm(ctx context.Context, tx *store.Tx, a Actor, id string, in FormPatch) ([]model.WebhookEvent, error) {
-	status := (*string)(nil)
-	return e.pf14Update(ctx, tx, a, id, UpdateInput{Status: status, Inputs: &in.Inputs, SlipItems: &in.SlipItems})
+	if len(in.Inputs) == 0 && len(in.SlipItems) == 0 {
+		return nil, kferr.InvalidParameter("Form patch must contain inputs or slip items")
+	}
+	update := UpdateInput{}
+	if len(in.Inputs) > 0 {
+		update.Inputs = &in.Inputs
+	}
+	var slipPatch *[]SlipItemInput
+	if len(in.SlipItems) > 0 {
+		slipPatch = &in.SlipItems
+	}
+	update.SlipItems = slipPatch
+	return e.pf14cUpdate(ctx, tx, a, id, update, true)
+}
+
+func pf14cValidateApproverPatch(def model.WorkflowDef, patch []FieldInput) error {
+	if def.Overwritable {
+		return nil
+	}
+	fieldsByID := map[string]model.FormField{}
+	fieldsByCode := map[string]model.FormField{}
+	for _, section := range def.SectionList {
+		for _, field := range section.FormFields {
+			fieldsByID[field.ID] = field
+			fieldsByCode[field.Code] = field
+		}
+	}
+	for _, input := range patch {
+		field, found := fieldsByID[input.FormFieldID]
+		if !found {
+			field, found = fieldsByCode[input.FormFieldCode]
+		}
+		if found && !field.Approver {
+			return kferr.InvalidParameter("Invalid form field code")
+		}
+	}
+	return nil
+}
+
+func pf14cInputsFromRows(def model.WorkflowDef, rows []model.TicketInput) []FieldInput {
+	fields := map[string]model.FormField{}
+	for _, section := range def.SectionList {
+		for _, field := range section.FormFields {
+			fields[field.ID] = field
+		}
+	}
+	out := make([]FieldInput, 0, len(rows))
+	for _, row := range rows {
+		field := fields[row.FormFieldID]
+		raw, err := json.Marshal(row.Value)
+		if err != nil {
+			raw = json.RawMessage("null")
+		}
+		input := FieldInput{FormFieldID: row.FormFieldID, FormFieldCode: field.Code, Value: raw}
+		if len(row.RefIDs) > 0 {
+			refValue := any(row.RefIDs)
+			if len(row.RefIDs) == 1 && !field.Multiple {
+				refValue = row.RefIDs[0]
+			}
+			refs, marshalErr := json.Marshal(refValue)
+			if marshalErr == nil {
+				switch field.FieldType {
+				case "master":
+					input.GeneralMasterItemID = refs
+				case "user":
+					input.UserID = refs
+				case "team":
+					input.TeamID = refs
+				case "ticket":
+					input.TicketID = refs
+				case "file":
+					input.Files = append([]string(nil), row.RefIDs...)
+				}
+			}
+		}
+		out = append(out, input)
+	}
+	return out
+}
+
+func pf14cMergeInputs(def model.WorkflowDef, stored, patch []FieldInput) []FieldInput {
+	fieldIDByCode := map[string]string{}
+	for _, section := range def.SectionList {
+		for _, field := range section.FormFields {
+			fieldIDByCode[field.Code] = field.ID
+		}
+	}
+	merged := make([]FieldInput, 0, len(stored)+len(patch))
+	index := map[string]int{}
+	key := func(in FieldInput) string {
+		if in.FormFieldID != "" {
+			return "id:" + in.FormFieldID
+		}
+		if id := fieldIDByCode[in.FormFieldCode]; id != "" {
+			return "id:" + id
+		}
+		return "code:" + in.FormFieldCode
+	}
+	for _, input := range stored {
+		index[key(input)] = len(merged)
+		merged = append(merged, input)
+	}
+	for _, input := range patch {
+		k := key(input)
+		if i, ok := index[k]; ok {
+			merged[i] = input
+			continue
+		}
+		index[k] = len(merged)
+		merged = append(merged, input)
+	}
+	return merged
 }
 
 func pf14InputsFromRows(def model.WorkflowDef, rows []model.TicketInput) []FieldInput {

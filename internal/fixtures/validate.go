@@ -318,6 +318,9 @@ func Validate(s *Set) error {
 			}
 			for fi, f := range sec.FormFields {
 				fields[f.Code] = true
+				if !pf06Contains(model.FormFieldSizes, f.Size) {
+					add(FileWorkflows, fmt.Sprintf("%s.sectionList[%d].formFields[%d].size", p, si, fi), "invalid size")
+				}
 				if f.GeneralMasterCode != "" && !masterCodes[f.GeneralMasterCode] {
 					add(FileWorkflows, fmt.Sprintf("%s.sectionList[%d].formFields[%d].generalMasterCode", p, si, fi), "unknown general master code")
 				}

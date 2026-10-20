@@ -1,10 +1,10 @@
 # PF-25 README Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 4 | **Depends On**: PF-07, PF-16 | **Plan ID**: PF-25
 **Design Reference**: design-docs/specs/architecture.md#developer-tooling (README contents); design-docs/specs/command.md; design-docs/specs/design-auth-admin.md; design-docs/specs/design-webhooks.md; design-docs/specs/notes.md
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -127,8 +127,8 @@ rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|
 
 ### Done Criteria (session 465)
 
-- [ ] All 9 sections present; the MISSING check and the banned-enum check exit 0; every flag in README appears in `command.md`
-- [ ] The progress log has exit status and log path for every command; any README/CLI mismatch is recorded as a reconciliation request to PF-16
+- [x] All 9 sections present; the MISSING check and the banned-enum check exit 0; every flag in README appears in `command.md`
+- [x] The progress log has exit status and log path for every command; any README/CLI mismatch is recorded as a reconciliation request to PF-16
 
 ## Execution Protocol
 
@@ -142,8 +142,78 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15).
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (s465 attempt 1)
+**Intent snapshot**: Create `README.md` with the nine required sections, sourced from `command.md`, fixture files and accepted design documents. Update only this plan's Progress Log and the session-465 completion checkboxes.
+**Tasks Completed**:
+- Added the local/dev usage guide, seeded persona/token table, kickflow REST client examples, webhook setup/signature/retry guidance, Keycloak manual check, dev switches, CLI/fixture references and development commands in `README.md`.
+- Documented all 13 webhook event types and `pending`, `succeeded`, `failed` statuses. Corrected the expense example to use the `expense-claim` workflow UUID and string-valued `formFieldCode` inputs from the OpenAPI contract.
+- Cross-checked CLI subcommands, flags, environment-variable conventions and defaults against `internal/cli/config.go` and subcommand files. No mismatch with `design-docs/specs/command.md` found; no PF-16 reconciliation request.
+- Updated both session-465 Done Criteria.
+**Verification**:
+- `bash -o pipefail -c 'for s in ...; do grep ...; done 2>&1 | tee /tmp/pf25-s465-grep.log'; echo "exit=$?"` — exit 0; all 15 markers found; log `/tmp/pf25-s465-grep.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-1/grep.log`.
+- `bash -o pipefail -c 'grep -c MISSING /tmp/pf25-s465-grep.log; test $? -eq 1'` — exit 0 (count 0); log `/tmp/pf25-s465-no-missing.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-1/no-missing.log`.
+- `bash -o pipefail -c 'rg -n ... README.md; test $? -eq 1'` — exit 0 (no banned values matched); log `/tmp/pf25-s465-banned.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-1/banned.log`.
+- CLI flag reference check against `command.md` — exit 0 (all listed CLI flags documented there); log `/tmp/pf25-s465-flags-wrapper.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-1/flags.log`.
+- README CLI flag extraction against `command.md` — exit 0 (all nine flags used in README are defined); log `/tmp/pf25-s465-readme-flags.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-1/readme-flags.log`.
+- README criteria assertion (sections, 13 events, 3 statuses, uncached development commands) — exit 0; log `/tmp/pf25-s465-content.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-1/content.log`.
+**Reconciliation requests**: None.
+
+**README SHA-256**: `6f6514418e705414b5d1d88c43ffe0a5bdfc15b9d7d3ff4f74ef59238cc17d80`.
+
+### Session: 2026-10-21 (s465 attempt 2, final-source check)
+**Intent snapshot**: Add an explicit `What punchflow is` heading for required section 1; preserve all previously written README content.
+**Tasks Completed**: Added the heading. The README now has all nine required section headings.
+**Verification**:
+- Marker loop — exit 0; all 15 markers found; `/tmp/pf25-s465-final-markers.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-2/markers.log`.
+- `grep -c MISSING /tmp/pf25-s465-final-markers.log; test $? -eq 1` — exit 0 (count 0); `/tmp/pf25-s465-final-no-missing.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-2/no-missing.log`.
+- Banned enum `rg` with expected no-match exit converted to pass — exit 0; `/tmp/pf25-s465-final-banned.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-2/banned.log`.
+- Final README assertion — exit 0; nine required section headings, 13 events, three delivery statuses, both uncached development commands and all nine README flags matched; `/tmp/pf25-s465-final-content.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-2/content.log`.
+**Reconciliation requests**: None.
+**Final README SHA-256**: `1803f9ae4d2442fa01c9abfea09f5e097e451ebecf5ac46cc8c71a342a930ae7`.
+
+### Session: 2026-10-21 (s465 attempt 3, behavioral verification)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-3/edit-intent.md`. Progress-only update; README content is unchanged.
+**Tasks Completed**: Set plan status to Completed after current-source assertions and positive-count scoped CLI behavioral tests passed. No mismatch with `command.md`; no PF-16 reconciliation request.
+**Verification**:
+- Marker loop — exit 0; all 15 markers found; complete log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-3/pf25-s465-attempt3-markers.log`.
+- `grep -c MISSING ...; test $? -eq 1` — exit 0; zero missing markers; complete log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-3/pf25-s465-attempt3-no-missing.log`.
+- Banned enum `rg` with expected no-match converted to pass — exit 0; no banned values; complete log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-3/pf25-s465-attempt3-banned.log`.
+- README contract assertion against `command.md` — exit 0; 9 sections, 13 events, 3 statuses, uncached development commands and 9 flags found; complete log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-3/pf25-s465-attempt3-content.log`.
+- `go test -count=1 -v ./internal/cli/...` — exit 0; PASS=6, FAIL=0, SKIP=0; complete log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-3/cli-test.log`.
+**Reconciliation requests**: None.
+
+### Session: 2026-10-21 (s465 attempt 4, verification-gap closure)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-4/edit-intent.md`. Progress-only update; `README.md` is unchanged (SHA-256 remains `1803f9ae4d2442fa01c9abfea09f5e097e451ebecf5ac46cc8c71a342a930ae7`).
+**Tasks Completed**: Re-ran required README contract checks and uncached CLI behavioral tests on the current shared tree. Kept status Completed. No `command.md` mismatch; no PF-16 reconciliation request. Independent review remains downstream.
+**Verification**:
+- Marker loop — exit 0; all 15 markers found; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-4/markers.log`.
+- `grep -c MISSING ...; test $? -eq 1` — exit 0; zero missing markers; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-4/no-missing.log`.
+- Banned-enum `rg` wrapper — exit 0; expected no-match exit was converted to pass; log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-4/banned-enums.log`.
+- README contract assertion against `command.md` — exit 0; 9 sections, 13 events, 3 delivery statuses, uncached development commands and all 9 punchflow CLI flags matched; log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-4/content-corrected.log`. An initial exploratory scan also picked up Bun's `--frozen-lockfile`; this is not a punchflow CLI flag and was excluded from the corrected assertion.
+- `go test -count=1 -v ./internal/cli/...` — exit 0; PASS=6, FAIL=0, SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-4/cli-test.log`.
+**Reconciliation requests**: None.
+
+### Session: 2026-10-21 (s465 attempt 5, PF25-ADV-01)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/edit-intent.md`. Correct only the create-ticket walkthrough and document the create response ID source; keep the nine headings and existing README contracts.
+**Tasks Completed**: Added the required `status` and seeded `authorTeamId` to the create body. Documented the allowed statuses, the applicant team requirement (sales for sales-rep), and that `TICKET_ID` comes from the create response `id`. No live API execution is claimed because PF-22 still owns the ticket handlers.
+**Verification**:
+- Required marker loop — exit 0; 15/15 markers found; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/markers.log`.
+- `grep -c MISSING ...; test $? -eq 1` — exit 0; zero missing markers; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/no-missing.log`.
+- Banned-enum `rg` wrapper — exit 0; no banned enums matched; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/banned-enums.log`.
+- Static create-body and fixture check — exit 0; required fields, allowed status, workflow/team IDs, and documented `TICKET_ID` source passed; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/create-body.log`.
+- `grep -c '^## ' README.md` assertion — exit 0; exactly 9 headings; complete log `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/headings.log`.
+**Reconciliation requests**: None.
+**README SHA-256**: `c95c7f47a187008c8f95644aa9c86bd23cd12887605daa2c09a0c4fa7aef0a14`.
+
+### Session: 2026-10-21 (s465 attempt 6, behavioral evidence for PF25-ADV-01)
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/edit-intent.md`. Preserve `README.md` unchanged; rerun current-source contract checks and positive-count uncached CLI behavioral tests, then record complete evidence paths.
+**Tasks Completed**: Re-verified the corrected create walkthrough against fixture IDs and reran the uncached CLI behavioral suite. `README.md` remains at SHA-256 `c95c7f47a187008c8f95644aa9c86bd23cd12887605daa2c09a0c4fa7aef0a14`. The live ticket-create walkthrough is not claimed as executed; PF-22 owns ticket handlers and their integration coverage.
+**Verification**:
+- `go test -count=1 -v ./internal/cli/...` — exit 0; PASS=6, FAIL=0, SKIP=0; `/tmp/pf25-s465-attempt6-cli-test-rerun.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/cli-test-rerun.log`.
+- Required marker loop — exit 0; 15/15 markers found; `/tmp/pf25-s465-attempt6-markers.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/markers.log`.
+- `bash -o pipefail -c 'grep -c MISSING tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/markers.log | tee /tmp/pf25-s465-attempt6-no-missing-rerun.log; test ${PIPESTATUS[0]} -eq 1'` — exit 0; zero missing markers; log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/no-missing-rerun.log`.
+- `rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|org|workflow|role|file|proxy)_(read|write)\b' README.md` — expected no-match exit 1; wrapper converted it to exit 0; no banned values; log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/banned-enums.log`.
+- `python3 -I tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-5/check-create-body.py` — exit 0; required fields, status, fixture IDs and `TICKET_ID` source pass; `/tmp/pf25-s465-attempt6-create-body.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/create-body.log`.
+- `bash -o pipefail -c 'grep -c "^## " README.md | tee /tmp/pf25-s465-attempt6-headings.log; test "$(cat /tmp/pf25-s465-attempt6-headings.log)" -eq 9'` — exit 0; nine headings; log copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-6/headings.log`.
+- Two harness setup errors were recovered: the first `zsh` wrapper used read-only variable `status` after the test process passed, and an initial no-missing check raced the marker-log copy (missing file, exit 1). The correct shell rerun passed, and the no-missing check was rerun after the marker log existed. Their original outputs are preserved in the tool transcript; no implementation gate remains failed.
+**Reconciliation requests**: None. No mismatch with `command.md`; no PF-16 reconciliation request.

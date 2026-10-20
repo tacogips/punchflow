@@ -2,8 +2,10 @@ package present
 
 import (
 	"context"
+	"encoding/json"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
+	"strconv"
 )
 
 func Workflow(ctx context.Context, q store.Querier, id string) (WorkflowJSON, error) {
@@ -63,6 +65,7 @@ func WorkflowDetail(ctx context.Context, q store.Querier, id string) (WorkflowDe
 	if e != nil {
 		return nil, e
 	}
+	formFields := pf08FormFieldsByCode(d.SectionList)
 	conditions := []any{}
 	for _, c := range d.RouteConditions {
 		var route any
@@ -77,7 +80,7 @@ func WorkflowDetail(ctx context.Context, q store.Querier, id string) (WorkflowDe
 		}
 		fields := []any{}
 		for _, f := range c.ConditionFields {
-			fields = append(fields, pf08WorkflowConditionField(ctx, q, f))
+			fields = append(fields, pf08WorkflowConditionField(ctx, q, f, formFields))
 		}
 		conditions = append(conditions, map[string]any{"id": c.ID, "conditionType": c.ConditionType, "combinationType": c.CombinationType, "combinationExpression": c.CombinationExpression, "conditionFields": fields, "route": route, "errorMessage": c.ErrorMessage})
 	}
@@ -130,8 +133,45 @@ func pf08WorkflowViewers(ctx context.Context, q store.Querier, id string) []mode
 	}
 	return d.TicketViewers
 }
-func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.ConditionField) map[string]any {
-	out := map[string]any{"id": f.ID, "symbol": f.Symbol, "value": f.Value, "formField": nil, "grade": nil, "team": nil, "generalMasterItem": nil}
+
+// pf08FormFieldsByCode indexes a workflow's form fields by code; condition fields reference them through Variable.
+func pf08FormFieldsByCode(sections []model.WorkflowSection) map[string]model.FormField {
+	out := map[string]model.FormField{}
+	for _, s := range sections {
+		for _, f := range s.FormFields {
+			out[f.Code] = f
+		}
+	}
+	return out
+}
+
+// pf08ConditionValue renders a stored threshold as the string-or-null value kickflow returns.
+func pf08ConditionValue(v any) any {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case string:
+		return x
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case json.Number:
+		return x.String()
+	case bool:
+		return strconv.FormatBool(x)
+	default:
+		raw, err := json.Marshal(x)
+		if err != nil {
+			return nil
+		}
+		return string(raw)
+	}
+}
+
+func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.ConditionField, formFields map[string]model.FormField) map[string]any {
+	out := map[string]any{"id": f.ID, "symbol": f.Symbol, "value": pf08ConditionValue(f.Value), "formField": nil, "grade": nil, "team": nil, "generalMasterItem": nil}
+	if field, ok := formFields[f.Variable]; ok {
+		out["formField"] = pf08FormField(ctx, q, field)
+	}
 	code, _ := f.Value.(string)
 	if code != "" {
 		switch f.FieldKey {

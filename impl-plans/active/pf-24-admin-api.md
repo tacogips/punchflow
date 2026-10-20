@@ -1,10 +1,10 @@
 # PF-24 Dev Admin API Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 4 | **Depends On**: PF-14, PF-15, PF-16 | **Plan ID**: PF-24
 **Design Reference**: design-docs/specs/design-auth-admin.md#dev-admin-api-internaladmin; design-docs/specs/design-webhooks.md#manual-operations-admin-api-integration-permission; design-docs/specs/design-api-coverage.md (error catalog "Fault" rows); notes.md INF-04, INF-09, INF-29, INF-32
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -173,8 +173,8 @@ Evidence: exit 0; FAIL=0; SKIP=0; the fault-code table test shows 6 passing subt
 
 ### Done Criteria (session 465)
 
-- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; admin tests exit 0, FAIL=0, SKIP=0, with 6 fault subtests and 13 fire subtests PASS and PF-16's `routes_test.go` PASS; `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`; gofmt check exit 0
-- [ ] Pre/post hashes of the six transferred stub files; every source write followed by a logged compile gate with exit 0
+- [x] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; admin tests exit 0, FAIL=0, SKIP=0, with 6 fault subtests and 13 fire subtests PASS and PF-16's `routes_test.go` PASS; `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`; gofmt check exit 0
+- [x] Pre/post hashes of the six transferred stub files; every source write followed by a logged compile gate with exit 0
 
 ## Execution Protocol
 
@@ -188,8 +188,42 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). The s
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (attempt 1)
+**Status**: Completed implementation; downstream serial integration review and PF-27 full gate remain pending.
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-1/edit-intent.md`.
+**Tasks Completed**: Implemented all 23 `/admin/api` handlers in the six transferred files; added admin store queries in `internal/store/admin.go`; added token/SAT, webhook, tenant, fault and fixture endpoint tests. Token and secret values are omitted from list responses; fixture reset remains flag-gated. Fire test iterates all 13 model webhook events and preserves the literal negative cases `ticket_submitted` and `comment_deleted`.
+**Changed paths**: `internal/admin/{tokens,service_accounts,webhooks,tenant,faults,fixtures}.go`, `internal/store/admin.go`, `internal/admin/{tokens,webhooks,tenant,faults,fixtures}_test.go`.
+**Verification**:
+- `go build ./...`: exit 0, `/tmp/pf24-s465-build-final2.log` (copied to `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-1/build-final.log`).
+- `go vet ./internal/admin/...`: exit 0, `/tmp/pf24-s465-vet-final3.log` (copied to `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-1/vet-final.log`).
+- `go test -count=1 -v -race ./internal/admin/...`: exit 0, PASS=31, FAIL=0, SKIP=0, cached=0, `/tmp/pf24-s465-test-final3.log` (copied to `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-1/test-final.log`). `TestFaultCatalog` has six passing subtests; `TestWebhookFireEventTypesAndNegativeEvents` has 13 valid event cases plus both negative cases passing; `TestOperationsContractAndUnknownRoute` passes.
+- `test -z "$(gofmt -l internal/admin internal/store/admin.go)"`: exit 0 (clean).
+- `rg -l 'ticket_submitted|comment_deleted' internal/admin`: exit 0 and lists `internal/admin/webhooks_test.go`.
+- Six transferred handler pre/post SHA-256 manifests: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-1/{pre-stub-hashes,post-stub-hashes}.txt`.
+- Per-write build/vet history and complete intermediate logs: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-1/compile-gate-history.txt` and corresponding `build-after-*`, `vet-after-*` files.
+**Prior verification**: Early shared-tree build failures were foreign transient PF-23 (`internal/files/files.go`) breakage, and early vet failures were transient PF-22 (`internal/api/v1/tickets.go`, `ticket_viewers.go`) breakage. PF-24 made no edits to those paths. Current final build/vet/test gates pass; intermediate diagnostics are retained under the attempt directory.
+**Reconciliation requests**: None outstanding for PF-24. Integration review and PF-27's full repository gate own downstream combined-tree acceptance.
+
+### Session: 2026-10-21 (attempt 2, test-integrity repairs)
+**Status**: PF24-TI-01 and PF24-TI-02 implementation repairs completed; independent review and the combined-tree/PF-27 gates remain downstream.
+**Intent snapshot**: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-2/edit-intent.md`; plan update intent: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-2/plan-edit-intent.md`.
+**Tasks Completed**:
+- PF24-TI-01: `TestWebhookFireEventTypesAndNegativeEvents` now registers `env.Receiver`, checks exactly one added persisted row with the matching event type and ticket/comment IDs, requires `DeliverWebhooks` to attempt exactly one delivery, verifies the HMAC signature, and checks the receiver payload `eventType`. Ping also asserts its response row. The literal `ticket_submitted` and `comment_deleted` rejection cases remain unchanged.
+- PF24-TI-02: added `TestWebhookResendManualAttempt`, checking successful first delivery, same event ID on resend, identical receiver bodies, two attempts with the latest marked manual, succeeded status, valid resent signature, and 404 `resource_not_found` for an unknown event.
+**Verification**:
+- `go vet ./internal/admin/...` after the test write: exit 0; `/tmp/pf24-s465-attempt2-vet-after-test.log` (complete copy: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-2/vet-after-test.log`).
+- `go test -count=1 -v -race -run '^TestWebhookFireEventTypesAndNegativeEvents$' ./internal/admin/...`: exit 0; 16 PASS, 0 FAIL, 0 SKIP; `/tmp/pf24-s465-attempt2-test-fire.log` (copy: `test-fire.log`).
+- `go test -count=1 -v -race -run '^TestWebhookResendManualAttempt$' ./internal/admin/...`: exit 0; 1 PASS, 0 FAIL, 0 SKIP; `/tmp/pf24-s465-attempt2-test-resend.log` (copy: `test-resend.log`).
+- `go test -count=1 -v -race ./internal/admin/...`: exit 0; 32 PASS, 0 FAIL, 0 SKIP, cached=0; `/tmp/pf24-s465-attempt2-test-full.log` (copy: `test-full.log`). This includes PF-16 `TestOperationsContractAndUnknownRoute`, six Fault subtests, all 13 supported fire events and both literal negative cases.
+- `go build ./...`: exit 0; `/tmp/pf24-s465-attempt2-build.log` (copy: `build.log`).
+- `test -z "$(gofmt -l internal/admin internal/store/admin.go)"`: exit 0; clean. `rg -l 'ticket_submitted|comment_deleted' internal/admin`: exit 0 and lists `internal/admin/webhooks_test.go`.
+- Source SHA-256: `pre-edit-sha256.txt` and `post-edit-sha256.txt`; `git diff --check` and per-write vet result are recorded in attempt-2 evidence.
+**Reconciliation requests**: None. Earlier attempt-1 build/vet/test evidence remains in its own attempt directory and is superseded for these changed tests by attempt-2 current-source verification.
+
+**Final-source confirmation after fire-row identity strengthening**: The fire table now identifies the newly created delivery by ID before asserting eventType and associated IDs, preventing an older row of the requested type from masking an incorrectly enqueued event. Intent: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-2/fire-row-intent.md`; this progress update intent: `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-2/final-progress-intent.md`.
+- `go vet ./internal/admin/...`: exit 0; `/tmp/pf24-s465-attempt2-vet-final.log` (copy: `vet-final.log`).
+- Focused fire test: exit 0, PASS=16, FAIL=0, SKIP=0; `/tmp/pf24-s465-attempt2-test-fire-final.log` (copy: `test-fire-final.log`).
+- Focused resend test: exit 0, PASS=1, FAIL=0, SKIP=0; `/tmp/pf24-s465-attempt2-test-resend-final.log` (copy: `test-resend-final.log`).
+- Full uncached admin race suite: exit 0, PASS=32, FAIL=0, SKIP=0, cached=0; `/tmp/pf24-s465-attempt2-test-full-final.log` (copy: `test-full-final.log`).
+- `go build ./...`: exit 0; `/tmp/pf24-s465-attempt2-build-final.log` (copy: `build-final.log`).
+- Gofmt check is clean; literal negative-event search lists `internal/admin/webhooks_test.go`. Current source hashes are in `post-edit-sha256.txt`.

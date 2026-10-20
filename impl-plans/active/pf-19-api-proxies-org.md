@@ -1,6 +1,6 @@
 # PF-19 /v1 Proxies, Organization Charts and Teams Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: 4 | **Depends On**: PF-08, PF-16 | **Plan ID**: PF-19
 **Design Reference**: design-docs/specs/design-api-coverage.md rows 19-42; design-docs/references/kickflow-api.md section 3 "Proxy applicants", "Proxy approvers", "Organization charts", "Teams"; notes.md INF-16, INF-23, INF-29
 **Created**: 2026-10-20
@@ -156,8 +156,8 @@ rg -n 'not implemented' internal/api/v1/proxies.go internal/api/v1/orgcharts.go 
 
 ### Done Criteria (session 465)
 
-- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
-- [ ] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
+- [x] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
+- [x] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
 
 ## Execution Protocol
 
@@ -171,8 +171,45 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). The t
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (s465 attempt 1)
+**Intent snapshot**: Implemented operations 19-42 from the accepted design: proxy applicant/approver CRUD and self-service, org chart CRUD/activation, team CRUD and memberships. Used only PF-19 declared paths. Evidence directory: `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/`.
+**Tasks Completed**:
+- Added transactional proxy, organization-chart, team and membership persistence in `internal/store/proxies.go` and `internal/store/org.go`.
+- Replaced all eight proxy, seven organization-chart and nine team handler stubs. Added pagination/presenters, permission checks, validations, audit records, code-scoped team lookup, parent-cycle checks, membership leader invariants and empty DELETE responses.
+- Added `TestProxyApplicantsCRUDAndValidation`, `TestProxyApproversAndSelfServicePermission`, `TestOrganizationChartListPermissionsAndCRUD`, `TestTeamTreeCreateUpdateAndPermissions`, and `TestTeamMembershipLeaderAndPaginationRules`.
+- Resolved implementation test failures during this attempt: use the actual `sales-rep` principal, allow case-insensitive workflow code lookup, require UUID parent references to belong to the requested chart, and persist team code updates.
+**Verification**:
+- Final `go build ./...`: exit 0, complete log `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/build-final.log`.
+- Final `go vet ./internal/api/v1/...`: exit 0, complete log `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/vet-final.log`.
+- PF10 guard `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2 FAIL=0 SKIP=0, log `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/pf10guard-final.log`.
+- Plan tests `go test -count=1 -v -race -run 'Test(Proxy|Proxies|OrgChart|OrganizationChart|Team)' ./internal/api/v1/...`: exit 0, PASS=5 FAIL=0 SKIP=0, log `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/test-final2.log`.
+- `gofmt -l` on the eight owned Go files: exit 0, no paths; log `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/gofmt-final.log`.
+- `rg -n 'not implemented'` over the three handler files followed by `test $? -eq 1`: exit 0 (no stub strings); log `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-1/stub-check-final.log`.
+- Shared handler file SHA-256 before -> after: `proxies.go` `d2b7299307274758e49b5ab789cad0ab8d60641a418cb30f1f3389b4620e7034` -> `285f8c1ccaf03b4c8360358121e80eb01c447257828a918ba46a2b91af510cb0`; `orgcharts.go` `41dee20770f8f332021196f5e2d967a62b97cf3cc5c4b7df102eaf8b2f1e0389` -> `69fc62b6166efbb94eed0f41c7011c95adeaa67f4b4cca9e8840340383e21e7f`; `teams.go` `43e6c9703fe009382cb4576a2f4800b7179920b926e3d107a0f9b3db11b45b44` -> `a3a53c84623197313cebbb9fd021e270674a3af0e2740f7f155079cea99606f5`. Hash files: `pre-edit-hashes.txt`, `post-edit-hashes.txt`.
+- Compile gate after each non-test Go write was run and logged. Early failures were resolved: PF-18 temporarily had undefined `Principal.UserID`; proxy handler edits had local compile errors corrected by subsequent writes; PF-20 temporarily had `general_masters.go` call/signature and `strconv` import errors. The later source-matched build and vet both pass. Compile logs are `compile-after-*.log`, `gate-*.log` in the attempt directory.
+- Earlier behavioral runs failed before fixes and are retained as `test-attempt1.log` (implementation test defects and later-sibling compile overlap) and `test-attempt2`/`test-attempt1` in the attempt directory; final-source rerun above passes.
+**Reconciliation requests**: None unresolved. Concurrent PF-18/PF-20 compile errors were not edited; the current shared tree now builds and vets successfully.
+
+### Session: 2026-10-21 (s465 attempt 2, PF19-TI-01 repair)
+**Intent snapshot**: Corrected `TestTeamMembershipLeaderAndPaginationRules` so its 11-entry `users` payload uses well-formed `{id, leader, gradeIds}` objects and asserts the specific 400 `invalid_parameter` size-limit response. All other assertions remain. Evidence directory: `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-2/`.
+**Changed paths**: `internal/api/v1/teams_test.go` only among source files; no production source changed. Current SHA-256: `teams_test.go` `16aaf1a6cb7040b784aa740007c7ab9a70c53d088559b9d2ce9915f9a7da8d5c`; production hashes unchanged: `teams.go` `a3a53c84623197313cebbb9fd021e270674a3af0e2740f7f155079cea99606f5`, `proxies.go` `285f8c1ccaf03b4c8360358121e80eb01c447257828a918ba46a2b91af510cb0`, `orgcharts.go` `69fc62b6166efbb94eed0f41c7011c95adeaa67f4b4cca9e8840340383e21e7f`. Hash record: `attempt-2/current-source-hashes.txt`.
+**Verification**:
+- Post-test-write compile gate `go vet ./internal/api/v1/...`: exit 0; complete log `attempt-2/pf19-s465-vet.log`.
+- `go build ./...`: the attempt-2 log recorded exit 0, but that result is stale and not valid for the completed attempt: the overlay source was added afterward and made the shared-tree build fail. Corrected current-tree result is recorded under attempt-3 below.
+- Scoped uncached race suite `go test -count=1 -v -race -run 'Test(Proxy|Proxies|OrgChart|OrganizationChart|Team)' ./internal/api/v1/...`: exit 0, PASS=5 FAIL=0 SKIP=0; complete log `attempt-2/pf19-s465-test.log`.
+- PF10 guard `go test -count=1 -v -run 'TestPF10' ./internal/api/v1/...`: exit 0, PASS=2 FAIL=0 SKIP=0; complete log `attempt-2/pf19-s465-pf10guard.log`.
+- `gofmt -l internal/api/v1/teams_test.go` empty; exit 0. `git diff --check -- internal/api/v1/teams_test.go` exit 0.
+- Negative mutation proof used `go test -overlay=.../overlay.json -count=1 -v -run '^TestTeamMembershipLeaderAndPaginationRules$' ./internal/api/v1/...` with a plan-local copy of `teams.go` changing only `len(b.Users) > 10` to `> 11`; expected nonzero, observed exit 1 because the corrected test rejected the 422 duplicate-member response instead of the required 400 size-limit error. Complete log `attempt-2/mutation-proof-rerun.log`; the tracked production file was not modified.
+
+### Session: 2026-10-21 (s465 attempt 3, PF19-ADV-01 repair)
+**Intent snapshot**: Renamed the plan-local overlay source to `_teams_mutated.go` so Go package discovery excludes it, then updated `attempt-2/overlay.json` to point to the renamed file. No production or test files changed. Evidence directory for fresh checks: `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-3/`.
+**Correction to attempt 2**: The attempt-2 build log's exit 0 preceded creation of `teams_mutated.go`; it did not verify the final attempt-2 tree. The reviewer reproduced the resulting package build failure. The file is now renamed, and current-tree build evidence below supersedes that stale claim.
+**Verification**:
+- `go build ./...`: exit 0; complete log `attempt-3/build.log`.
+- `go vet ./internal/api/v1/...`: exit 0; complete log `attempt-3/vet.log`.
+- Scoped uncached race suite: exit 0, PASS=5 FAIL=0 SKIP=0; complete log `attempt-3/scoped-race-test.log`.
+- PF10 guard: exit 0, PASS=2 FAIL=0 SKIP=0; complete log `attempt-3/pf10guard.log`.
+- `go list ./...` contains no package under `tmp/punchflow-kickflow-dummy-s465/PF-19`; `find tmp/punchflow-kickflow-dummy-s465/PF-19 -name '*.go' ! -name '_*'` is empty.
+- `gofmt -l` on the eight PF-19 Go files is empty; the `not implemented` check found no matches (rg exit 1, accepted no-match result).
+- Production and test hashes remain unchanged at the accepted values; full list in `attempt-3/source-hashes.txt`.
+- Overlay mutation proof with the updated mapping still fails as expected (observed exit 1); log `attempt-3/mutation-proof.log`. This negative proof is progress/self-check evidence, not a passing verification gate.

@@ -161,4 +161,16 @@ var UserTypes = []string{UserTypeNormal, UserTypeAssistant}
 var Permissions = []string{PermissionTenant, PermissionBilling, PermissionIntegration, PermissionSecurity, PermissionAudit, PermissionStats, PermissionWorkflow, PermissionRoute, PermissionPipeline, PermissionWorkflowMisc, PermissionUser, PermissionTeam, PermissionRole, PermissionMaster, PermissionMasterRead, PermissionTicketRead, PermissionTicketWrite, PermissionLabel, PermissionAutomation}
 var MasterFieldTypes = []string{MasterFieldTypeText, MasterFieldTypeTextLong, MasterFieldTypeNumber, MasterFieldTypeInteger, MasterFieldTypeCheckbox, MasterFieldTypePullDown, MasterFieldTypeDate}
 var MasterSortKeys = []string{MasterSortKeyName, MasterSortKeyCode}
+
+const (
+	FormFieldSizeFull = "full"
+	FormFieldSizeHalf = "half"
+
+	ForcedPublicTypeFollowWorkflow = "follow_workflow"
+	ForcedPublicTypeForcedPublic   = "forced_public"
+	ForcedPublicTypeForcedPrivate  = "forced_private"
+)
+
+var FormFieldSizes = []string{FormFieldSizeFull, FormFieldSizeHalf}
+var ForcedPublicTypes = []string{ForcedPublicTypeFollowWorkflow, ForcedPublicTypeForcedPublic, ForcedPublicTypeForcedPrivate}
 var WebhookEventTypes = []string{WebhookEventPing, WebhookEventTicketCreated, WebhookEventTicketUpdated, WebhookEventTicketOpened, WebhookEventTicketApproved, WebhookEventTicketConfirmed, WebhookEventTicketRejected, WebhookEventTicketDenied, WebhookEventTicketCompleted, WebhookEventTicketWithdrawn, WebhookEventTicketArchived, WebhookEventCommentCreated, WebhookEventCommentUpdated}

@@ -1,6 +1,6 @@
 # PF-14c Engine Forms, Create and Update Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Wave**: A (s465) | **Depends On**: PF-06, PF-07, PF-08, PF-10 (all accepted at `ea385c7`) | **Plan ID**: PF-14c
 **Design Reference**: design-docs/specs/design-approval-engine.md "Form validation" rules 1-7, "Proxy application", "State machine" (Create/Update rows), "Plan ownership (session 465)"; design-docs/specs/notes.md INF-20, INF-21, INF-26, INF-28, CF-07; design-docs/specs/architecture.md "Plan split, evidence-reporting and wave rule (session 465)"
 **Supersedes (in part)**: impl-plans/active/pf-14-engine.md
@@ -88,7 +88,7 @@ State at `ea385c7`:
 ## Key Points and Pitfalls
 
 - Drafts skip required checks but not type checks (design rule 4). The required check runs only when the ticket is or becomes `in_progress`.
-- Approver updates may only include `approver: true` fields, or all fields when `overwritable` (rule 2). Keep the current behavior.
+- Approver updates may only include `approver: true` fields, or all fields when `overwritable` (rule 2); validate the raw patch before merging.
 - The default fixtures register `ceo` (client) <- `assistant` (proxy) for `expense-claim` only (`fixtures/default/proxy-applicants.json`), and `suspended-user` exists. Build expired, other-workflow and suspended-client cases by updating rows inside the test transaction (`env.apply`). Never edit fixtures.
 - The field types present in the default fixtures are `number`, `text`, `text_long`, `date`, `master`, `file`, `pull_down`, `checkbox`, `user`, `team` and `ticket`. Test them through `Engine.Create`. Test `integer`, `radio_button`, `datetime` and `calculation` with a table test that calls your new `pf14c` validation helper on constructed `model.FormField` values.
 - For `file`, insert a `files` row in the test DB (look at how PF-23/`internal/store` writes `files`) or use an unknown signed id for the negative case. Never call the HTTP upload API.
@@ -114,7 +114,7 @@ State at `ea385c7`:
   - `sales-rep` (no registration) with client ceo -> 422
   - client switched to `suspended` status -> 422
   - Update of a draft setting an invalid client -> 422
-- `TestUpdateFormMerge`: create an expense-claim draft with amount, purpose and cost-center; `UpdateForm` with only `purpose` -> amount and the cost-center item id/reference are unchanged; empty patch -> 400 `invalid_parameter`
+- `TestUpdateFormMerge`: create an expense-claim draft with amount, purpose and cost-center; `UpdateForm` with only `purpose` -> amount and the cost-center item id/reference are unchanged; empty patch -> 400 `invalid_parameter`. A partial applicant `Update` -> 400 `invalid_parameter` with stored rows unchanged; a current approver's approver-note-only `Update` preserves applicant values and RefIDs.
 
 ## Verification (manifest `verification` array for PF-14c; all must pass)
 
@@ -132,11 +132,13 @@ Evidence: build/vet `exit=0`; tests `exit=0`, FAIL=0, SKIP=0, PASS>0; the named 
 
 ## Done Criteria
 
-- [ ] Form validation rules 1-7 hold for every field kind; references validated
-- [ ] Proxy application checks on Create and Update follow the design; author and proxy client stored correctly
-- [ ] `UpdateForm` merges partial patches
-- [ ] The 4 named tests PASS; whole engine package and `./internal/store/...` FAIL=0, SKIP=0
-- [ ] Frozen signatures unchanged; new identifiers `pf14c`/`Eng` prefixed; gofmt clean; files < 1000 lines; compile gate logged after every write
+- [x] Form validation rules 1-7 hold for every field kind; references validated
+- [x] Proxy application checks on Create and Update follow the design; author and proxy client stored correctly
+- [x] `UpdateForm` merges partial patches
+- [x] The 4 named tests PASS; whole engine package and `./internal/store/...` FAIL=0, SKIP=0
+- [x] With `overwritable=false`, approver Update and UpdateForm reject applicant-owned field patches with 400 `invalid_parameter` and unchanged rows; approver-owned fields remain editable, and `overwritable=true` permits the amount patch
+- [x] An author who is not the current approver cannot Update or UpdateForm an `in_progress` ticket; both paths return 403 `user_not_assigned` and preserve stored rows
+- [x] Frozen signatures unchanged; new identifiers `pf14c`/`Eng` prefixed; gofmt clean; files < 1000 lines; compile gate logged after every write
 
 ## Execution Protocol
 
@@ -150,4 +152,107 @@ Evidence reporting (README rule 14; design architecture.md s465 rule 3):
 
 ## Progress Log
 
-(none yet)
+### Session: 2026-10-21 — PF-14c implementation
+
+**Tasks Completed**: field-kind and reference validation; proxy applicant checks on Create/Update; partial UpdateForm field merge including reference IDs; assigned engine/store tests.
+
+**Implementation**:
+- `forms.go`: added `pf14cValidateFormValue` for field shape, options, lengths, regex, finite numeric/range/decimal, date/datetime, calculation-null and user/team/ticket/master/file reference checks. NaN and infinities are rejected; file fields validate `Files` signed IDs.
+- `create.go`/`update.go`: `proxyClientUserId` requires the actor/client/workflow registration for the current JST date and an activated, non-deactivated client. `UpdateForm` overlays partial fields on stored inputs and reconstructs typed references before revalidation; empty patches return `400 invalid_parameter`.
+- `engine_refs.go`: added the owned `Eng`-prefixed existence and proxy-applicant readers. Frozen helper signatures and existing shared results are unchanged.
+- `create_update_test.go`: added `TestFormFieldTypes` (including a NaN rejection case), `TestProxyApplicantCreate` and `TestUpdateFormMerge`; existing `TestFormValidation` remains unchanged.
+
+**Incremental compile gates after non-test Go writes** (`go build ./...`; full logs are under `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-1/`):
+- `build-after-store.log`: exit 0; `build-after-store-correction.log`: exit 0.
+- `build-after-forms.log`: exit 1 (initial validator return-order error plus concurrent PF-14b missing symbols); `build-after-forms-fix.log`: exit 1 (PF-14b-owned `routing.go` symbols remained); `build-after-forms-import.log`: exit 1 (PF-14b-owned route symbols remained).
+- `build-after-create.log` and `build-after-update.log`: exit 1 while PF-14b `routing.go` was being written; no PF-14c source errors remained.
+- `build-check-routes.log`: exit 0 after PF-14b symbols landed; `build-after-status-fix.log`, `build-after-files.log`, `build-after-ref-preservation.log`, `build-after-calc.log`, and `build-after-gofmt.log`: exit 0.
+
+**Test-file vet gates after each `_test.go` write** (`go vet ./internal/engine`): `vet-after-tests.log`, `vet-after-test-format.log`, `vet-after-test-fixes.log`, `vet-after-criteria-tests.log`, `vet-after-reference-test.log`, and `vet-after-calc-test.log`: exit 0.
+
+**Final verification** (final source; commands and complete logs are in the evidence directory):
+- `go build ./...`: exit 0, `final-build.log`.
+- `go vet ./internal/engine/... ./internal/store/...`: exit 0, `final-vet.log`.
+- `go test -count=1 -v -race ./internal/engine/...`: exit 0; PASS=72, FAIL=0, SKIP=0; all four named tests PASS; `final-engine-test.log`.
+- `go test -count=1 -v ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `final-store-test.log`.
+- Named-test count command: 4; `final-counts.log`. Gofmt selection check: exit 0; `final-gofmt.log`. Latest-source rerun includes the finite-number regression case.
+- `git diff --check` on owned Go source/test paths: exit 0. All owned Go files are below 1000 lines.
+
+**Resolved test attempt**: an earlier test run failed two assertions due to test setup (wrong workflow for file reference, missing calculation field ID, and nonmember proxy test team). Corrections are documented in `prior-test-attempt-summary.md`; the full uncached final-source run above passes. The initial tee log was replaced by the final rerun at the same `/tmp` path.
+
+**Post-edit hashes**: `forms.go` `f3ce5310a19a0ba656c74d95276cdfd589c190a575c5222ec868235d0c6b967a`; `create.go` `ed240be399caaca1f2b12a30638e6b0cfeb8e5b3ebf2b57080a53137558b10e5`; `update.go` `765979b1947b07ec52c6d58ef20f7b231c83d6b2caec5ff657f66858a1aaba38`; `create_update_test.go` `83643dd667585a8f1fca016c15caf9778840f83060e9adfa4838104c64a1fa46`; `engine_refs.go` `df3e2d4620d0bba18f2904e591a49a4084a38cf7cd92fdde7ca6a4abde26ef9f`.
+
+
+### Session: 2026-10-21 — PF14C-TI-01 test-integrity repair
+
+**Finding addressed**: `PF14C-TI-01` (mid). `TestUpdateFormMerge` now records persisted amount, purpose and cost-center row presence and fails if any are missing. Existing value assertions, the cost-center `RefIDs` assertion, and the empty-patch `invalid_parameter` assertion remain intact. The correction is limited to `internal/engine/create_update_test.go`.
+
+**Attempt-2 verification** (complete logs under `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-2/`):
+- `go vet ./internal/engine`: exit 0; `vet-after-test-edit-rerun.log`.
+- `go vet ./internal/engine/... ./internal/store/...`: exit 0; `final-vet.log`.
+- `go build ./...`: exit 0; `final-build.log`.
+- `go test -count=1 -v -race ./internal/engine/...`: exit 0; PASS=72, FAIL=0, SKIP=0; `final-engine-test.log`.
+- `go test -count=1 -v ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `final-store-test.log`.
+- Named test count: 4; `final-named-tests-count.log`. `gofmt` check for `create_update_test.go`: exit 0; `final-gofmt.log`.
+- Updated `create_update_test.go` SHA-256: `83643dd667585a8f1fca016c15caf9778840f83060e9adfa4838104c64a1fa46`.
+
+### Session: 2026-10-21 — PF-14c current-source verification rerun
+
+No source or test files changed in this rerun. The repaired `TestUpdateFormMerge` source remains at SHA-256 `83643dd667585a8f1fca016c15caf9778840f83060e9adfa4838104c64a1fa46`; its row-presence checks and prior value, reference-ID, and empty-patch assertions passed again.
+
+**Attempt-3 verification** (complete logs under `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-3/`):
+- `go build ./...`: exit 0; `build.log`.
+- `go vet ./internal/engine/... ./internal/store/...`: exit 0; `vet.log`.
+- `go test -count=1 -v -race ./internal/engine/...`: exit 0; PASS=72, FAIL=0, SKIP=0; `engine-test.log`.
+- `go test -count=1 -v ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `store-test.log`.
+- Required named-test count: 4; `named-test-count.log`. Owned Go files are gofmt-clean; exit 0.
+- Independent re-review of PF14C-TI-01 remains a downstream review step; this implementation report does not claim that decision.
+
+### Session: 2026-10-21 — PF14C-ADV-01/-02 adversarial repair
+
+**Findings addressed**: `PF14C-ADV-01` and `PF14C-ADV-02` from `comm-008325`. For current-approver direct Updates with inputs, `pf14Update` now overlays the patch onto stored rows via `pf14cInputsFromRows` and `pf14cMergeInputs`, preserving applicant values and references. Applicant direct Updates with inputs now run `pf14ValidateCreateCompleteness` before normalization or persistence; `Inputs == nil` paths remain unchanged.
+
+**Regression coverage**: `TestUpdateFormMerge/applicant_update_missing_field_is_invalid_parameter` asserts HTTP 400/code `invalid_parameter` and unchanged stored row count, values and RefIDs. `TestUpdateFormMerge/approver_update_keeps_applicant_inputs` resolves an unfinished assignee on the current step dynamically, patches only `approver-note`, and asserts amount, purpose and cost-center values/RefIDs plus the new note.
+
+**Pre-fix reproduction**: the two new subtests failed on the pre-fix production code as expected: applicant Update returned nil instead of `invalid_parameter`, and the approver Update dropped amount, purpose and cost-center. Complete log: `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-4/pre-fix-repro.log` (exit 1; intentional negative proof, not a required verification gate).
+
+**Attempt-4 final-source verification** (complete logs under `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-4/`):
+- `go build ./...`: exit 0; `build.log`.
+- `go vet ./internal/engine/... ./internal/store/...`: exit 0; `vet.log`.
+- `go test -count=1 -v -race ./internal/engine/...`: exit 0; PASS=79, FAIL=0, SKIP=0; all four named PF-14c tests pass and both new subtests pass; `engine-test.log`.
+- `go test -count=1 -v ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `store-test.log`.
+- Named PF-14c test count: 4; applicant and approver regression subtest counts: 1 each. Gofmt selection check: exit 0. `update.go`: 356 lines.
+- Required `go vet ./internal/engine` after the test write initially exited 1 on a map-value assignment in the new snapshot helper; the helper was corrected, then the same vet command exited 0. Both logs are preserved as `posttest-vet-initial-fail.log` and `posttest-vet.log`.
+- Final source hashes: `update.go` `5166458f8622937a34a096afeb06f18798e446a72c452dba563b3293a6ea2c36`; `create_update_test.go` `76362a89d07df33259d93e9a12746a7c54d62db5ea8317a0b42bcfdce18ece80`.
+- Read-only patch review by `/root/pf14c_patch_review` found no concrete correctness gaps. Independent adversarial re-review remains downstream; this progress entry does not claim acceptance.
+- A later independent post-modification `go build ./...` rerun exited 1 after sibling artifact `tmp/punchflow-kickflow-dummy-s465/PF-19/attempt-2/teams_mutated.go` appeared. The file is outside PF-14c ownership and has undefined `API` references at lines 38, 39, 49, 63, 113, 185, 207, 298, 335 and 368. Full current shared-tree failure log: `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-4/build-current-shared-tree-fail.log`. The earlier attempt-4 build passed before this artifact appeared and is not a current shared-tree pass. Reconciliation owner: PF-19; resume PF-14c verification after the PF-19 owner or integration review resolves/excludes this temporary Go source and rerun `go build ./...` with exit 0.
+
+### Session: 2026-10-21 — PF-14c verification after PF-19 reconciliation
+
+No Go source or test files changed in this attempt. PF-19's accepted repair renamed its generated mutation file to `_teams_mutated.go`, excluding it from Go package discovery. The attempt-4 shared-tree blocker is retained above as historical evidence and is resolved by these current-source gates.
+
+**Attempt-5 verification** (complete logs under `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-5/`):
+- `go build ./...`: exit 0; `build.log`.
+- `go vet ./internal/engine/... ./internal/store/...`: exit 0; `vet.log`.
+- `go test -count=1 -v -race ./internal/engine/...`: exit 0; PASS=79, FAIL=0, SKIP=0; all four named PF-14c tests PASS; `engine-test.log`.
+- `go test -count=1 -v ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `store-test.log`.
+- Named-test count: 4; gofmt selection check: exit 0; all six owned Go files are below 1000 lines; see `named-test-count.log`, `gofmt.log`, and `line-counts.log`.
+- `pre-rerun-source.sha256` and `post-rerun-source.sha256` match exactly, confirming the source verified is the source previously reviewed and no source drift occurred during the rerun.
+- PF-14c implementation gates are complete. Independent re-review, combined-tree integration review, and PF-27 final gates remain downstream; no acceptance decision is claimed here.
+
+### Session: 2026-10-21 — PF14C-ADV-03/-04 adversarial repair (attempt 6)
+
+**Findings addressed**: `PF14C-ADV-03` and `PF14C-ADV-04` from `comm-008376`.
+
+**Changes**:
+- `update.go`: retained the frozen `pf14Update` signature as a delegate to `pf14cUpdate(..., partial bool)`. The in-progress guard now returns the `pf14CanAct` error for an author who is not a current approver. Approver input patches are resolved by ID, then code, and checked against `FormField.Approver` when `WorkflowDef.Overwritable` is false before any write. `UpdateForm` passes its raw input patch to the core; partial applicant patches merge with stored rows, while direct applicant `Update` retains the completeness check. Slip-only partial updates reconstruct references through `pf14cInputsFromRows`.
+- `create_update_test.go`: added rejection and no-write assertions for approver amount patches through both Update paths, positive controls for approver-note and overwritable amount patches, and author Update/UpdateForm rejection assertions for `403 user_not_assigned` with unchanged rows.
+- The targeted regressions reproduced all four defects against the pre-fix source (exit 1; expected failure) in `pre-fix-repro.log`; the current-source focused run passes all six new cases in `focused-test.log`.
+
+**Attempt-6 final-source verification** (complete logs under `tmp/punchflow-kickflow-dummy-s465/PF-14c/attempt-6/`):
+- `go build ./...`: exit 0; `final-build.log`.
+- `go vet ./internal/engine/... ./internal/store/...`: exit 0; `final-vet.log`; the required post-test-edit `go vet ./internal/engine` also exited 0 (`vet-after-tests.log`, `vet-after-assertion.log`).
+- `go test -count=1 -v -race ./internal/engine/...`: exit 0; PASS=87, FAIL=0, SKIP=0, zero cached lines; all four named PF-14c tests pass; `final-engine-test.log`.
+- `go test -count=1 -v ./internal/store/...`: exit 0; PASS=10, FAIL=0, SKIP=0; `final-store-test.log`.
+- Named-test count is 4; gofmt selection check exits 0; `update.go` is 389 lines and `create_update_test.go` is 625 lines. Final SHA-256: `update.go` `8fce1f94659d82709f7da4cf4b914098d37311cafdb6d1a246e65cad88d2d3cc`; `create_update_test.go` `d27123ee26893e130c85290e7a81f128c322ecf71b34344da4488bdb34c3a916`.
+- Independent test-integrity and adversarial re-review, combined-tree integration review, and PF-27 final gate remain downstream; this implementation progress does not claim their decisions.

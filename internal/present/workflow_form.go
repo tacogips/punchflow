@@ -7,6 +7,7 @@ import (
 )
 
 func pf08Sections(ctx context.Context, q store.Querier, sections []model.WorkflowSection) ([]any, error) {
+	formFields := pf08FormFieldsByCode(sections)
 	out := []any{}
 	for _, s := range sections {
 		fields := []any{}
@@ -19,7 +20,7 @@ func pf08Sections(ctx context.Context, q store.Querier, sections []model.Workflo
 		}
 		cfs := []any{}
 		for _, f := range s.ConditionFields {
-			cfs = append(cfs, pf08WorkflowConditionField(ctx, q, f))
+			cfs = append(cfs, pf08WorkflowConditionField(ctx, q, f, formFields))
 		}
 		section := map[string]any{"id": s.ID, "title": s.Title, "sectionType": s.SectionType, "description": nil, "viewRestriction": false, "sectionViewers": []any{}, "formFields": fields, "slipFields": slips, "conditionFields": cfs}
 		switch s.SectionType {
