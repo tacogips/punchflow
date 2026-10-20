@@ -164,18 +164,34 @@ func (s *Store) MaxBytes() int64
 - catch-all (served through the mux, independent of stubs): `PUT /v1/users` -> 404 `endpoint_not_found`; `GET /v1/nope` -> 404 `endpoint_not_found`
 - no assertion on placeholder handler status codes or placeholder response bodies anywhere in this test file
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 2. **Depends on**: PF-02.
+
+### Why
+
+The session-460 implementation (route table, 16 handler stub files, engine and files contract stubs, `routes_test.go`) is in the tree. Its only verification attempt failed on other plans' compile errors, which have since cleared. This session re-verifies it. No contract change is allowed: phase-3/4 plans compile against these signatures.
+
+### Tasks
+
+1. Run the verification below. If `routes_test.go` fails, fix only PF-10 files: the table must match the coverage matrix rows 1-96 exactly.
+2. Confirm by grep that each of the 96 handler methods exists exactly once: `rg -c '^func \(a \*API\) ' internal/api/v1/*.go`, total 96 plus helpers. Record the count.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf10-build.log
-go vet ./internal/api/... ./internal/engine/... ./internal/files/... 2>&1 | tee /tmp/pf10-vet.log
-go test ./internal/api/... 2>&1 | tee /tmp/pf10-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf10-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/... ./internal/engine/... ./internal/files/... 2>&1 | tee /tmp/pf10-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -run 'TestPF10' ./internal/api/v1/... 2>&1 | tee /tmp/pf10-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf10-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf10-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf10-s462-test.log)"
 gofmt -l internal/api internal/engine internal/files   # prints nothing
 ```
 
-## Done Criteria
+The pattern `TestPF10` matches the two PF-10 tests `TestPF10OperationsMatchCoverageMatrix` and `TestPF10DispatchPatternsAndCatchAll` (`routes_test.go:10,134`). Evidence: exit 0; FAIL=0; SKIP=0; both top-level tests appear as `--- PASS`.
 
-- [ ] 96 operations registered in the 16 handler files named in the coverage matrix Handler column; engine and files contracts compile with the exact signatures; tests pass; gofmt clean
+### Done Criteria (session 462)
+
+- [ ] 96 operations registered in the handler files named by the coverage matrix; `Operations()` count test passes uncached; engine and files contracts compile unchanged; build/vet exit 0; gofmt clean; counts recorded
 
 ## Execution Protocol
 

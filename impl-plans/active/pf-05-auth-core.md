@@ -123,19 +123,40 @@ Insert a tenant, users (activated, invited valid, invited expired, suspended), r
 - lastUsedOn written once per day (two requests same day -> one UPDATE)
 - `NewTokenValue("pat")` matches `^pf_pat_[0-9A-Za-z]{32}$`
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 2. **Depends on**: PF-02 (canonical `model.Permissions`, `UserStatusActive = "activated"`, `UserTypeNormal`).
+**Design**: `design-docs/specs/notes.md` CF-03 (mid) and CF-01; `design-api-coverage.md` enum contract.
+
+### Why
+
+- CF-03: the active-status correction is confirmed in code (`internal/store/auth.go:161` writes `model.UserStatusActive`; `internal/auth/session.go:17,30`; the tests use `activated`). It closes only with uncached PF-05 evidence.
+- CF-01: `internal/auth/token_test.go:75,89` seeds and asserts the invented permission `user_read`.
+
+### File-level changes
+
+1. `internal/auth/token_test.go`: replace `user_read` with the kickflow permission `user` (both the seed JSON at ~75 and the expected list at ~89). Expected union stays 3 values: `user`, `ticket_write`, `integration`.
+2. Re-read `internal/auth/*_test.go` and `internal/store/auth.go` for any other user-status, user-type or permission literal. Every one must be a value from the design enum table; use `model.*` constants where the file already imports `model`. No production behavior change.
+3. Do not edit `internal/auth/oidc.go` (PF-17 replaces it in phase 3).
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf05-build.log
-go vet ./internal/auth/... ./internal/store/... 2>&1 | tee /tmp/pf05-vet.log
-go test -race ./internal/auth/... 2>&1 | tee /tmp/pf05-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf05-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf05-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf05-s462-test.log'; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf05-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf05-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf05-s462-test.log)"
 gofmt -l internal/auth internal/store/auth.go   # prints nothing
+rg -n '"active"|user_read|"member"' internal/auth internal/store/auth.go   # prints nothing (exit 1)
 ```
 
-## Done Criteria
+Evidence: exit 0; FAIL=0; SKIP=0; PASS >= 22 (16 tests + 6 subtests in session 460). The log shows `TestSessionActivationRequiresValidInvitation` and `TestHandlersLocalLoginAndOIDCDisabled` passing.
 
-- [x] Contract symbols and store functions exist with the exact names; `oidc.go` stub compiles and returns nil OIDC for an empty issuer
-- [x] All tests pass with `-race`; gofmt clean
+### Done Criteria (session 462)
+
+- [ ] CF-03 closed: activation writes `activated` and the uncached auth tests pass with counts recorded
+- [ ] No invented permission, user-status or user-type literal remains in PF-05 files (rg check empty)
+- [ ] build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

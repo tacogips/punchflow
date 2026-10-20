@@ -61,19 +61,31 @@ Run `cli.Run(ctx, []string{"serve", "--listen", "127.0.0.1:0", "--db", tmp + "/p
 - Some schemas use `format: uuid` on ids: punchflow ids are lowercase UUID v4, which passes.
 - Keep each test file < 1000 lines (hence the scenario split).
 
-## Tests and Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 5 (alone). **Depends on**: PF-17..PF-24. **State at 410d3d8**: not started (`internal/contract` does not exist). Implement this plan as written. Session-462 points:
+
+- The 13 webhook payloads are the events in `model.WebhookEventTypes`. The webhook test asserts the set of received `eventType` values equals that list exactly.
+- Schema validation is the second line of defense for the enum contract: a response with `userType: member`, `sectionType: conditional`, `gradeSymbol: ""`, route `status: active` or an invented permission fails schema validation. Report such a failure as a reconciliation request against the owning plan (PF-07 data, PF-08/PF-15 presenter). Do not loosen the validator.
+- Test names: `TestContract*` in `internal/contract`; the smoke test is `TestServeSmoke` in `internal/cli/serve_smoke_test.go`.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf26-build.log
-go vet ./internal/contract/... ./internal/cli/... 2>&1 | tee /tmp/pf26-vet.log
-go test -race ./internal/contract/... 2>&1 | tee /tmp/pf26-contract.log     # 96 routes, 96 scenarios, 13 webhook payloads
-go test -race -run TestServeSmoke ./internal/cli/... 2>&1 | tee /tmp/pf26-smoke.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf26-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/contract/... ./internal/cli/... 2>&1 | tee /tmp/pf26-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/contract/... 2>&1 | tee /tmp/pf26-s462-contract.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'TestServeSmoke' ./internal/cli/... 2>&1 | tee /tmp/pf26-s462-smoke.log"; echo "exit=$?"
+for f in /tmp/pf26-s462-contract.log /tmp/pf26-s462-smoke.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
 gofmt -l internal/contract internal/cli/serve_smoke_test.go   # prints nothing
 ```
 
-## Done Criteria
+Evidence: exit 0; FAIL=0; SKIP=0. The contract log shows the 96-route test, 96 scenario subtests and 13 webhook subtests passing. Count them with `grep -c -- '--- PASS: TestContract.*/' /tmp/pf26-s462-contract.log`, which must be >= 109. The smoke log shows `--- PASS: TestServeSmoke`.
 
-- [ ] Contract tests cover 96/96 routes and 96/96 scenarios and 13/13 webhook payloads; smoke test passes; any non-test failures are logged as reconciliation requests with the owning plan id
+### Done Criteria (session 462)
+
+- [ ] Contract tests cover 96/96 routes, 96/96 scenarios and 13/13 webhook payloads (exact event set); smoke test passes; counts recorded
+- [ ] Any non-test failure is logged as a reconciliation request with the owning plan id
 
 ## Execution Protocol
 

@@ -88,18 +88,37 @@ func ProxyUserIDs(ctx context.Context, q store.Querier, userID, workflowID strin
 - a title with `<b>` -> payload bytes contain `<b>`
 - all timestamps match the JST millisecond regex
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 3. **Depends on**: PF-06, PF-07, PF-08, PF-09.
+**State at 410d3d8**: not started (`internal/present` has no ticket files; `internal/webhook/payload.go` is the PF-09 stub). Implement this plan as written, with these session-462 corrections:
+
+- Event types: `Build` handles exactly the 13 values of `model.WebhookEventTypes`. `ping` -> ping body; the 10 `ticket_*` -> ticket body; `comment_created`/`comment_updated` -> comment body. Any other value (including the removed `ticket_submitted`, `comment_deleted`) returns an error. Comment deletion is delivered as `comment_updated` with `deletedAt` set (INF-30).
+- Correction to the test list above: the bullet "a title with `<b>` -> payload bytes contain `<b>`" is wrong under INF-33, because `json.Marshal` escapes HTML characters. Correct expectations for a ticket title `<b>`:
+  - The payload bytes contain the 13-byte escaped sequence `\u003cb\u003e`: a backslash, `u003c`, the letter `b`, a backslash, `u003e`. In Go test source, write it as the interpreted literal `"\\u003cb\\u003e"` or the raw literal `` `\u003cb\u003e` ``.
+  - The payload bytes do NOT contain the 3-byte raw string `"<b>"` (`bytes.Contains(body, []byte("<b>"))` must be false).
+  - Do not call `SetEscapeHTML(false)` or otherwise change `Build`'s encoding to make a raw-`<b>` assertion pass.
+- `TicketStep.status` takes values only from `model.StepStatuses`; `fallbackResult` from `model.FallbackTypes` or null; ticket `status` from `model.TicketStatuses`.
+- Sections in `TicketDetail.ticketSections` follow the PF-02/PF-08 section shape. A conditional form section's `visible` is computed from its own `conditionFields` and `combinationType`.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf15-build.log
-go vet ./internal/present/... ./internal/webhook/... 2>&1 | tee /tmp/pf15-vet.log
-go test ./internal/present/... ./internal/webhook/... 2>&1 | tee /tmp/pf15-test.log
-gofmt -l internal/present internal/webhook/payload.go internal/store/read_tickets.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf15-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/present/... ./internal/webhook/... 2>&1 | tee /tmp/pf15-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -run 'Test(Ticket|Comment|Viewer|WebhookTenant)' ./internal/present/... 2>&1 | tee /tmp/pf15-s462-present-test.log"; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/webhook/... 2>&1 | tee /tmp/pf15-s462-webhook-test.log'; echo "exit=$?"   # whole package: payload.go is shared with PF-09, whose tests must stay green
+for f in /tmp/pf15-s462-present-test.log /tmp/pf15-s462-webhook-test.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
+gofmt -l internal/present/ticket.go internal/present/ticket_detail.go internal/present/comment.go internal/present/viewer.go internal/present/tenant.go internal/present/ticket_test.go internal/present/comment_test.go internal/store/read_tickets.go internal/webhook/payload.go internal/webhook/payload_test.go   # prints nothing
 ```
 
-## Done Criteria
+Name the payload tests `TestPayload*` in `payload_test.go`, and the presenter tests `TestTicket*`/`TestComment*`/`TestViewer*`/`TestWebhookTenant*`, so that the `-run` patterns cover them. Evidence: exit 0; FAIL=0; SKIP=0 in both logs; the webhook log also shows the PF-09 tests passing.
 
-- [ ] Contract functions exist; `NewPayloads().Build` handles all 13 event types; tests pass; PF-09 tests still pass; gofmt clean
+### Done Criteria (session 462)
+
+- [ ] Contract functions exist; `NewPayloads().Build` handles exactly the 13 event types (table test) and rejects others
+- [ ] HTML-escape test asserts the payload contains the escaped `\u003cb\u003e` sequence (backslash-u escapes) and does not contain raw `<b>`; JST timestamp regex test passes
+- [ ] Uncached present (scoped) and webhook (full package) tests pass with counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

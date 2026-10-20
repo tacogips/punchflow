@@ -106,18 +106,35 @@ Use an `httptest.Server` receiver and a fake builder returning `{"eventType":"ti
 - pending row inserted before `Run` starts -> delivered after start (persisted outbox)
 - `Backoff(10s, 1)` = 10s, `(10s, 10)` = 1h cap
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 2. **Depends on**: PF-02 (phase 1 renames `model.WebhookStatusDelivered` to `WebhookStatusSucceeded = "succeeded"` and fixes `WebhookEventTypes` to the 13 kickflow events).
+
+### Why
+
+The session-460 implementation exists. It needs re-verification under the session-462 evidence rule, plus a check that it is consistent with the corrected PF-02 enums.
+
+### Tasks
+
+1. `rg -n '"delivered"|"succeeded"|WebhookStatus' internal/webhook internal/store/webhooks.go`. Delivery status values written or compared must be exactly `pending`, `succeeded`, `failed` (`design-webhooks.md` data model). Where PF-09 code uses a string literal for these, prefer the `model.WebhookStatus*` constants. That edit is optional, but if a literal differs from the design, it must be fixed.
+2. Check the test expectations against INF-33 HTML escaping. The fake builder value `<a&b>`, encoded with `json.Marshal`, yields the escaped sequence `\u003ca\u0026b\u003e` (backslash-u escapes for `<`, `&` and `>`; the Go interpreted literal is `"\\u003ca\\u0026b\\u003e"`). If `sign_test.go` asserts the raw string `"<a&b>"` inside `json.Marshal` output, or a signature computed over unescaped bytes, correct the test to assert the escaped form, and assert that the raw `"<a&b>"` is absent. Do not change `Sign` and do not disable HTML escaping. If the test signs a hand-written byte string that is not produced by `json.Marshal`, leave it as it is and record that in the progress log.
+3. Do not touch `internal/webhook/payload.go` (PF-15 replaces it in phase 3).
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf09-build.log
-go vet ./internal/webhook/... ./internal/store/... 2>&1 | tee /tmp/pf09-vet.log
-go test -race ./internal/webhook/... 2>&1 | tee /tmp/pf09-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf09-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/webhook/... 2>&1 | tee /tmp/pf09-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/webhook/... 2>&1 | tee /tmp/pf09-s462-test.log'; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf09-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf09-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf09-s462-test.log)"
 gofmt -l internal/webhook internal/store/webhooks.go   # prints nothing
 ```
 
-## Done Criteria
+Evidence: exit 0; FAIL=0; SKIP=0; PASS >= 15 (12 top-level tests + 3 subtests in session 460).
 
-- [x] Contract symbols exist (including the `NewPayloads`/`Build` stub); all tests pass with `-race`; gofmt clean
+### Done Criteria (session 462)
+
+- [ ] Delivery statuses are exactly `pending|succeeded|failed`; uncached `-race -v` tests pass with counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

@@ -100,18 +100,35 @@ Audit actions: `ticket.create`, `ticket.update`, `ticket.updateForm`, `ticket.ap
 - viewers: add team viewer with grade -> listed; userId and teamId both -> 400; delete -> 200 empty
 - receiver responds 500 then 200 -> second `DeliverWebhooks` after advancing the fake clock past the backoff delivers with the same `X-Kickflow-Delivery`
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-14, PF-15, PF-16.
+**State at 410d3d8**: not started (PF-10 stubs). Implement this plan as written. Session-462 points:
+
+- The ten ticket events proven through the receiver are exactly `ticket_created`, `ticket_updated`, `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected`, `ticket_denied`, `ticket_completed`, `ticket_withdrawn`, `ticket_archived` (`model.WebhookEvent*`). Assert each by `eventType` in the received bodies.
+- Query enum validation:
+  - `listTickets` `status[]` in `model.TicketStatuses`; `assigneeStatus[]` in `all|current|approved` (spec query enum; not a step status)
+  - `listTasks` `status[]` in `draft|in_progress|rejected|completed|deleted` (`deleted` matches `archived`, INF-34)
+  - other values -> `400 invalid_parameter`
+- Withdraw results in ticket `status: rejected` (assert it).
+- Name tests `TestTicket*`, `TestTickets*`, `TestTask*`, `TestViewer*`, `TestTicketWebhook*`; prefix helpers with `pf22`.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf22-build.log
-go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf22-vet.log
-go test -race -run 'Test(Ticket|Tickets|Task|Viewer|TicketWebhook)' ./internal/api/v1/... 2>&1 | tee /tmp/pf22-test.log
-gofmt -l internal/api/v1/tickets*.go internal/api/v1/ticket_*.go internal/store/ticket_queries.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf22-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf22-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'Test(Ticket|Tickets|Task|Viewer|TicketWebhook)' ./internal/api/v1/... 2>&1 | tee /tmp/pf22-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf22-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf22-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf22-s462-test.log)"
+gofmt -l internal/api/v1/tickets.go internal/api/v1/ticket_actions.go internal/api/v1/ticket_viewers.go internal/api/v1/tickets_test.go internal/api/v1/ticket_actions_test.go internal/api/v1/ticket_viewers_test.go internal/api/v1/ticket_webhooks_test.go internal/store/ticket_queries.go   # prints nothing
+rg -n 'not implemented' internal/api/v1/tickets.go internal/api/v1/ticket_actions.go internal/api/v1/ticket_viewers.go   # prints nothing (exit 1)
+wc -l internal/api/v1/ticket*.go internal/store/ticket_queries.go | sort -n | tail -2   # every file < 1000
 ```
 
-## Done Criteria
+### Done Criteria (session 462)
 
-- [ ] 15 operations implemented; ten ticket_* events proven via HTTP + receiver; tests pass with `-race`; gofmt clean; files < 1000 lines
+- [ ] 15 operations implemented; the ten `ticket_*` events proven via HTTP + receiver with verified signatures; query enums validated
+- [ ] Listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 

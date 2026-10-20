@@ -1,0 +1,1041 @@
+{
+  "taskId": "punchflow-kickflow-dummy-s462",
+  "workflowMode": "issue-resolution",
+  "implementationBranch": "feat/kickflow-dummy-server",
+  "baseBranch": "feat/kickflow-dummy-server",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "410d3d8920a89d784bb4dd8dc9b45ac417046892",
+  "evidenceRoot": "tmp/punchflow-kickflow-dummy-s462",
+  "manifestPath": "impl-plans/active/punchflow-kickflow-dummy-s462-dispatch.json",
+  "historicalManifestPath": "impl-plans/active/punchflow-kickflow-dummy-s460-dispatch.json",
+  "designDocPaths": [
+    "design-docs/specs/architecture.md",
+    "design-docs/specs/command.md",
+    "design-docs/specs/notes.md",
+    "design-docs/specs/design-api-coverage.md",
+    "design-docs/specs/design-approval-engine.md",
+    "design-docs/specs/design-auth-admin.md",
+    "design-docs/specs/design-webhooks.md",
+    "design-docs/user-qa/README.md",
+    "design-docs/user-qa/pending-punchflow-defaults.md"
+  ],
+  "planIndexPath": "impl-plans/README.md",
+  "acceptedDependencies": [
+    {
+      "planId": "PF-01",
+      "planPath": "impl-plans/active/pf-01-foundation-primitives.md",
+      "commit": "410d3d8920a89d784bb4dd8dc9b45ac417046892",
+      "provides": "internal/kftime, internal/kferr, internal/build, internal/cli skeleton (Run signature), cmd/punchflow/main.go, embed.go + embed_test.go, web/dist and fixtures/default .gitkeep anchors, mise.toml tasks, .gitignore"
+    },
+    {
+      "planId": "PF-03",
+      "planPath": "impl-plans/active/pf-03-web-scaffold.md",
+      "commit": "410d3d8920a89d784bb4dd8dc9b45ac417046892",
+      "provides": "web/ Solid.js + TypeScript scaffold built with bun (package.json, bun.lock, toolchain.json, vite config, api client, lib helpers, page stubs) and web/node_modules install"
+    },
+    {
+      "planId": "PF-11",
+      "planPath": "impl-plans/active/pf-11-web-tickets.md",
+      "commit": "410d3d8920a89d784bb4dd8dc9b45ac417046892",
+      "provides": "web ticket screens (dashboard, search, detail, create/edit) and web/src/components/tickets, web/src/lib/ticket-view.ts with bun tests"
+    },
+    {
+      "planId": "PF-12",
+      "planPath": "impl-plans/active/pf-12-web-readviews.md",
+      "commit": "410d3d8920a89d784bb4dd8dc9b45ac417046892",
+      "provides": "web read-only definition, org, master, role, proxy and audit views; web/src/components/readviews, web/src/lib/tree.ts with bun tests"
+    },
+    {
+      "planId": "PF-13",
+      "planPath": "impl-plans/active/pf-13-web-integration.md",
+      "commit": "410d3d8920a89d784bb4dd8dc9b45ac417046892",
+      "provides": "web login, token, service-account, webhook, delivery-log and dev-tools screens; web/src/components/integration, web/src/lib/webhook-view.ts with bun tests"
+    }
+  ],
+  "reviewContext": {
+    "issueReference": "workflowInput issue 'punchflow continuation: finish remaining implementation plans (PF-02, PF-04..PF-10, PF-14..PF-27)' (no GitHub URL or number); continuation of riela session 460 from checkpoint 410d3d8 on feat/kickflow-dummy-server; workflowExecutionId opus-luna-design-and-implement-review-loop-session-462; plans accepted by step5-impl-plan-review comm-008152 (re-review of step4 rerun comm-008151); gitPush=false",
+    "userProblem": "Other systems need to verify their kickflow integration (REST API client and webhook receiver) locally and in dev without the real service, which individuals cannot contract. punchflow is a dummy kickflow server inferred from public kickflow material (design-docs/references/kickflow-api.md, kickflow-openapi.yaml: 96 operations, 57 paths, 13 webhook events). Session 460 left 22 plans partially implemented at 410d3d8, with open wave-3 findings CF-01 (invented enums), CF-02 (master item input IDs) and CF-03 (activated status), and test evidence that was rejected because it came from the go test cache without counts.",
+    "requiredOutcomes": [
+      "CF-01 closed: internal/model/enums.go exports the 21 canonical Go enum lists matching the OpenAPI spec (enums_test.go conformance test), no invented constants remain, fixtures.Validate uses the Go lists, fixtures/default and testdata/minimal use only design-table values, and the CF-01 ban grep in notes.md prints nothing (PF-02, PF-05, PF-06, PF-07, PF-27)",
+      "CF-02 closed: general master item input IDs persist through load, store read, presenter, API create/update and export; export(load(fixtures/default)) is byte-identical (PF-06, PF-08, PF-16, PF-20)",
+      "CF-03 closed: activation writes 'activated', proven by uncached PF-05 auth tests with counts (PF-05)",
+      "Coverage matrix rows: every /v1 endpoint implemented and covered by httptest Go tests checking status codes, field names, pagination headers and error format (PF-10, PF-18..PF-23)",
+      "All 13 webhook events emitted by lifecycle actions, signed with X-Kickflow-Signature sha256=HMAC hex over HTML-escaped json.Marshal bytes, persisted with delivery attempts (pending|succeeded|failed), tested with an httptest receiver (PF-09, PF-15, PF-22, PF-23, PF-24, PF-26)",
+      "Approval engine tests cover submit -> multi-step approve -> completed, reject, send back and resubmit, withdraw (-> rejected), parallel all/any steps and proxy approval (PF-14)",
+      "Server, CLI (serve, fixtures load/reset/export, token), dev admin API (23 ops) and testutil assembled; default fixtures validate and round-trip (PF-16, PF-24)",
+      "OIDC callback/token validation unit-tested against a fake issuer (PF-17); README explains pointing a kickflow client at punchflow (PF-25)",
+      "Contract test asserts 96/96 routes, 96/96 schema-validated scenarios and the exact 13 webhook payloads; serve smoke test passes (PF-26)",
+      "Final gate (PF-27 only): go build/vet ./..., uncached go test -count=1 -v -race ./... with zero cached lines and SKIP 0, web frozen install/typecheck/bun test/build, mise build/test/lint, embedded build test PASS; accepted PF-01/03/11/12/13 stay green; plans archived"
+    ],
+    "nonGoals": [
+      "Redesign: accepted design-docs/specs and plans are the baseline; only the session-462 Continuation amendments apply",
+      "Re-implementing accepted PF-01, PF-03, PF-11, PF-12, PF-13 (keep them green only)",
+      "kickflow AI features; production hardening, multi-tenancy, billing, high availability",
+      "A visual workflow designer (definitions are read-only JSON fixtures, DIV-05)",
+      "New migrations: 0001_init.sql in-place input_ids edit accepted pre-release (D-06)",
+      "go mod tidy or go.mod/go.sum edits before PF-27",
+      "Pushing to any remote (gitPush=false)"
+    ],
+    "constraints": [
+      "Go module punchflow, go 1.25, cmd/ and internal/ layout per .claude/skills/go-coding-standards; every touched Go file under 1000 lines",
+      "SQLite only via pure-Go modernc.org/sqlite; frontend Solid.js + TypeScript with bun only (no npm/yarn/pnpm)",
+      "impl-plans/README.md Shared Execution Protocol rules 1-11: edit only declared writePaths/sharedPaths, frozen contracts outside owners and PF-27, per-plan identifier prefixes in shared packages, no git state changes by workers",
+      "README rule 11 / architecture.md#verification-command-rule-session-462: every tee'd command runs under bash -o pipefail with exit= recorded; Go tests are go test -count=1 -v [-race] [-run pattern] scoped to the plan; record --- PASS/FAIL/SKIP counts; (cached) output is not evidence; only PF-27 runs go test ./...",
+      "Foreign-file breakage is recorded as a reconciliation request (file:line, owning plan, log path), never fixed by a non-owner",
+      "Each plan's Continuation (session 462) section overrides its older Verification and Done Criteria text",
+      "Plans log to /tmp/<plan-id>-s462-<step>.log as written in the plan; per-plan/per-attempt evidence copies go under evidenceRoot tmp/punchflow-kickflow-dummy-s462/<planId>/attempt-<n>/ (git-ignored by **/tmp)",
+      "Workers update only their own plan file Progress Log and never edit this dispatch manifest or the historical s460 manifest",
+      "Dev-only shortcuts (local login, admin reset) only behind explicit flags; no real secrets",
+      "Run commands in the foreground; no detached or orphaned processes"
+    ],
+    "designDecisionsAndRationale": [
+      "Enum contract frozen in PF-02 (design-api-coverage.md#enum-contract-frozen-in-pf-02): one exported []string per enum plus constants; all validation, engine and presenter code uses only these lists; an OpenAPI conformance test replaces hand-written expectations",
+      "PF-02 runs alone in phase 1 because every other plan compiles against internal/model; it makes the minimal consumer edits (validate.go enum checks, present_test.go GradeSymbol literals) as declared sharedPaths so the build is never left broken",
+      "RouteTarget.GradeSymbol becomes *string (null = no grade filter); conditional sections are form sections with conditional/combinationType; slip sections carry code",
+      "CF-02 input ID data flow (architecture.md#fixtures): inputs {fieldId: value} and input_ids {fieldId: inputId} are written together; presenter never falls back to the field ID; update preserves existing IDs",
+      "Webhook delivery status renamed to succeeded; comment deletion is delivered as comment_updated with deletedAt (INF-30); withdraw yields ticket status rejected",
+      "HTML escaping per INF-33 stays enabled; tests assert the escaped \\u003c...\\u003e sequences and the absence of raw characters",
+      "Verification scoped per plan to avoid the session-460 cross-plan deadlock; the full-repo gate belongs to PF-27",
+      "Single SQLite connection; functions take store.Querier inside WithTx; stub-first contracts (PF-10 route table and engine/files stubs, PF-05 oidc.go, PF-09 payload.go, PF-16 admin stubs) enable parallel phases"
+    ],
+    "intentionalTradeoffs": [
+      "Shared stub files cross phases and are declared as sharedPaths with intendedEdit notes (PF-02 -> validate.go/present_test.go; PF-14 -> engine.go; PF-15 -> payload.go; PF-16 -> cli.go/cli_test.go/fixtures/default; PF-17 -> oidc.go; PF-18..PF-23 -> PF-10 handler stubs; PF-24 -> PF-16 admin stubs)",
+      "Phase-4 plans share the internal/api/v1 package; transient compile coupling is handled by README rule 11 reconciliation, not foreign edits",
+      "PF-07 reshapes fixture data while PF-16 later asserts the byte-exact round trip; the atomic regeneration procedure is the backstop",
+      "The enum table does not cover every OpenAPI enum; PF-26 schema validation is the second line of defense",
+      "The superseded session-460 verification blocks remain in plan text for history; the Continuation sections and README rule 11 override them",
+      "Rate limiting off by default; Keycloak login remains a documented manual check"
+    ],
+    "supportedEdgeCases": [
+      "Enum rejection: step type grade, permission audit_read, event ticket_submitted, user type member, route status active, section type conditional, gradeSymbol empty string, defaultSortBy createdAt",
+      "Master item inputs: item without inputs exports inputs []; missing input ID is an export/presenter error; update keeps IDs and assigns new ones only for new fields",
+      "Webhooks: retries keep X-Kickflow-Delivery, 3xx/404/timeout count as failures, persisted outbox survives restart, fire endpoint accepts all 13 events (ping only with webhookIds)",
+      "Query enum validation on listTickets/listTasks/listUsers/listRoutes/listWorkflows returns 400 invalid_parameter",
+      "Engine: serial and parallel groups with all/any, proxy approval, send back to applicant or earlier step, resubmit keeps ticket number, conditional form sections, slip section codes, fallback types",
+      "OIDC: state replay/expiry, nonce/audience/expiry mismatch, unknown e-mail, open-redirect-safe returnTo, empty issuer -> 404",
+      "Fixtures: strict unknown-key rejection, 15 invalid cases each producing only their target problem, byte-stable round trip"
+    ],
+    "outOfScopeEdgeCases": [
+      "combinationType custom and fieldKey other_variable rejected (INF-18)",
+      "Excluded spec values permanently_deleted and raised are never produced (DIV-04)",
+      "Asynchronous org-chart jobs, activation schedules, multiple workflow versions",
+      "Integration objects (Slack, Teams, etc.) always null/[] (DIV-03, DIV-06)",
+      "Databases created before 410d3d8 must be deleted or reset (in-place migration edit)"
+    ],
+    "residualRisks": [
+      "pf-27 superseded section (lines 128-146) still shows old uncached commands; the Continuation and README rule 11 override them (low)",
+      "Phase-4 internal/api/v1 shared-package compile coupling (README rule 11 reconciliation)",
+      "PF-07 data reshaping vs the PF-16 byte-exact round trip; regeneration procedure is the backstop",
+      "Enum table does not cover every OpenAPI enum; PF-26 schema validation is the backstop",
+      "Network-dependent installs; Docker may be unavailable for the Keycloak compose check"
+    ],
+    "dispatchOrderNote": "dependsOn follows the session-462 README table and Continuation sections. Topological levels equal the approved phases: 1 = PF-02; 2 = PF-04..PF-10; 3 = PF-14..PF-17; 4 = PF-18..PF-25; 5 = PF-26; 6 = PF-27 (serial). Accepted PF-01/PF-03/PF-11/PF-12/PF-13 are acceptedDependencies and are not dispatched.",
+    "sourcePaths": [
+      "design-docs/references/kickflow-api.md",
+      "design-docs/references/kickflow-openapi.yaml",
+      "design-docs/specs/architecture.md",
+      "design-docs/specs/command.md",
+      "design-docs/specs/notes.md",
+      "design-docs/specs/design-api-coverage.md",
+      "design-docs/specs/design-approval-engine.md",
+      "design-docs/specs/design-auth-admin.md",
+      "design-docs/specs/design-webhooks.md",
+      "design-docs/user-qa/pending-punchflow-defaults.md",
+      "impl-plans/README.md",
+      "impl-plans/active/punchflow-kickflow-dummy-s460-dispatch.json",
+      "mise.toml",
+      ".gitignore"
+    ]
+  },
+  "plans": [
+    {
+      "planId": "PF-02",
+      "planPath": "impl-plans/active/pf-02-data-contract.md",
+      "dependsOn": ["PF-01"],
+      "writePaths": [
+        "impl-plans/active/pf-02-data-contract.md",
+        "go.mod",
+        "go.sum",
+        "go-toolchain.json",
+        "internal/model/tenant.go",
+        "internal/model/user.go",
+        "internal/model/org.go",
+        "internal/model/role.go",
+        "internal/model/classification.go",
+        "internal/model/master.go",
+        "internal/model/definition.go",
+        "internal/model/ticket.go",
+        "internal/model/comment.go",
+        "internal/model/file.go",
+        "internal/model/audit.go",
+        "internal/model/token.go",
+        "internal/model/webhook.go",
+        "internal/model/enums.go",
+        "internal/store/db.go",
+        "internal/store/tx.go",
+        "internal/store/migrate.go",
+        "internal/store/ids.go",
+        "internal/store/secrets.go",
+        "internal/store/audit.go",
+        "internal/store/truncate.go",
+        "internal/store/store_test.go",
+        "internal/store/migrations/0001_init.sql",
+        "internal/fixtures/types.go",
+        "internal/model/enums_test.go",
+        "internal/fixtures/enum_rules_test.go"
+      ],
+      "sharedPaths": [
+        "internal/fixtures/validate.go",
+        "internal/present/present_test.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/fixtures/validate.go", "intendedEdit": "owned by PF-06; session 462 phase 1 only: replace enum literal checks with the internal/model Go lists and add the enum checks listed in Continuation task 5; nothing else"},
+        {"path": "internal/present/present_test.go", "intendedEdit": "owned by PF-08; session 462 phase 1 only: change the two RouteTarget GradeSymbol literals to pf08String(\"equal\") so the package compiles after the *string change"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "enums.go has the 21 Go lists and constants named in the plan; no invented or non-kickflow constant remains (rg check empty)",
+        "RouteTarget.GradeSymbol is *string json:\"gradeSymbol\"; WorkflowSection has Code, Conditional, CombinationType in the stated order",
+        "TestEnumListsMatchOpenAPI (20 rows), TestWebhookEventTypesMatchReference and TestEnumListsHaveNoDuplicates pass uncached",
+        "validate.go uses the Go lists for every enum check listed in task 5; the TestEnumRule* cases pass",
+        "Store test seeds use canonical values; TestModelEnumValuesMatchDesign removed",
+        "build/vet exit 0; gofmt clean; every touched Go file < 1000 lines; progress log has exit status, log path and counts for each command"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf02-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/model/... ./internal/store/... ./internal/fixtures/... ./internal/present/... 2>&1 | tee /tmp/pf02-s462-vet.log'; echo \"exit=$?\"   # vet compiles present_test.go",
+        "bash -o pipefail -c 'go test -count=1 -v ./internal/model/... ./internal/store/... 2>&1 | tee /tmp/pf02-s462-test.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'TestEnumRule' ./internal/fixtures/... 2>&1 | tee /tmp/pf02-s462-fixtures-test.log\"; echo \"exit=$?\"",
+        "for f in /tmp/pf02-s462-test.log /tmp/pf02-s462-fixtures-test.log; do echo \"$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)\"; done",
+        "gofmt -l internal/model internal/store internal/fixtures/validate.go internal/fixtures/enum_rules_test.go internal/present/present_test.go   # prints nothing",
+        "rg -n -e 'ticket_submitted|ticket_remanded|ticket_resubmitted|comment_deleted|ticket_admin|audit_read|StepTypeGrade|StepTypeParallel|StepStatus(Approved|Denied|Remanded)|TicketStatus(Withdrawn|Pending)|WebhookStatusDelivered' -e '\\b(user|org|workflow|role|file|proxy)_(read|write)\\b' internal/model internal/fixtures/validate.go internal/store   # prints nothing, exit 1",
+        "go mod verify 2>&1 | tee /tmp/pf02-s462-modverify.log   # all modules verified"
+      ]
+    },
+    {
+      "planId": "PF-04",
+      "planPath": "impl-plans/active/pf-04-httpx.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-04-httpx.md",
+        "internal/httpx/json.go",
+        "internal/httpx/pagination.go",
+        "internal/httpx/query.go",
+        "internal/httpx/middleware.go",
+        "internal/httpx/ratelimit.go",
+        "internal/httpx/faults.go",
+        "internal/httpx/json_test.go",
+        "internal/httpx/pagination_test.go",
+        "internal/httpx/query_test.go",
+        "internal/httpx/middleware_test.go",
+        "internal/httpx/ratelimit_test.go",
+        "internal/httpx/faults_test.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Uncached -race -v httpx tests pass with counts recorded (FAIL=0, SKIP=0, PASS >= 19); build and vet exit 0; gofmt clean; no source change, or each change justified with hashes"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf04-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf04-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf04-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf04-s462-test.log)\"",
+        "gofmt -l internal/httpx   # prints nothing",
+        "wc -l internal/httpx/*.go | sort -n | tail -2   # largest < 1000"
+      ]
+    },
+    {
+      "planId": "PF-05",
+      "planPath": "impl-plans/active/pf-05-auth-core.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-05-auth-core.md",
+        "internal/auth/principal.go",
+        "internal/auth/token.go",
+        "internal/auth/middleware.go",
+        "internal/auth/session.go",
+        "internal/auth/handlers.go",
+        "internal/auth/oidc.go",
+        "internal/auth/token_test.go",
+        "internal/auth/middleware_test.go",
+        "internal/auth/session_test.go",
+        "internal/auth/handlers_test.go",
+        "internal/store/auth.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "CF-03 closed: activation writes activated and the uncached auth tests pass with counts recorded (FAIL=0, SKIP=0, PASS >= 22)",
+        "No invented permission, user-status or user-type literal remains in PF-05 files (rg check empty); oidc.go untouched (PF-17)",
+        "build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf05-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf05-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf05-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf05-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf05-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf05-s462-test.log)\"",
+        "gofmt -l internal/auth internal/store/auth.go   # prints nothing",
+        "rg -n '\"active\"|user_read|\"member\"' internal/auth internal/store/auth.go   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-06",
+      "planPath": "impl-plans/active/pf-06-fixtures-loader.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-06-fixtures-loader.md",
+        "internal/fixtures/parse.go",
+        "internal/fixtures/validate.go",
+        "internal/fixtures/load.go",
+        "internal/fixtures/export.go",
+        "internal/fixtures/fixtures_test.go",
+        "internal/fixtures/validate_test.go",
+        "internal/fixtures/testdata"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "CF-02 load/export half closed: input_ids written on load and restored as inputs[].id on export; inputs never null; tests prove it",
+        "testdata/minimal is canonical and round-trips byte-identically; 15 invalid cases each yield only their target problem",
+        "fixtures_test.go and validate_test.go exist and pass uncached with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf06-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/fixtures/... 2>&1 | tee /tmp/pf06-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'Test(Load|Export|Reset|Validate)' ./internal/fixtures/... 2>&1 | tee /tmp/pf06-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf06-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf06-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf06-s462-test.log)\"",
+        "gofmt -l internal/fixtures/parse.go internal/fixtures/validate.go internal/fixtures/load.go internal/fixtures/export.go internal/fixtures/fixtures_test.go internal/fixtures/validate_test.go   # prints nothing",
+        "rg -n '\"status\": *\"active\"|\"userType\": *\"member\"|\"sectionType\": *\"conditional\"|\"gradeSymbol\": *\"\"|\"id\": *\"\"|\"inputs\": *null' internal/fixtures/testdata/minimal   # prints nothing (exit 1)",
+        "wc -l internal/fixtures/*.go | sort -n | tail -2   # every file < 1000"
+      ]
+    },
+    {
+      "planId": "PF-07",
+      "planPath": "impl-plans/active/pf-07-fixtures-default-keycloak.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-07-fixtures-default-keycloak.md",
+        "fixtures/default/tenant.json",
+        "fixtures/default/grades.json",
+        "fixtures/default/users.json",
+        "fixtures/default/organization-charts.json",
+        "fixtures/default/roles.json",
+        "fixtures/default/categories.json",
+        "fixtures/default/folders.json",
+        "fixtures/default/general-masters.json",
+        "fixtures/default/routes.json",
+        "fixtures/default/workflows.json",
+        "fixtures/default/proxy-applicants.json",
+        "fixtures/default/proxy-approvers.json",
+        "fixtures/default/tokens.json",
+        "fixtures/default/webhooks.json",
+        "deploy/keycloak/docker-compose.yml",
+        "deploy/keycloak/realm-punchflow.json",
+        "fixtures_default_test.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "fixtures/default uses only design-table enum values (rg check empty) and passes fixtures.Validate (TestDefaultFixturesValidate PASS, uncached)",
+        "Pinned content unchanged except for the listed enum and section-shape corrections; UUIDs preserved",
+        "build/vet exit 0; gofmt clean; counts recorded"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf07-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet . 2>&1 | tee /tmp/pf07-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'TestDefault|TestKeycloak' . 2>&1 | tee /tmp/pf07-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf07-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf07-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf07-s462-test.log)\"",
+        "gofmt -l fixtures_default_test.go   # prints nothing",
+        "rg -n -e '\"userType\": *\"member\"|\"status\": *\"active\"|\"sectionType\": *\"conditional\"|\"gradeSymbol\": *\"\"' -e 'ticket_admin|audit_read' -e '\"(user|org|workflow|role|file|proxy)_(read|write)\"' fixtures/default   # prints nothing (exit 1)",
+        "python3 -I -m json.tool deploy/keycloak/realm-punchflow.json > /dev/null && echo realm-json-ok"
+      ]
+    },
+    {
+      "planId": "PF-08",
+      "planPath": "impl-plans/active/pf-08-present-core.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-08-present-core.md",
+        "internal/present/present.go",
+        "internal/present/user.go",
+        "internal/present/org.go",
+        "internal/present/role.go",
+        "internal/present/classification.go",
+        "internal/present/master.go",
+        "internal/present/workflow.go",
+        "internal/present/workflow_form.go",
+        "internal/present/route.go",
+        "internal/present/proxy.go",
+        "internal/present/audit.go",
+        "internal/present/present_test.go",
+        "internal/present/workflow_test.go",
+        "internal/store/read_users.go",
+        "internal/store/read_org.go",
+        "internal/store/read_roles.go",
+        "internal/store/read_classification.go",
+        "internal/store/read_masters.go",
+        "internal/store/read_definitions.go",
+        "internal/store/read_proxies.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "CF-02 read/present half closed: inputs[].id is the persisted input ID; a missing ID is an error; tests prove both",
+        "Section JSON carries code (slip) and conditional/combinationType (form); gradeSymbol null renders as null",
+        "Uncached present tests pass with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf08-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/present/... ./internal/store/... 2>&1 | tee /tmp/pf08-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v ./internal/present/... 2>&1 | tee /tmp/pf08-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf08-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf08-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf08-s462-test.log)\"",
+        "gofmt -l internal/present internal/store/read_users.go internal/store/read_org.go internal/store/read_roles.go internal/store/read_classification.go internal/store/read_masters.go internal/store/read_definitions.go internal/store/read_proxies.go   # prints nothing",
+        "wc -l internal/present/*.go | sort -n | tail -2   # every file < 1000"
+      ]
+    },
+    {
+      "planId": "PF-09",
+      "planPath": "impl-plans/active/pf-09-webhook-delivery.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-09-webhook-delivery.md",
+        "internal/webhook/service.go",
+        "internal/webhook/dispatcher.go",
+        "internal/webhook/sign.go",
+        "internal/webhook/backoff.go",
+        "internal/webhook/payload.go",
+        "internal/webhook/sign_test.go",
+        "internal/webhook/service_test.go",
+        "internal/webhook/dispatcher_test.go",
+        "internal/store/webhooks.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Delivery statuses are exactly pending|succeeded|failed; HTML-escape expectations follow INF-33 (escaped \\u003ca\\u0026b\\u003e, raw <a&b> absent from json.Marshal output); payload.go untouched (PF-15)",
+        "Uncached -race -v tests pass with counts recorded (FAIL=0, SKIP=0, PASS >= 15); build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf09-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/webhook/... 2>&1 | tee /tmp/pf09-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/webhook/... 2>&1 | tee /tmp/pf09-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf09-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf09-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf09-s462-test.log)\"",
+        "gofmt -l internal/webhook internal/store/webhooks.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-10",
+      "planPath": "impl-plans/active/pf-10-api-contracts.md",
+      "dependsOn": ["PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-10-api-contracts.md",
+        "internal/api/v1/api.go",
+        "internal/api/v1/routes.go",
+        "internal/api/v1/routes_test.go",
+        "internal/api/v1/users.go",
+        "internal/api/v1/grades.go",
+        "internal/api/v1/proxies.go",
+        "internal/api/v1/orgcharts.go",
+        "internal/api/v1/teams.go",
+        "internal/api/v1/categories.go",
+        "internal/api/v1/folders.go",
+        "internal/api/v1/definitions.go",
+        "internal/api/v1/tickets.go",
+        "internal/api/v1/ticket_actions.go",
+        "internal/api/v1/ticket_viewers.go",
+        "internal/api/v1/files.go",
+        "internal/api/v1/general_masters.go",
+        "internal/api/v1/roles.go",
+        "internal/api/v1/comments.go",
+        "internal/api/v1/audit_logs.go",
+        "internal/engine/engine.go",
+        "internal/files/files.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "96 operations registered in the handler files named by the coverage matrix; Operations() count test passes uncached (TestPF10OperationsMatchCoverageMatrix, TestPF10DispatchPatternsAndCatchAll); engine and files contracts compile unchanged; build/vet exit 0; gofmt clean; counts recorded"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf10-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/... ./internal/engine/... ./internal/files/... 2>&1 | tee /tmp/pf10-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'TestPF10' ./internal/api/v1/... 2>&1 | tee /tmp/pf10-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf10-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf10-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf10-s462-test.log)\"",
+        "gofmt -l internal/api internal/engine internal/files   # prints nothing",
+        "rg -c '^func \\(a \\*API\\) ' internal/api/v1/*.go   # total 96 plus helpers; record the count"
+      ]
+    },
+    {
+      "planId": "PF-14",
+      "planPath": "impl-plans/active/pf-14-engine.md",
+      "dependsOn": ["PF-06", "PF-07", "PF-08", "PF-10"],
+      "writePaths": [
+        "impl-plans/active/pf-14-engine.md",
+        "internal/engine/create.go",
+        "internal/engine/update.go",
+        "internal/engine/forms.go",
+        "internal/engine/conditions.go",
+        "internal/engine/routing.go",
+        "internal/engine/progression.go",
+        "internal/engine/actions.go",
+        "internal/engine/visibility.go",
+        "internal/engine/comments.go",
+        "internal/engine/numbering.go",
+        "internal/engine/setup_test.go",
+        "internal/engine/lifecycle_test.go",
+        "internal/engine/forms_test.go",
+        "internal/engine/routing_test.go",
+        "internal/engine/events_test.go",
+        "internal/engine/comments_test.go",
+        "internal/store/tickets.go",
+        "internal/store/engine_lookup.go"
+      ],
+      "sharedPaths": [
+        "internal/engine/engine.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/engine/engine.go", "intendedEdit": "created by PF-10 as the contract stub; replace the method bodies only, keeping every exported type and signature"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "All engine methods implemented with unchanged PF-10 signatures; the 17 listed tests pass uncached with -race, with counts recorded",
+        "Engine production code uses only internal/model enum constants (rg check empty); conditional sections and slip codes follow the PF-02 model; withdraw yields rejected",
+        "build/vet exit 0; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf14-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/engine/... ./internal/store/... 2>&1 | tee /tmp/pf14-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/engine/... 2>&1 | tee /tmp/pf14-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf14-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf14-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf14-s462-test.log)\"",
+        "gofmt -l internal/engine internal/store/tickets.go internal/store/engine_lookup.go   # prints nothing",
+        "wc -l internal/engine/*.go internal/store/tickets.go internal/store/engine_lookup.go | sort -n | tail -2   # every file < 1000",
+        "rg -n '\"(in_progress|completed|rejected|denied|archived|draft|pending|skipped|approve|confirm|none|ticket_[a-z]+|comment_[a-z]+)\"' internal/engine --glob '!*_test.go'   # prints nothing: production code uses model constants"
+      ]
+    },
+    {
+      "planId": "PF-15",
+      "planPath": "impl-plans/active/pf-15-present-ticket-payloads.md",
+      "dependsOn": ["PF-06", "PF-07", "PF-08", "PF-09"],
+      "writePaths": [
+        "impl-plans/active/pf-15-present-ticket-payloads.md",
+        "internal/present/ticket.go",
+        "internal/present/ticket_detail.go",
+        "internal/present/comment.go",
+        "internal/present/viewer.go",
+        "internal/present/tenant.go",
+        "internal/present/ticket_test.go",
+        "internal/present/comment_test.go",
+        "internal/store/read_tickets.go",
+        "internal/webhook/payload_test.go"
+      ],
+      "sharedPaths": [
+        "internal/webhook/payload.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/webhook/payload.go", "intendedEdit": "created by PF-09 as a stub; implement Build for exactly the 13 model.WebhookEventTypes values (reject others), keeping NewPayloads() and the Build signature and HTML escaping"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract functions exist; NewPayloads().Build handles exactly the 13 event types (table test) and rejects others",
+        "HTML-escape test asserts the payload contains the escaped \\u003cb\\u003e sequence and does not contain raw <b>; JST timestamp regex test passes",
+        "Uncached present (scoped) and webhook (full package) tests pass with counts recorded; build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf15-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/present/... ./internal/webhook/... 2>&1 | tee /tmp/pf15-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'Test(Ticket|Comment|Viewer|WebhookTenant)' ./internal/present/... 2>&1 | tee /tmp/pf15-s462-present-test.log\"; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/webhook/... 2>&1 | tee /tmp/pf15-s462-webhook-test.log'; echo \"exit=$?\"   # whole package: payload.go is shared with PF-09, whose tests must stay green",
+        "for f in /tmp/pf15-s462-present-test.log /tmp/pf15-s462-webhook-test.log; do echo \"$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)\"; done",
+        "gofmt -l internal/present/ticket.go internal/present/ticket_detail.go internal/present/comment.go internal/present/viewer.go internal/present/tenant.go internal/present/ticket_test.go internal/present/comment_test.go internal/store/read_tickets.go internal/webhook/payload.go internal/webhook/payload_test.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-16",
+      "planPath": "impl-plans/active/pf-16-server-cli-testutil.md",
+      "dependsOn": ["PF-04", "PF-05", "PF-06", "PF-07", "PF-08", "PF-09", "PF-10"],
+      "writePaths": [
+        "impl-plans/active/pf-16-server-cli-testutil.md",
+        "internal/server/server.go",
+        "internal/server/server_test.go",
+        "internal/webui/webui.go",
+        "internal/webui/webui_test.go",
+        "internal/admin/admin.go",
+        "internal/admin/routes.go",
+        "internal/admin/routes_test.go",
+        "internal/admin/tokens.go",
+        "internal/admin/service_accounts.go",
+        "internal/admin/webhooks.go",
+        "internal/admin/tenant.go",
+        "internal/admin/faults.go",
+        "internal/admin/fixtures.go",
+        "internal/cli/config.go",
+        "internal/cli/serve.go",
+        "internal/cli/fixtures.go",
+        "internal/cli/token.go",
+        "internal/testutil/env.go",
+        "internal/testutil/personas.go",
+        "internal/testutil/receiver.go",
+        "internal/testutil/assert.go",
+        "internal/testutil/testutil_test.go",
+        "internal/fixtures/default_roundtrip_test.go"
+      ],
+      "sharedPaths": [
+        "internal/cli/cli.go",
+        "internal/cli/cli_test.go",
+        "fixtures/default"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/cli/cli.go", "intendedEdit": "created by accepted PF-01 as a skeleton; replace dispatch with the real subcommands, keep the Run signature"},
+        {"path": "internal/cli/cli_test.go", "intendedEdit": "created by accepted PF-01; extend with the CLI cases listed in the plan, keep TestRunVersion/TestRunPlaceholdersAndUsage green, adjusting only placeholder expectations replaced by real subcommands"},
+        {"path": "fixtures/default", "intendedEdit": "created by PF-01 (.gitkeep) and PF-07 (JSON files); regenerate atomically only if the byte round-trip fails, after proving semantic equality, then re-run the PF-07 rg ban check"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contracts exist; server assembled as specified; CLI subcommands, flags and env vars match command.md",
+        "Uncached -race -v tests of the five PF-16 packages pass (SKIP allowed only for TestEmbeddedBuild); TestDefaultRoundTrip passes (Validate nil; byte-identical export); counts recorded",
+        "build/vet exit 0; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf16-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... 2>&1 | tee /tmp/pf16-s462-test.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'TestDefaultRoundTrip' ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s462-roundtrip.log\"; echo \"exit=$?\"",
+        "for f in /tmp/pf16-s462-test.log /tmp/pf16-s462-roundtrip.log; do echo \"$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)\"; done",
+        "gofmt -l internal/server internal/webui internal/admin internal/cli internal/testutil internal/fixtures/default_roundtrip_test.go   # prints nothing",
+        "bash -o pipefail -c 'go run ./cmd/punchflow version 2>&1 | tee /tmp/pf16-s462-version.log'; echo \"exit=$?\"   # \"punchflow 0.1.0\""
+      ]
+    },
+    {
+      "planId": "PF-17",
+      "planPath": "impl-plans/active/pf-17-auth-oidc.md",
+      "dependsOn": ["PF-05"],
+      "writePaths": [
+        "impl-plans/active/pf-17-auth-oidc.md",
+        "internal/auth/oidc_test.go",
+        "internal/auth/oidc_fake_test.go"
+      ],
+      "sharedPaths": [
+        "internal/auth/oidc.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/auth/oidc.go", "intendedEdit": "created by PF-05 as a stub; replace the bodies, keeping OIDCConfig, NewOIDC, Login and Callback signatures"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Signatures unchanged; all listed TestOIDC* tests pass uncached with -race (>= 6); PF-05 tests still pass; counts recorded; no go.mod/go.sum change"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf17-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-test.log'; echo \"exit=$?\"   # whole package: oidc.go is shared with PF-05, whose tests must stay green",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf17-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf17-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf17-s462-test.log)\"",
+        "grep -c -- '--- PASS: TestOIDC' /tmp/pf17-s462-test.log   # >= 6",
+        "gofmt -l internal/auth   # prints nothing",
+        "git diff --quiet -- go.mod go.sum && echo \"go.mod unchanged\""
+      ]
+    },
+    {
+      "planId": "PF-18",
+      "planPath": "impl-plans/active/pf-18-api-users-grades.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-18-api-users-grades.md",
+        "internal/api/v1/users_status.go",
+        "internal/api/v1/users_test.go",
+        "internal/api/v1/grades_test.go",
+        "internal/store/users.go",
+        "internal/store/grades.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/users.go",
+        "internal/api/v1/grades.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/users.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 1-12 (may move status actions into users_status.go)"},
+        {"path": "internal/api/v1/grades.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 13-18"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "18 operations implemented (no stub message left); permissions via model.Permission*, userType/status via model lists; listed tests pass uncached with -race; counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf18-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf18-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/... 2>&1 | tee /tmp/pf18-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf18-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf18-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf18-s462-test.log)\"",
+        "gofmt -l internal/api/v1/users.go internal/api/v1/users_status.go internal/api/v1/grades.go internal/api/v1/users_test.go internal/api/v1/grades_test.go internal/store/users.go internal/store/grades.go   # prints nothing",
+        "rg -n 'not implemented' internal/api/v1/users.go internal/api/v1/grades.go   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-19",
+      "planPath": "impl-plans/active/pf-19-api-proxies-org.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-19-api-proxies-org.md",
+        "internal/api/v1/proxies_test.go",
+        "internal/api/v1/orgcharts_test.go",
+        "internal/api/v1/teams_test.go",
+        "internal/store/proxies.go",
+        "internal/store/org.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/proxies.go",
+        "internal/api/v1/orgcharts.go",
+        "internal/api/v1/teams.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/proxies.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 19-26"},
+        {"path": "internal/api/v1/orgcharts.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 27-33"},
+        {"path": "internal/api/v1/teams.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 34-42"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "24 operations implemented (no stub message left); permissions model.PermissionUser/model.PermissionTeam; listed tests pass uncached with -race; counts recorded; build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf19-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf19-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'Test(Proxy|Proxies|OrgChart|OrganizationChart|Team)' ./internal/api/v1/... 2>&1 | tee /tmp/pf19-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf19-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf19-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf19-s462-test.log)\"",
+        "gofmt -l internal/api/v1/proxies.go internal/api/v1/orgcharts.go internal/api/v1/teams.go internal/api/v1/proxies_test.go internal/api/v1/orgcharts_test.go internal/api/v1/teams_test.go internal/store/proxies.go internal/store/org.go   # prints nothing",
+        "rg -n 'not implemented' internal/api/v1/proxies.go internal/api/v1/orgcharts.go internal/api/v1/teams.go   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-20",
+      "planPath": "impl-plans/active/pf-20-api-definitions-masters.md",
+      "dependsOn": ["PF-06", "PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-20-api-definitions-masters.md",
+        "internal/api/v1/categories_test.go",
+        "internal/api/v1/folders_test.go",
+        "internal/api/v1/definitions_test.go",
+        "internal/api/v1/general_masters_test.go",
+        "internal/store/classification.go",
+        "internal/store/masters.go",
+        "internal/store/definitions.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/categories.go",
+        "internal/api/v1/folders.go",
+        "internal/api/v1/definitions.go",
+        "internal/api/v1/general_masters.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/categories.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 43-46"},
+        {"path": "internal/api/v1/folders.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 47-51"},
+        {"path": "internal/api/v1/definitions.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 52-55"},
+        {"path": "internal/api/v1/general_masters.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 73-82, including the CF-02 input ID create/update hop"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "23 operations implemented; CF-02 API hop closed (create assigns IDs, update preserves them, get returns fixture IDs read from fixtures/default/general-masters.json), proven by tests",
+        "Listed tests pass uncached with -race; counts recorded; build/vet exit 0; gofmt clean; inferred rules recorded in the progress log"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf20-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf20-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'Test(Categor|Folder|Workflow|Route|GeneralMaster|Master)' ./internal/api/v1/... 2>&1 | tee /tmp/pf20-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf20-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf20-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf20-s462-test.log)\"",
+        "gofmt -l internal/api/v1/categories.go internal/api/v1/folders.go internal/api/v1/definitions.go internal/api/v1/general_masters.go internal/api/v1/categories_test.go internal/api/v1/folders_test.go internal/api/v1/definitions_test.go internal/api/v1/general_masters_test.go internal/store/classification.go internal/store/masters.go internal/store/definitions.go   # prints nothing",
+        "rg -n 'not implemented' internal/api/v1/categories.go internal/api/v1/folders.go internal/api/v1/definitions.go internal/api/v1/general_masters.go   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-21",
+      "planPath": "impl-plans/active/pf-21-api-roles-audit.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-21-api-roles-audit.md",
+        "internal/api/v1/roles_test.go",
+        "internal/api/v1/audit_logs_test.go",
+        "internal/store/roles.go",
+        "internal/store/audit_queries.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/roles.go",
+        "internal/api/v1/audit_logs.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/roles.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 83-90"},
+        {"path": "internal/api/v1/audit_logs.go", "intendedEdit": "PF-10 stub file; replace the body of operation 96"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "9 operations implemented; permission enum validated against model.Permissions (audit_read -> 400 test case kept); listed tests pass uncached with -race; counts recorded; build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf21-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf21-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/... 2>&1 | tee /tmp/pf21-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf21-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf21-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf21-s462-test.log)\"",
+        "gofmt -l internal/api/v1/roles.go internal/api/v1/audit_logs.go internal/api/v1/roles_test.go internal/api/v1/audit_logs_test.go internal/store/roles.go internal/store/audit_queries.go   # prints nothing",
+        "rg -n 'not implemented' internal/api/v1/roles.go internal/api/v1/audit_logs.go   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-22",
+      "planPath": "impl-plans/active/pf-22-api-tickets.md",
+      "dependsOn": ["PF-14", "PF-15", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-22-api-tickets.md",
+        "internal/api/v1/tickets_test.go",
+        "internal/api/v1/ticket_actions_test.go",
+        "internal/api/v1/ticket_viewers_test.go",
+        "internal/api/v1/ticket_webhooks_test.go",
+        "internal/store/ticket_queries.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/tickets.go",
+        "internal/api/v1/ticket_actions.go",
+        "internal/api/v1/ticket_viewers.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/tickets.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 56-61"},
+        {"path": "internal/api/v1/ticket_actions.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 62-66"},
+        {"path": "internal/api/v1/ticket_viewers.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 67-70"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "15 operations implemented; the ten ticket_* events proven via HTTP + receiver with verified signatures; query enums validated; withdraw yields status rejected",
+        "Listed tests pass uncached with -race; counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf22-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf22-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'Test(Ticket|Tickets|Task|Viewer|TicketWebhook)' ./internal/api/v1/... 2>&1 | tee /tmp/pf22-s462-test.log\"; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf22-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf22-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf22-s462-test.log)\"",
+        "gofmt -l internal/api/v1/tickets.go internal/api/v1/ticket_actions.go internal/api/v1/ticket_viewers.go internal/api/v1/tickets_test.go internal/api/v1/ticket_actions_test.go internal/api/v1/ticket_viewers_test.go internal/api/v1/ticket_webhooks_test.go internal/store/ticket_queries.go   # prints nothing",
+        "rg -n 'not implemented' internal/api/v1/tickets.go internal/api/v1/ticket_actions.go internal/api/v1/ticket_viewers.go   # prints nothing (exit 1)",
+        "wc -l internal/api/v1/ticket*.go internal/store/ticket_queries.go | sort -n | tail -2   # every file < 1000"
+      ]
+    },
+    {
+      "planId": "PF-23",
+      "planPath": "impl-plans/active/pf-23-api-comments-files.md",
+      "dependsOn": ["PF-14", "PF-15", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-23-api-comments-files.md",
+        "internal/api/v1/comments_test.go",
+        "internal/api/v1/files_test.go",
+        "internal/files/download.go",
+        "internal/files/files_test.go",
+        "internal/store/files.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/comments.go",
+        "internal/api/v1/files.go",
+        "internal/files/files.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/comments.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 91-95"},
+        {"path": "internal/api/v1/files.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 71-72"},
+        {"path": "internal/files/files.go", "intendedEdit": "PF-10 contract stub; implement the store keeping the New/Save/SignedURL/DownloadHandler/MaxBytes signatures, and set present.AttachmentURL in New"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "7 operations implemented; download handler works; comment_created/comment_updated proven through the receiver (no comment_deleted)",
+        "Both test logs pass uncached with -race; counts recorded; build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf23-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/api/v1/... ./internal/files/... 2>&1 | tee /tmp/pf23-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/files/... 2>&1 | tee /tmp/pf23-s462-files.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'Test(Comment|Comments|File|Files|Upload)' ./internal/api/v1/... 2>&1 | tee /tmp/pf23-s462-test.log\"; echo \"exit=$?\"",
+        "for f in /tmp/pf23-s462-files.log /tmp/pf23-s462-test.log; do echo \"$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)\"; done",
+        "gofmt -l internal/api/v1/comments.go internal/api/v1/files.go internal/api/v1/comments_test.go internal/api/v1/files_test.go internal/files internal/store/files.go   # prints nothing",
+        "rg -n 'not implemented' internal/api/v1/comments.go internal/api/v1/files.go internal/files/files.go   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-24",
+      "planPath": "impl-plans/active/pf-24-admin-api.md",
+      "dependsOn": ["PF-14", "PF-15", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-24-admin-api.md",
+        "internal/admin/tokens_test.go",
+        "internal/admin/webhooks_test.go",
+        "internal/admin/tenant_test.go",
+        "internal/admin/faults_test.go",
+        "internal/admin/fixtures_test.go",
+        "internal/store/admin.go"
+      ],
+      "sharedPaths": [
+        "internal/admin/tokens.go",
+        "internal/admin/service_accounts.go",
+        "internal/admin/webhooks.go",
+        "internal/admin/tenant.go",
+        "internal/admin/faults.go",
+        "internal/admin/fixtures.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/admin/tokens.go", "intendedEdit": "PF-16 stub file; implement the personal token endpoints"},
+        {"path": "internal/admin/service_accounts.go", "intendedEdit": "PF-16 stub file; implement the service account endpoints"},
+        {"path": "internal/admin/webhooks.go", "intendedEdit": "PF-16 stub file; implement webhook CRUD, ping, events, resend and fire, validating event types with model.WebhookEventTypes"},
+        {"path": "internal/admin/tenant.go", "intendedEdit": "PF-16 stub file; implement tenant GET/PATCH"},
+        {"path": "internal/admin/faults.go", "intendedEdit": "PF-16 stub file; implement the fault rule endpoints"},
+        {"path": "internal/admin/fixtures.go", "intendedEdit": "PF-16 stub file; implement fixture export and flag-gated reset"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "23 endpoints implemented; every Fault catalog code proven (6 subtests); fire covers exactly the 13 kickflow events; export includes non-empty inputs[].id",
+        "Uncached -race -v admin tests pass with counts recorded (FAIL=0, SKIP=0); build/vet exit 0; gofmt clean"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf24-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/admin/... 2>&1 | tee /tmp/pf24-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/admin/... 2>&1 | tee /tmp/pf24-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf24-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf24-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf24-s462-test.log)\"",
+        "gofmt -l internal/admin internal/store/admin.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-25",
+      "planPath": "impl-plans/active/pf-25-readme.md",
+      "dependsOn": ["PF-07", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-25-readme.md",
+        "README.md"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "README contains all 9 sections; grep check has no MISSING lines; no banned enum value appears in README; personas list kickflow permission names; 13 webhook events and pending|succeeded|failed statuses documented; uncached test commands in Development section"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'for s in pf_pat_dev_admin pf_pat_dev_manager pf_pat_dev_finance pf_pat_dev_employee pf_sat_dev_integration X-Kickflow-Signature X-Caller-Id keycloak:up --enable-local-login --enable-admin-reset --oidc-issuer /admin/api/webhooks ticket_opened comment_updated workflow_misc; do grep -q -- \"$s\" README.md && echo \"ok $s\" || echo \"MISSING $s\"; done 2>&1 | tee /tmp/pf25-s462-grep.log'; echo \"exit=$?\"",
+        "grep -c MISSING /tmp/pf25-s462-grep.log   # 0",
+        "rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\\b(user|org|workflow|role|file|proxy)_(read|write)\\b' README.md   # prints nothing (exit 1)"
+      ]
+    },
+    {
+      "planId": "PF-26",
+      "planPath": "impl-plans/active/pf-26-contract-smoke.md",
+      "dependsOn": ["PF-17", "PF-18", "PF-19", "PF-20", "PF-21", "PF-22", "PF-23", "PF-24"],
+      "writePaths": [
+        "impl-plans/active/pf-26-contract-smoke.md",
+        "internal/contract/spec_test.go",
+        "internal/contract/routes_test.go",
+        "internal/contract/scenarios_users_org_test.go",
+        "internal/contract/scenarios_definitions_test.go",
+        "internal/contract/scenarios_tickets_test.go",
+        "internal/contract/scenarios_misc_test.go",
+        "internal/contract/webhooks_test.go",
+        "internal/contract/helpers_test.go",
+        "internal/cli/serve_smoke_test.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract tests cover 96/96 routes, 96/96 scenarios and 13/13 webhook payloads (exact event set; >= 109 TestContract subtests PASS); smoke test passes; counts recorded",
+        "Any non-test failure is logged as a reconciliation request with the owning plan id; the schema validator is never loosened"
+      ],
+      "verification": [
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf26-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./internal/contract/... ./internal/cli/... 2>&1 | tee /tmp/pf26-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./internal/contract/... 2>&1 | tee /tmp/pf26-s462-contract.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'TestServeSmoke' ./internal/cli/... 2>&1 | tee /tmp/pf26-s462-smoke.log\"; echo \"exit=$?\"",
+        "for f in /tmp/pf26-s462-contract.log /tmp/pf26-s462-smoke.log; do echo \"$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)\"; done",
+        "grep -c -- '--- PASS: TestContract.*/' /tmp/pf26-s462-contract.log   # >= 109",
+        "gofmt -l internal/contract internal/cli/serve_smoke_test.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-27",
+      "planPath": "impl-plans/active/pf-27-finalize.md",
+      "dependsOn": ["PF-01", "PF-02", "PF-03", "PF-04", "PF-05", "PF-06", "PF-07", "PF-08", "PF-09", "PF-10", "PF-11", "PF-12", "PF-13", "PF-14", "PF-15", "PF-16", "PF-17", "PF-18", "PF-19", "PF-20", "PF-21", "PF-22", "PF-23", "PF-24", "PF-25", "PF-26"],
+      "writePaths": [
+        "impl-plans/completed",
+        "web/node_modules",
+        "web/dist/app",
+        "punchflow"
+      ],
+      "sharedPaths": [
+        "impl-plans/active",
+        "impl-plans/README.md",
+        "go.mod",
+        "go.sum",
+        "go-toolchain.json",
+        "web/toolchain.json",
+        "web/package.json",
+        "web/bun.lock",
+        "design-docs/specs/notes.md",
+        "internal",
+        "cmd",
+        "fixtures",
+        "deploy",
+        "web/src",
+        "embed.go",
+        "embed_test.go",
+        "fixtures_default_test.go",
+        "README.md",
+        "mise.toml",
+        ".gitignore"
+      ],
+      "sharedPathNotes": [
+        {"path": "impl-plans/active", "intendedEdit": "all plans (PF-01..PF-27) plus the historical punchflow-kickflow-dummy-s460-dispatch.json; set Status Completed with a final progress entry, then move each file to impl-plans/completed; never edit this s462 dispatch manifest"},
+        {"path": "impl-plans/README.md", "intendedEdit": "update the plan tables and phase status after archiving"},
+        {"path": "go.mod", "intendedEdit": "PF-02; go mod tidy only"},
+        {"path": "go.sum", "intendedEdit": "PF-02; updated by go mod tidy"},
+        {"path": "go-toolchain.json", "intendedEdit": "PF-02; append the tidy and final verify record (command, exit code, output)"},
+        {"path": "web/toolchain.json", "intendedEdit": "accepted PF-03; append the final frozen install and build record (commands, exit codes, bun.lock sha256)"},
+        {"path": "web/package.json", "intendedEdit": "accepted PF-03; edit only if a logged reconciliation request requires a dependency change"},
+        {"path": "web/bun.lock", "intendedEdit": "accepted PF-03; regenerated only together with a web/package.json reconciliation change"},
+        {"path": "design-docs/specs/notes.md", "intendedEdit": "accepted design; append new INF rows and append-only CF-01..CF-03 closing notes"},
+        {"path": "internal", "intendedEdit": "Go packages from PF-01..PF-26; repair only per reconciliation request or failing check"},
+        {"path": "cmd", "intendedEdit": "accepted PF-01; repair only"},
+        {"path": "fixtures", "intendedEdit": "PF-01/PF-07/PF-16; repair only"},
+        {"path": "deploy", "intendedEdit": "PF-07; repair only"},
+        {"path": "web/src", "intendedEdit": "accepted PF-03/PF-11/PF-12/PF-13; repair only"},
+        {"path": "embed.go", "intendedEdit": "accepted PF-01; repair only"},
+        {"path": "embed_test.go", "intendedEdit": "accepted PF-01; repair only"},
+        {"path": "fixtures_default_test.go", "intendedEdit": "PF-07; repair only"},
+        {"path": "README.md", "intendedEdit": "PF-25; repair only"},
+        {"path": "mise.toml", "intendedEdit": "accepted PF-01; repair only"},
+        {"path": ".gitignore", "intendedEdit": "accepted PF-01; repair only"}
+      ],
+      "artifactRoots": [
+        "web/node_modules",
+        "web/dist/app",
+        "punchflow"
+      ],
+      "acceptanceCriteria": [
+        "All reconciliation requests resolved and listed",
+        "Every session-462 verification command passed in one final run, with exit status, log path and counts recorded (no cached output; go test FAIL=0, SKIP=0, zero (cached) lines; every module package ok)",
+        "CF-01, CF-02 and CF-03 closed with the evidence named in task 8; the CF-01 ban grep (production code + fixtures; tests excluded) prints nothing, and the negative-test presence checks list the PF-02/PF-21/PF-24 test files",
+        "Accepted PF-01/PF-03/PF-11/PF-12/PF-13 stay green with PASS counts recorded separately",
+        "notes.md updated with new inferences; all plans and the s460 manifest moved to impl-plans/completed; README index updated"
+      ],
+      "verification": [
+        "bash -o pipefail -c '(cd web && bun install --frozen-lockfile && bun run typecheck && bun test && bun run build) 2>&1 | tee /tmp/pf27-s462-web.log'; echo \"exit=$?\"   # run first; writes web/dist/app; record bun test's pass/fail summary line",
+        "bash -o pipefail -c 'mise run build 2>&1 | tee /tmp/pf27-s462-mise-build.log'; echo \"exit=$?\"   # run second; binary embeds web/dist/app",
+        "bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf27-s462-build.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go vet ./... 2>&1 | tee /tmp/pf27-s462-vet.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c 'go test -count=1 -v -race ./... 2>&1 | tee /tmp/pf27-s462-test.log'; echo \"exit=$?\"",
+        "echo \"PASS=$(grep -c -- '--- PASS' /tmp/pf27-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf27-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf27-s462-test.log)\"; grep -E '^(ok|FAIL|---)' /tmp/pf27-s462-test.log | grep -c '(cached)'   # last value must be 0",
+        "bash -o pipefail -c 'mise run test 2>&1 | tee /tmp/pf27-s462-mise-test.log'; echo \"exit=$?\"   # task-works check only, NOT test evidence",
+        "bash -o pipefail -c 'mise run lint 2>&1 | tee /tmp/pf27-s462-mise-lint.log'; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -race -run 'TestServeSmoke' ./internal/cli/... 2>&1 | tee /tmp/pf27-s462-smoke.log\"; echo \"exit=$?\"",
+        "bash -o pipefail -c \"go test -count=1 -v -run 'TestEmbeddedBuild' ./internal/webui/... 2>&1 | tee /tmp/pf27-s462-embed.log\"; echo \"exit=$?\"   # must PASS, not SKIP",
+        "rg -n -e 'ticket_submitted|ticket_remanded|ticket_resubmitted|comment_deleted|ticket_admin|audit_read' -e '\\b(user|org|workflow|role|file|proxy)_(read|write)\\b' -e 'StepTypeGrade|StepTypeParallel|StepStatus(Approved|Denied|Remanded)|TicketStatusWithdrawn' -e '\"userType\": *\"member\"|\"status\": *\"active\"|\"sectionType\": *\"conditional\"|\"gradeSymbol\": *\"\"' internal fixtures --glob '!**/*_test.go' --glob '!internal/fixtures/testdata/invalid/**'   # CF-01 ban grep: prints nothing",
+        "rg -l 'audit_read' internal/fixtures/enum_rules_test.go internal/api/v1/roles_test.go   # lists both files",
+        "rg -l 'ticket_submitted|comment_deleted' internal/admin   # lists the PF-24 webhook test file",
+        "gofmt -l $(git ls-files '*.go')   # prints nothing",
+        "git status --porcelain web/dist/app | head -1   # prints nothing (output is git-ignored)",
+        "ls web/package-lock.json web/yarn.lock web/pnpm-lock.yaml 2>&1   # \"No such file\" for all three"
+      ]
+    }
+  ]
+}

@@ -94,7 +94,68 @@ Author the realistic default data set embedded in the binary (`fixtures/default/
 - workflows `expense-claim`, `purchase-request`, `leave-request` and routes `expense-standard`, `expense-large`, `purchase`, `leave` exist
 - every route step has exactly one positive required-approval value
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 2. **Depends on**: PF-02 (phase 1: canonical Go enum lists, `fixtures.Validate` enum checks, `RouteTarget.GradeSymbol *string`, `WorkflowSection.Code/Conditional/CombinationType`).
+**Design**: `design-docs/specs/design-api-coverage.md#enum-contract-frozen-in-pf-02` (Section type row, rules 2 and 5); `architecture.md#fixtures`; `notes.md` CF-01.
+
+### Why (state at 410d3d8)
+
+The default data set uses enum values that kickflow does not have:
+- `users.json`: 12 x `"userType": "member"`
+- `roles.json`: 14 invented permissions (`audit_read`, `ticket_admin`, `user_read`/`user_write`, `org_*`, `workflow_*`, `role_*`, `file_*`, `proxy_*`)
+- `routes.json`: 4 x and `workflows.json`: 3 x `"status": "active"`
+- `routes.json:53,159,240`: `"gradeSymbol": ""`
+- `workflows.json:519`: a separate `sectionType: "conditional"` section
+
+`fixtures.Validate` was never run on this set (only strict decoding).
+
+### File-level changes (data only; pinned content otherwise unchanged)
+
+1. `users.json`: `userType` `normal` for every user except `assistant` (`assistant`).
+2. `roles.json`:
+   - `Super Admin`: exactly the 19 kickflow permissions in the order of `model.Permissions`, each with the existing per-entry fields.
+   - `Ticket Admin`: `ticket_read`, `ticket_write`. `Master Editor`: `master`, `master_read`. `Integration Admin`: `integration`.
+   - No other permission values.
+3. `routes.json`:
+   - Every route `status` `visible`.
+   - Every `targets[]` object has a `gradeSymbol` key (`null` when there is no grade filter; the one `greater_than_or_equal` target keeps its value), in `model.RouteTarget` field order.
+4. `workflows.json`:
+   - Every workflow `status` `visible`.
+   - `leave-request`: delete the separate `"Other reason condition"` section (id `5ef2305b-...`). Move its `conditionFields` entry (keep id `3c51441f-...`) into the following `"Other details"` form section (id `645beada-...`), and set `"conditional": true, "combinationType": "all"` there.
+   - The `expense-claim` slip section gets `"code": "lines"`.
+   - Keys in `model.WorkflowSection` field order (`id, code, title, sectionType, conditional, combinationType, formFields, slipFields, conditionFields`), with `omitempty` keys omitted when empty.
+5. All files stay canonical: 2-space indent, struct key order, arrays sorted per PF-06, trailing newline. Keep every other UUID unchanged.
+6. `fixtures_default_test.go`: add `TestDefaultFixturesValidate`. It parses `fs.Sub(DefaultFixtures, "fixtures/default")` with `fixtures.Parse`, calls `fixtures.Validate`, and fails with every problem printed. It must return nil. Also update the strict-decode test if it hard-codes anything that changed.
+7. Keycloak files: no change.
+
+### Key points
+
+- Do not edit `internal/fixtures/*.go` or `internal/model/*` (log reconciliation requests). PF-06 edits `load.go`/`export.go` in parallel. `Validate` is stable after phase 1.
+- Removing the conditional section changes section indexes in `leave-request`. Re-check that `TestDefaultFixturePersonasAndDefinitions` still passes, and update its expectations if they reference section positions.
+- PF-16 later asserts the byte-exact `Export(Load(default))` round trip. Keep the canonical order exactly; do not hand-reorder keys.
+
+### Verification
+
+```bash
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf07-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet . 2>&1 | tee /tmp/pf07-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -run 'TestDefault|TestKeycloak' . 2>&1 | tee /tmp/pf07-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf07-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf07-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf07-s462-test.log)"
+gofmt -l fixtures_default_test.go   # prints nothing
+rg -n -e '"userType": *"member"|"status": *"active"|"sectionType": *"conditional"|"gradeSymbol": *""' -e 'ticket_admin|audit_read' -e '"(user|org|workflow|role|file|proxy)_(read|write)"' fixtures/default   # prints nothing (exit 1)
+python3 -I -m json.tool deploy/keycloak/realm-punchflow.json > /dev/null && echo realm-json-ok
+```
+
+Evidence: exit 0; FAIL=0; SKIP=0; `TestDefaultFixturesValidate` PASS; rg prints nothing.
+
+### Done Criteria (session 462)
+
+- [ ] `fixtures/default` uses only design-table enum values (rg check empty) and passes `fixtures.Validate` (`TestDefaultFixturesValidate` PASS, uncached)
+- [ ] Pinned content unchanged except for the listed enum and section-shape corrections; UUIDs preserved
+- [ ] build/vet exit 0; gofmt clean; counts recorded
+
+## Verification (session 460, superseded)
 
 ```bash
 go build ./... 2>&1 | tee /tmp/pf07-build.log
@@ -105,10 +166,10 @@ python3 -I -m json.tool deploy/keycloak/realm-punchflow.json > /dev/null && echo
 docker compose -f deploy/keycloak/docker-compose.yml config -q 2>&1 | tee /tmp/pf07-compose.log  # if docker is unavailable, record "skipped: no docker" (not a failure)
 ```
 
-## Done Criteria
+## Done Criteria (session 460, superseded by the session 462 Done Criteria above)
 
-- [x] All 14 fixture files and both Keycloak files exist with the pinned content
-- [x] Root package tests pass; JSON valid; compose config valid or explicitly skipped (no docker)
+- All 14 fixture files and both Keycloak files exist with the pinned content
+- Root package tests pass; JSON valid; compose config valid or explicitly skipped (no docker)
 
 ## Execution Protocol
 

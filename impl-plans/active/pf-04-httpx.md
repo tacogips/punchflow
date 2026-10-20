@@ -115,18 +115,34 @@ func (f *FaultSet) Middleware(next http.Handler) http.Handler
 - fault rule {pathPrefix:"/v1/tickets", status:504, code:"gateway_timeout", remaining:1} -> first request 504, second passes
 - panic in handler -> 500 `internal_server_error`, `X-Request-Id` set
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 2. **Depends on**: PF-02 (phase 1; it changes `internal/model`, which this package does not import, so the dependency is only for wave ordering).
+
+### Why
+
+The implementation was complete at 410d3d8, but session-460 evidence mixed cached runs with uncached ones and was never accepted. This session only re-verifies with the session-462 evidence rule (`impl-plans/README.md` rule 11). No source change is expected.
+
+### Non-goals
+
+- Do not edit any file unless an uncached test fails. In that case, fix only PF-04 files, recording pre/post hashes. Do not touch `internal/kferr` (accepted PF-01).
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf04-build.log
-go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-vet.log
-go test -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf04-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-s462-test.log'; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf04-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf04-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf04-s462-test.log)"
 gofmt -l internal/httpx   # prints nothing
+wc -l internal/httpx/*.go | sort -n | tail -2   # largest < 1000
 ```
 
-## Done Criteria
+Evidence: exit 0 for each command; FAIL=0, SKIP=0, PASS >= 19 (the session-460 uncached count).
 
-- [x] Every contract symbol exists; every listed test passes with `-race`; gofmt clean; files < 1000 lines
+### Done Criteria (session 462)
+
+- [ ] Uncached `-race -v` httpx tests pass, with counts recorded; build and vet exit 0; gofmt clean; no source change, or each change justified with hashes
 
 ## Execution Protocol
 

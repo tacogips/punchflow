@@ -68,19 +68,30 @@ Create tickets in tests with `engine.New(env.Clock).Create` inside `env.DB.WithT
 - updateComment by non-author -> 403 `missing_permission`; author -> 200 + `comment_updated`; delete -> 200 empty, list shows `deletedAt` and empty body, receiver gets `comment_updated`
 - listComments pagination headers; invisible ticket -> 403 `invisible_ticket`
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-14, PF-15, PF-16.
+**State at 410d3d8**: not started (PF-10 stubs; `internal/files/files.go` is the 33-line contract stub). Implement this plan as written. Session-462 points:
+
+- Comment events are exactly `comment_created` and `comment_updated`. Deleting a comment emits `comment_updated` with `deletedAt` set. There is no `comment_deleted` event; assert that no received body has that `eventType`.
+- Name API tests `TestComment*`, `TestComments*`, `TestFile*`, `TestFiles*`, `TestUpload*`; prefix helpers with `pf23`. `internal/files` tests may use any `TestXxx` names (PF-23 owns that package).
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf23-build.log
-go vet ./internal/api/... ./internal/files/... ./internal/store/... 2>&1 | tee /tmp/pf23-vet.log
-go test -race ./internal/files/... 2>&1 | tee /tmp/pf23-files.log
-go test -race -run 'Test(Comment|Comments|File|Files|Upload)' ./internal/api/v1/... 2>&1 | tee /tmp/pf23-test.log
-gofmt -l internal/api/v1/comments*.go internal/api/v1/files*.go internal/files internal/store/files.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf23-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/v1/... ./internal/files/... 2>&1 | tee /tmp/pf23-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/files/... 2>&1 | tee /tmp/pf23-s462-files.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'Test(Comment|Comments|File|Files|Upload)' ./internal/api/v1/... 2>&1 | tee /tmp/pf23-s462-test.log"; echo "exit=$?"
+for f in /tmp/pf23-s462-files.log /tmp/pf23-s462-test.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
+gofmt -l internal/api/v1/comments.go internal/api/v1/files.go internal/api/v1/comments_test.go internal/api/v1/files_test.go internal/files internal/store/files.go   # prints nothing
+rg -n 'not implemented' internal/api/v1/comments.go internal/api/v1/files.go internal/files/files.go   # prints nothing (exit 1)
 ```
 
-## Done Criteria
+### Done Criteria (session 462)
 
-- [ ] 7 operations implemented; download handler works; comment events proven through the receiver; tests pass with `-race`; gofmt clean
+- [ ] 7 operations implemented; download handler works; `comment_created`/`comment_updated` proven through the receiver (no `comment_deleted`)
+- [ ] Both test logs pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

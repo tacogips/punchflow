@@ -88,18 +88,31 @@ Replace the PF-10 stubs for the 18 user and grade operations with real handlers,
 - audit log rows exist with actions `user.suspend`, `grade.create`
 - unknown user id -> 404 `resource_not_found`; get by code `admin` works
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4 (parallel with PF-19..PF-25). **Depends on**: PF-08, PF-16.
+**State at 410d3d8**: not started. `users.go`/`grades.go` hold the PF-10 stubs (`kferr` 500 "not implemented"). Implement this plan as written, with these session-462 points:
+
+- Permission checks use the kickflow permission names from `model.Permission*` (`model.PermissionUser`, `model.PermissionTeam`, `model.PermissionRole`). Never use a string literal or an invented name such as `user_read`.
+- User status transitions use `model.UserStatus*`. `userType` values come from `model.UserTypes`; `createUser` accepts `userType` only from that list, and anything else is `400 invalid_parameter`. The `status` query filter on `listUsers` accepts only `model.UserStatuses` (otherwise `400 invalid_parameter`).
+- Shared package: `internal/api/v1` is compiled with PF-19..PF-23 tests at the same time. Name tests `TestUser*`, `TestUsers*`, `TestCurrentUser*`, `TestGrade*`. Prefix helpers with `pf18`. If the package fails to compile because of another plan's file, follow README rule 11 (reconciliation entry, no foreign edit, re-run).
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf18-build.log
-go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf18-vet.log
-go test -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/... 2>&1 | tee /tmp/pf18-test.log
-gofmt -l internal/api/v1/users*.go internal/api/v1/grades*.go internal/store/users.go internal/store/grades.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf18-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf18-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/... 2>&1 | tee /tmp/pf18-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf18-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf18-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf18-s462-test.log)"
+gofmt -l internal/api/v1/users.go internal/api/v1/users_status.go internal/api/v1/grades.go internal/api/v1/users_test.go internal/api/v1/grades_test.go internal/store/users.go internal/store/grades.go   # prints nothing
+rg -n 'not implemented' internal/api/v1/users.go internal/api/v1/grades.go   # prints nothing (exit 1)
 ```
 
-## Done Criteria
+Evidence: exit 0; FAIL=0; SKIP=0; PASS covers every case in the Tests section.
 
-- [ ] 18 operations implemented (no stub message remains in `users.go`/`grades.go`); tests above pass with `-race`; gofmt clean
+### Done Criteria (session 462)
+
+- [ ] 18 operations implemented (no stub message left); listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 

@@ -52,16 +52,31 @@ Write the user-facing `README.md`: how to run punchflow locally and how to point
 - Every flag, env var, path and token value must match `command.md`, PF-07 and PF-16 exactly; check with grep (verification below).
 - Use plain ASCII; no emojis.
 
-## Verification
+## Verification (session 460, superseded by the Continuation section below)
 
 ```bash
 for s in pf_pat_dev_admin pf_pat_dev_manager pf_pat_dev_finance pf_pat_dev_employee pf_sat_dev_integration X-Kickflow-Signature X-Caller-Id keycloak:up --enable-local-login --enable-admin-reset --oidc-issuer /admin/api/webhooks; do grep -q -- "$s" README.md && echo "ok $s" || echo "MISSING $s"; done 2>&1 | tee /tmp/pf25-grep.log   # no MISSING lines
 grep -c 'pf_pat_dev_admin' fixtures/default/tokens.json   # >= 1 (README matches fixtures)
 ```
 
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-07, PF-16. **State at 410d3d8**: `README.md` does not exist. Write it as specified. Session-462 points:
+
+- The personas table lists each role's permissions using the kickflow permission names exactly as in `fixtures/default/roles.json` after PF-07: Super Admin = all 19, written out by name; Ticket Admin = `ticket_read`, `ticket_write`; Master Editor = `master`, `master_read`; Integration Admin = `integration`.
+- The webhooks section lists the 13 event types exactly as in `design-docs/specs/design-api-coverage.md` (webhook event matrix). Delivery status values are `pending`, `succeeded`, `failed`.
+- The "Development" section uses the uncached test command `go test -count=1 -v ./...` and `cd web && bun test`.
+- Run the verification as:
+
+```bash
+bash -o pipefail -c 'for s in pf_pat_dev_admin pf_pat_dev_manager pf_pat_dev_finance pf_pat_dev_employee pf_sat_dev_integration X-Kickflow-Signature X-Caller-Id keycloak:up --enable-local-login --enable-admin-reset --oidc-issuer /admin/api/webhooks ticket_opened comment_updated workflow_misc; do grep -q -- "$s" README.md && echo "ok $s" || echo "MISSING $s"; done 2>&1 | tee /tmp/pf25-s462-grep.log'; echo "exit=$?"
+grep -c MISSING /tmp/pf25-s462-grep.log   # 0
+rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|org|workflow|role|file|proxy)_(read|write)\b' README.md   # prints nothing (exit 1)
+```
+
 ## Done Criteria
 
-- [ ] README contains all 9 sections; grep check has no MISSING lines
+- [ ] README contains all 9 sections; grep check has no MISSING lines; no banned enum value appears in README (session 462)
 
 ## Execution Protocol
 

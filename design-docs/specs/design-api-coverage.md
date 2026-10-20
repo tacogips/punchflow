@@ -206,6 +206,42 @@ All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads a
 
 The admin API can also enqueue any of the 13 event types for an existing ticket/comment on demand ("fire event", see `design-webhooks.md`), which uses the same payload builders.
 
+### Enum contract (frozen in PF-02)
+
+Added in session 462 to close carried finding CF-01 (`notes.md`). The values come from the cited OpenAPI schema property (`#/components/schemas/<Schema>/properties/<prop>`); where this table lists values, they were checked against the spec. "Excluded" values exist in the spec but punchflow never produces or accepts them. `internal/model/enums.go` exports one canonical `[]string` per row, named in the "Go list" column, plus one constant per value.
+
+| Enum | Values | Source | Excluded (reason) | Go list |
+|---|---|---|---|---|
+| Ticket status | `draft`, `in_progress`, `completed`, `rejected`, `denied`, `archived` | `TicketSummary.status` | `permanently_deleted` (DIV-04) | `TicketStatuses` |
+| Ticket step status | `pending`, `in_progress`, `completed`, `skipped` | `TicketStep.status` | `raised` (DIV-04) | `StepStatuses` |
+| Action type | `approve`, `confirm`, `none` | `RouteStep.actionType`, `TicketStep.actionType` | - | `ActionTypes` |
+| Step type | `author`, `manager`, `team`, `user`, `author_customizable`, `assignee_customizable`, `dynamic_team`, `dynamic_user` | `RouteStep.stepType` | - | `StepTypes` |
+| Fallback | `direct_manager`, `higher_manager`, `skip`, `no_fallback`, `higher_team`, or `null` | `RouteStep.fallbackType`, `TicketStep.fallbackResult` | - | `FallbackTypes` |
+| Manager selection | `closest`, `all` | `RouteStep.managerSelectionType` | - | `ManagerSelectionTypes` |
+| Grade symbol | `equal`, `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal`, `any_of`, or `null` | `RouteStepTarget.gradeSymbol` | `""` is not a value; no grade filter is `null` | `GradeSymbols` |
+| Step condition type | `always`, `conditional`, `conditional_skip` | `RouteStepCondition.conditionType` | - | `StepConditionTypes` |
+| Step condition combination | `all`, `any` | `RouteStepCondition.combinationType` | - | `StepCombinationTypes` |
+| Step condition field key | spec enum | `RouteStepConditionField.fieldKey` | `other_variable` (INF-18) | `StepConditionFieldKeys` |
+| Route condition type | `always`, `field`, `field_otherwise` | `WorkflowRouteCondition.conditionType` | - | `RouteConditionTypes` |
+| Route condition combination | `all`, `any` | `WorkflowRouteCondition.combinationType` | `custom` (INF-18) | `RouteCombinationTypes` |
+| Section type | `form`, `slip` | `SectionListItem.sectionType` | `conditional` is not a type. A conditional section is a `form` section with `conditional: true`, `combinationType` (`all`/`any`; `custom` rejected, INF-18) and its own `conditionFields`. Slip sections carry `code` | `SectionTypes` |
+| Route status | `visible`, `deleted`, `error` | `Route.status` | - | `RouteStatuses` |
+| Workflow status | `visible`, `invisible`, `deleted` | `Workflow.status` | - | `WorkflowStatuses` |
+| User status | `invited`, `activated`, `suspended`, `deactivated` | `User.status` | - | `UserStatuses` (`UserStatusActive = "activated"`) |
+| User type | `normal`, `assistant` | `User.userType` | - | `UserTypes` |
+| Admin permission | `tenant`, `billing`, `integration`, `security`, `audit`, `stats`, `workflow`, `route`, `pipeline`, `workflow_misc`, `user`, `team`, `role`, `master`, `master_read`, `ticket_read`, `ticket_write`, `label`, `automation` (19) | `RoleDetail.permissionList[].permission` | - | `Permissions` |
+| Master field type | `text`, `text_long`, `number`, `integer`, `checkbox`, `pull_down`, `date` | `GeneralMasterField.fieldType` | - | `MasterFieldTypes` |
+| Master default sort | `name`, `code` | `GeneralMaster.defaultSortBy` | - | `MasterSortKeys` |
+| Webhook event type | `ping`, `ticket_created`, `ticket_updated`, `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected`, `ticket_denied`, `ticket_completed`, `ticket_withdrawn`, `ticket_archived`, `comment_created`, `comment_updated` (13) | `kickflow-api.md` section 5.5 (the spec has no enum here) | - | `WebhookEventTypes` |
+
+Rules:
+
+1. Fixture validation (PF-06), request validation (PF-18..PF-24), the engine (PF-14) and presenters (PF-08, PF-15) check and emit these values only through the Go lists and constants. No other package hard-codes these literals.
+2. A value outside its row is a validation problem in fixtures and `400 invalid_parameter` / `422 validation_failed` in requests (as the coverage row says). It is never stored or emitted. Values that kickflow does not have, such as `ticket_submitted`, `ticket_remanded`, `ticket_resubmitted`, `comment_deleted`, the invented permissions `ticket_admin`, `audit_read`, `user_read`, `user_write`, `org_read`, `org_write`, `workflow_read`, `workflow_write`, `role_read`, `role_write`, `file_read`, `file_write`, `proxy_read`, `proxy_write` (the real `ticket_read`, `ticket_write`, `master_read` stay), step types `grade`/`parallel`, ticket status `withdrawn`, step statuses `approved`/`denied`/`remanded`, user type `member`, route/workflow status `active` and section type `conditional`, must not exist as model constants. "Parallel" is a set of steps that share one `stepOrder` (INF-13). "Grade" is a target filter (`gradeSymbol` + `gradeCodes`, INF-19). Withdraw yields `rejected`. Deny and send-back act on the ticket, not on the step.
+3. PF-02 removes the constants that nothing else references. A deprecated constant that another package still references (currently `StepTypeGrade` and `StepTypeParallel` in `internal/fixtures/validate.go`) is removed once that package switches to the Go list (PF-06 in the same continuation wave). PF-27 confirms that no such identifier is left.
+4. Conformance test `internal/model/enums_test.go` (PF-02; test-only use of `gopkg.in/yaml.v3`) loads `design-docs/references/kickflow-openapi.yaml`. For every row with an OpenAPI source, it asserts that the Go list equals the spec enum minus the "Excluded" values (set equality, `null` ignored). It compares `WebhookEventTypes` with the 13 literals above. This test replaces the hand-written expectations in `internal/store/store_test.go` `TestModelEnumValuesMatchDesign`.
+5. Data conformance: `fixtures/default` (PF-07) passes `fixtures.Validate`, which a root test in `fixtures_default_test.go` asserts. The PF-06 invalid testdata covers at least step type `grade`, permission `audit_read`, event `ticket_submitted`, user type `member` and route status `active`.
+
 ### Contract test
 
 Location: `internal/contract/` (test-only package; `contract_test.go` plus per-resource scenario files to stay under 1000 lines).

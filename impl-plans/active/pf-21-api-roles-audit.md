@@ -70,18 +70,29 @@ Same as PF-18 "Handler Conventions".
 - Employee `GET /v1/auditLogs` -> 403; Admin creates role `Auditors` (`audit`) and adds sales-rep -> Employee `GET /v1/auditLogs` -> 200 (permission union works end to end, using only this plan's endpoints)
 - listAuditLogs Admin after a role create -> contains action `role.create` with `user` = admin; `createdAtStart` in the future -> `[]`; Employee -> 403
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-08, PF-16.
+**State at 410d3d8**: not started (PF-10 stubs). Implement this plan as written. Session-462 points:
+
+- `createRole`/`updateRole` validate each `permissionList[].permission` against `model.Permissions` (the 19 kickflow values). Unknown -> `400 invalid_parameter`. The invented names (`audit_read`, `ticket_admin`, `user_read`, ...) are rejected; add the test case `permission: audit_read -> 400`.
+- Endpoint permissions: `model.PermissionRole` (roles), `model.PermissionAudit` (audit logs).
+- Name tests `TestRole*`, `TestRoles*`, `TestAuditLog*`; prefix helpers with `pf21`.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf21-build.log
-go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf21-vet.log
-go test -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/... 2>&1 | tee /tmp/pf21-test.log
-gofmt -l internal/api/v1/roles*.go internal/api/v1/audit_logs*.go internal/store/roles.go internal/store/audit_queries.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf21-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf21-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/... 2>&1 | tee /tmp/pf21-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf21-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf21-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf21-s462-test.log)"
+gofmt -l internal/api/v1/roles.go internal/api/v1/audit_logs.go internal/api/v1/roles_test.go internal/api/v1/audit_logs_test.go internal/store/roles.go internal/store/audit_queries.go   # prints nothing
+rg -n 'not implemented' internal/api/v1/roles.go internal/api/v1/audit_logs.go   # prints nothing (exit 1)
 ```
 
-## Done Criteria
+### Done Criteria (session 462)
 
-- [ ] 9 operations implemented; tests pass with `-race`; gofmt clean
+- [ ] 9 operations implemented; permission enum validated against `model.Permissions`; listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

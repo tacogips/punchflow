@@ -106,6 +106,15 @@ Rules: dependencies point downward only; small interfaces at consumer side (`kft
 - Files: `tenant.json`, `grades.json`, `users.json`, `organization-charts.json` (charts with teams and memberships), `roles.json`, `categories.json`, `folders.json`, `general-masters.json` (fields and items), `routes.json`, `workflows.json`, `proxy-applicants.json`, `proxy-approvers.json`, `tokens.json`, `webhooks.json`.
 - Format: kickflow field names (camelCase). Every API-visible entity and sub-entity (form fields, sections, route steps, conditions) has an explicit UUID `id` and, where kickflow has one, a `code`. Cross references use codes (`userCode`, `teamCode`, `gradeCode`, `routeCode`, `folderCode`, `formFieldCode`, ...), which keeps files readable and stable.
 - Validation on load: JSON shape, enums, uniqueness of ids and codes, referential integrity, INF-14 step requirement rule, INF-18 unsupported features, exactly one active org chart, a super admin role with at least one member, a root folder. Errors name the file and JSON path; nothing is written when validation fails.
+- Enum values in fixtures follow the enum contract in `design-api-coverage.md` (for example `userType` `normal|assistant`, route/workflow `status` `visible|...`, `gradeSymbol: null` when there is no grade filter, the 19 kickflow permissions).
+- General master item input IDs (CF-02): each `general-masters.json` `items[].inputs[]` entry is `{id, fieldCode, value}`. Its `id` is a required UUID and must be globally unique like every other id. Data flow:
+  - Load: `general_master_items.inputs` stores `{fieldId: value}` and `general_master_items.input_ids` stores `{fieldId: inputId}`. Both are written in the same insert.
+  - Store read: `store.GetGeneralMasterItem` / `GetGeneralMasterItems` return `model.GeneralMasterItem.InputIDs`.
+  - Present: `GeneralMasterItem.inputs[].id` is the persisted input ID. `inputs[].field.id` is the field ID. The two are never the same value. A field ID with a value but no input ID is a data error, not a fallback.
+  - API (PF-20): `createGeneralMasterItem` assigns a new UUID per input. `updateGeneralMasterItem` keeps the existing input ID for every field already present, and assigns a new UUID only for a field that had no input before.
+  - Export: writes `inputs[].id` from `input_ids`. Inputs are sorted by `fieldCode` (current export order).
+  - Owners: PF-02 (column and model field, done), PF-06 (validate/load/export), PF-08 (store read + presenter), PF-20 (API), PF-07 (fixture data already carries the ids).
+  - Edited migration: `0001_init.sql` was changed in place, which breaks the forward-only rule. That is acceptable only because nothing has been released (all commits are local). A database created before 410d3d8 must be deleted or `reset`.
 - Operations: `load` (into an empty DB), `reset` (delete all rows in FK-safe order and uploaded files, then load), `export` (definitions and org data only; tickets, comments, files, audit logs, sessions and webhook history are state, not fixtures). Runtime-issued tokens are not exported (no plaintext); fixture-seeded tokens are (INF-04).
 - Canonical form: export writes 2-space indented JSON with a fixed key order and arrays sorted by `code` (ordered collections such as sections, fields and steps keep their order). The committed default fixtures are stored in canonical form, so the round-trip test asserts `export(load(fixtures/default))` is byte-identical to the files, and `export(load(export(...)))` is stable.
 - Default content (must exist): tenant `punchflow-dev` (plan enterprise); at least 5 grades; at least 8 users including one `suspended` and one `invited`; one active org chart with at least 6 teams over 3 levels and leaders, plus one inactive chart; roles Super Admin (all permissions), Ticket Admin (`ticket_read`, `ticket_write`), Master Editor (`master`, `master_read`), Integration Admin (`integration`); 3 categories; root folder plus 2 children; 2 general masters with custom fields and items (one expired); at least 4 routes; at least 3 workflows (`expense-claim`, `purchase-request`, `leave-request`) that together exercise every `stepType`, all `actionType`s, branch types `always`/`field`/`field_otherwise` plus a refusal branch, all step condition types, fallbacks `skip` and `higher_manager`, a parallel group with an "any" step and an "all" step, one slip section, one workflow with `commentingEnabled: false`, one with `availableToEveryone: false`; one proxy approver and one proxy applicant registration; dev tokens: PATs for the super admin, a manager, a finance approver and a plain employee, and one service account token. Token values are obviously fake, low-entropy dev strings (for example `pf_pat_dev_admin`) documented in the README.
@@ -176,7 +185,18 @@ No router, UUID, CLI or logging libraries: the standard library covers them. Add
 | Web | `web/src/**/*.test.ts` | `bun test` |
 | Manual | README | Keycloak login; curl against a running server |
 
-Verification commands: `go build ./...`, `go vet ./...`, `go test ./...`, `cd web && bun install && bun run build && bun test`, `mise run build && mise run test && mise run lint`.
+Final verification commands (PF-27 only): `go build ./...`, `go vet ./...`, `go test -count=1 -v ./...`, `cd web && bun install --frozen-lockfile && bun run build && bun test`, `mise run build && mise run test && mise run lint`.
+
+#### Verification-command rule (session 462)
+
+This rule fixes two failures from the previous run: test evidence came from the `go test` cache and had no counts, and plans deadlocked on a repo-wide gate that depended on other plans' pending files. Every implementation plan's Verification section and Done criteria follow it:
+
+1. Uncached and counted. Every Go test command is `go test -count=1 -v [-race] [-run '<plan pattern>'] <plan packages>`. Web tests are `cd web && bun test`. Cached output (`(cached)`) or output without counts is not evidence.
+2. Exit status survives logging. Commands that pipe into `tee` run under `bash -o pipefail -c '<cmd> 2>&1 | tee /tmp/<plan-id>-<step>.log'`, and the progress log records that exit status. Never use the status of `tee`.
+3. Counts recorded. For Go, record `--- PASS`, `--- FAIL` and `--- SKIP` line counts from the log (`grep -c -- '--- PASS' <log>`, ...). For bun, record the pass/fail summary line. A passing check needs exit 0, FAIL count 0 and PASS count > 0. A test that the plan requires to PASS must not SKIP.
+4. Scoped to the plan. A plan runs tests only for the packages it owns, plus its `-run` pattern inside shared packages (`internal/api/v1`, `internal/store`, `internal/present`, ...). `go build ./...` and `go vet <own packages>` are allowed. No plan other than PF-27 runs, or has a Done criterion that requires, `go test ./...` or "all packages pass".
+5. Foreign breakage is a blocker, not a fix. If a scoped command fails because of a file owned by another plan, the plan records the file:line and the owning plan as a reconciliation blocker and does not edit that file. Wave partitioning (below) keeps plans that share a package in dependency order, so this should be rare.
+6. Accepted plans stay green. PF-01, PF-03, PF-11, PF-12 and PF-13 are not re-implemented. PF-27 re-runs their tests (`go test -count=1 -v ./internal/kftime/... ./internal/kferr/... ./internal/build/... .`, `cd web && bun test`) as part of the full gate.
 
 ### Delivery waves (input for implementation plans)
 
@@ -189,5 +209,7 @@ Verification commands: `go build ./...`, `go vet ./...`, `go test ./...`, `cd we
 | 5 | OIDC + local login + `deploy/keycloak`; SPA screens; contract test; README | 4 (SPA can start after 2 against the API shapes) |
 
 The coverage matrix is the checklist for waves 3-5: a row is done when its handler, handler test and contract scenario exist and pass.
+
+Continuation order (session 462, from checkpoint 410d3d8). The plan-to-phase mapping in `impl-plans/README.md` is unchanged except for one point: the PF-02 corrections for CF-01 and CF-02 (enum lists, removal of invented constants, conformance test, store-test seed values) run first and alone, because every other plan compiles against `internal/model`. After that the phases are: PF-04..PF-10 -> PF-14..PF-17 -> PF-18..PF-25 -> PF-26 -> PF-27. Within a phase, PF-06 (validator switch to the Go lists, input ID load/export) and PF-07 (fixture enum values) are the first consumers of the corrected enums. PF-08 handles the input ID read/present.
 
 ---

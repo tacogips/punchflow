@@ -82,18 +82,47 @@ Same as PF-18 "Handler Conventions".
 - masters: Employee list -> 403; Master Editor persona via SAT caller `accountant` -> 200; create master with duplicate field codes -> 422; create item with pull_down value outside options -> 422; list items of cost-centers default sort by `defaultSortBy`
 - unknown master id -> 404; delete master -> items gone
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-06, PF-08, PF-16.
+**State at 410d3d8**: not started (PF-10 stubs in `general_masters.go`, `categories.go`, `folders.go` and `definitions.go`). Implement this plan as written, plus the CF-02 API hop (`architecture.md#fixtures`, input ID data flow):
+
+- `createGeneralMasterItem`: one `store.NewID()` per input. Write `general_master_items.inputs` = `{fieldId: value}` and `input_ids` = `{fieldId: inputId}` in the same INSERT.
+- `updateGeneralMasterItem`:
+  - The request `inputs[]` addresses fields by `code`, so resolve each code to its field ID in this master (unknown code -> 422 `validation_failed`).
+  - For a field already present in `input_ids`, keep its existing input ID and replace the value. A field with no prior input gets a new ID.
+  - Delete IDs only for fields no longer present.
+  - Write both columns in one UPDATE inside the tx.
+- Responses use `present.GeneralMasterItem` (PF-08), so `inputs[].id` is the persisted ID.
+- Enum validation for request bodies uses the `internal/model` lists:
+  - master `defaultSortBy` in `model.MasterSortKeys` (`name|code`)
+  - master field `fieldType` in `model.MasterFieldTypes`
+  - `listRoutes` `status` filter in `visible|error` (spec query enum), `listWorkflows` `status` filter in `visible|invisible`
+  - other values -> `400 invalid_parameter`
+- Permissions are `model.PermissionWorkflowMisc` (categories, folders writes), `model.PermissionMaster`/`model.PermissionMasterRead`. Reads of categories, folders, routes and workflows need any authenticated user (INF-42).
+- Name tests `TestCategor*`, `TestFolder*`, `TestWorkflow*`, `TestRoute*`, `TestGeneralMaster*`, `TestMaster*`; prefix helpers with `pf20`. Note: `TestRoute*` must not collide with PF-10's `TestPF10*` names.
+
+Additional tests (input -> expected):
+- create item in `cost-centers` with `inputs [{code: budget-owner, value: x}]` -> 200; response `inputs[0].id` is a UUID different from `inputs[0].field.id`; `SELECT input_ids` matches it
+- update the same item's value -> same `inputs[0].id` as before; value changed
+- get a fixture item `cc-sales` -> `inputs[0].id` equals the fixture input id of `cc-sales` (`00000000-0000-4000-8000-000000000042` at 410d3d8). Read it from `fixtures/default/general-masters.json` in the test rather than hard-coding it
+- `defaultSortBy: createdAt` on createGeneralMaster -> 400 `invalid_parameter`
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf20-build.log
-go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf20-vet.log
-go test -race -run 'Test(Categor|Folder|Workflow|Route|GeneralMaster|Master)' ./internal/api/v1/... 2>&1 | tee /tmp/pf20-test.log
-gofmt -l internal/api/v1/categories*.go internal/api/v1/folders*.go internal/api/v1/definitions*.go internal/api/v1/general_masters*.go internal/store/classification.go internal/store/masters.go internal/store/definitions.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf20-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf20-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'Test(Categor|Folder|Workflow|Route|GeneralMaster|Master)' ./internal/api/v1/... 2>&1 | tee /tmp/pf20-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf20-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf20-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf20-s462-test.log)"
+gofmt -l internal/api/v1/categories.go internal/api/v1/folders.go internal/api/v1/definitions.go internal/api/v1/general_masters.go internal/api/v1/categories_test.go internal/api/v1/folders_test.go internal/api/v1/definitions_test.go internal/api/v1/general_masters_test.go internal/store/classification.go internal/store/masters.go internal/store/definitions.go   # prints nothing
+rg -n 'not implemented' internal/api/v1/categories.go internal/api/v1/folders.go internal/api/v1/definitions.go internal/api/v1/general_masters.go   # prints nothing (exit 1)
 ```
 
-## Done Criteria
+### Done Criteria (session 462)
 
-- [ ] 23 operations implemented; tests pass with `-race`; gofmt clean; inferred rules recorded in the progress log
+- [ ] 23 operations implemented; CF-02 API hop closed (create assigns IDs, update preserves them, get returns fixture IDs), proven by tests
+- [ ] Listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean; inferred rules recorded in the progress log
 
 ## Execution Protocol
 

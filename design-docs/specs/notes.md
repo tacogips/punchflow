@@ -79,6 +79,33 @@ Each entry is a design assumption. "Ref" points to the reference section that le
 | INF-43 | Own-role protection | A caller without super admin membership who updates/deletes a role they belong to, or adds/removes themselves, gets `403 missing_permission`. The super admin role itself is `403 resource_not_editable`; removing its last member is `422 validation_failed`. | 1.8 |
 | INF-41 | Default order inside action checks | Tenant `suspended`/`maintenance` and IP checks run in middleware before routing. For approve/reject/deny the engine checks run in this order: ticket exists (404) -> visible (403 `invisible_ticket`) -> tenant mode (403 `admin_is_working`) -> status `in_progress` (422 `invalid_state`) -> caller assigned (403 `user_not_assigned`) -> comment rules (422 `validation_failed`) -> input and assignment checks (422). | 1.7 |
 
+### Carried review findings (session 462 continuation)
+
+Wave-3 integration-review findings carried over from session 460. This session re-reviewed them against the tree at 410d3d8 by static inspection. "Closed when" is the acceptance evidence that the owning plans must produce.
+
+| ID | Sev | Finding and current state at 410d3d8 | Design resolution | Owners | Closed when |
+|---|---|---|---|---|---|
+| CF-01 | high | **Still open: the previous correction was partial.** `internal/model/enums.go` now has the eight kickflow step types and `activated`, but it still defines invented webhook events (`ticket_submitted`, `ticket_remanded`, `ticket_resubmitted`, `comment_deleted`) and lacks `ticket_updated`, `ticket_opened`, `ticket_confirmed` and `ticket_rejected`. It defines 19 invented permissions (`ticket_admin`, `user_read`, `audit_read`, ...) in place of the kickflow 19. It keeps the non-kickflow constants `StepTypeGrade`/`StepTypeParallel`. `internal/fixtures/validate.go:222` accepts only `user\|team\|grade\|parallel`, so it rejects six valid step types that `fixtures/default/routes.json` uses. `fixtures/default` uses `userType: member`, route/workflow `status: active`, `gradeSymbol: ""` and the invented permissions in `roles.json`. `internal/fixtures/testdata/minimal` seeds user, route and workflow `status: active`. `fixtures/default/workflows.json:519` models a section condition as a separate `sectionType: "conditional"` section, and `model.WorkflowSection` has no `code`, `conditional` or `combinationType` (found while planning; added as the "Section type" row). `model.RouteTarget.GradeSymbol` is a non-nullable `string`, so `routes.json` has to write `""` for "no grade filter". `internal/auth/token_test.go:75,89` uses `user_read`. `TestModelEnumValuesMatchDesign` checks only four enums, using hand-written expectations. Baseline ban-grep hit counts: enums.go 24, roles.json 14, users.json 12, routes.json 4, workflows.json 3, minimal testdata 4, token_test.go 2, validate.go 1. | Enum contract in `design-api-coverage.md` (Go lists, banned values, OpenAPI conformance test, default-fixture validation test) | PF-02, PF-06, PF-07, PF-05 (test seeds) (PF-08/PF-15 consume) | `internal/model/enums_test.go` passes against the OpenAPI; `fixtures.Validate(default)` returns nil; the invalid-testdata cases are rejected; the CF-01 ban grep below prints nothing. It scans production `.go` files and fixture data and excludes `*_test.go` and the PF-06 invalid testdata, because negative tests may name banned values; only production code and fixtures must be clean. The companion presence check confirms that the negative tests still exist |
+| CF-02 | high | **Still open: only the PF-02 half is done.** `model.GeneralMasterItem.InputIDs` and the `general_master_items.input_ids` column exist. `internal/fixtures/load.go:261` does not write `input_ids`. `internal/fixtures/export.go:274` drops `MasterInputFixture.ID`. `internal/store/read_masters.go` does not read `input_ids`. `internal/present/master.go:47` emits the field ID as `inputs[].id`. | Input ID data flow in `architecture.md#fixtures` | PF-06, PF-08, PF-20 | `export(load(fixtures/default))` is byte-identical including `inputs[].id`; `getGeneralMasterItem` returns the fixture input ID (not the field ID); `updateGeneralMasterItem` keeps the IDs |
+| CF-03 | mid | **Confirmed correct; closes on PF-05 verification.** `internal/store/auth.go:161` writes `model.UserStatusActive` (`activated`). `internal/auth/session.go:17,30` use the constant. The auth tests seed and assert `activated` (`handlers_test.go:81`, `middleware_test.go:28`, `session_test.go:41`). Residual drift outside PF-05: `internal/store/store_test.go:188,281` seed `status "active"` and `user_type "member"` (PF-02-owned test data). | INF-31 activation writes `activated`; the PF-02 store tests use canonical values | PF-05 (verify), PF-02 (seed values) | PF-05 scoped `go test -count=1 -v -race ./internal/auth/...` passes with counts; `rg -n '"active"' internal --glob '*.go'` finds no user-status literal |
+
+CF-01 ban grep:
+
+```bash
+rg -n -e 'ticket_submitted|ticket_remanded|ticket_resubmitted|comment_deleted|ticket_admin|audit_read' \
+  -e '\b(user|org|workflow|role|file|proxy)_(read|write)\b' \
+  -e 'StepTypeGrade|StepTypeParallel|StepStatus(Approved|Denied|Remanded)|TicketStatusWithdrawn' \
+  -e '"userType": *"member"|"status": *"active"|"sectionType": *"conditional"|"gradeSymbol": *""' \
+  internal fixtures --glob '!**/*_test.go' --glob '!internal/fixtures/testdata/invalid/**'
+```
+
+Scope: production Go files under `internal/`, the `fixtures/` data, and `internal/fixtures/testdata/minimal`. Test files (`*_test.go`) and the PF-06 invalid-case testdata are excluded on purpose. Negative tests must name banned values in order to prove they are rejected (PF-02 `enum_rules_test.go`, PF-15 payload tests, PF-21 `roles_test.go`, PF-23 comment tests, PF-24 admin webhook tests). Never delete or obfuscate those literals to make this grep pass.
+
+```bash
+# companion presence check (PF-27): the negative tests still exist
+rg -l 'audit_read' internal/fixtures/enum_rules_test.go internal/api/v1/roles_test.go   # lists both files
+```
+
 ### Intentional divergences from kickflow
 
 These are scope cuts, not inferences. Each is visible to API clients only as a constant value.

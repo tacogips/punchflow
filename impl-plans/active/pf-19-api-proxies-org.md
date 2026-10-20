@@ -81,18 +81,28 @@ Same as PF-18 "Handler Conventions" (permission first, id-or-code resolution, on
 - pagination headers on listTeamMembers; Employee on any org endpoint -> 403 `missing_permission`
 - audit actions `organizationChart.activate`, `proxyApprover.create` recorded
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-08, PF-16.
+**State at 410d3d8**: not started (PF-10 stubs). Implement this plan as written. Session-462 points:
+
+- Permissions are `model.PermissionUser` (proxies) and `model.PermissionTeam` (org charts, teams, memberships). No literal permission strings.
+- Name tests `TestProxy*`, `TestProxies*`, `TestOrgChart*`, `TestOrganizationChart*`, `TestTeam*`; prefix helpers with `pf19`. The shared-package compile rule is README rule 11.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf19-build.log
-go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf19-vet.log
-go test -race -run 'Test(Proxy|Proxies|OrgChart|OrganizationChart|Team)' ./internal/api/v1/... 2>&1 | tee /tmp/pf19-test.log
-gofmt -l internal/api/v1/proxies*.go internal/api/v1/orgcharts*.go internal/api/v1/teams*.go internal/store/proxies.go internal/store/org.go   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf19-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/api/v1/... 2>&1 | tee /tmp/pf19-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -race -run 'Test(Proxy|Proxies|OrgChart|OrganizationChart|Team)' ./internal/api/v1/... 2>&1 | tee /tmp/pf19-s462-test.log"; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf19-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf19-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf19-s462-test.log)"
+gofmt -l internal/api/v1/proxies.go internal/api/v1/orgcharts.go internal/api/v1/teams.go internal/api/v1/proxies_test.go internal/api/v1/orgcharts_test.go internal/api/v1/teams_test.go internal/store/proxies.go internal/store/org.go   # prints nothing
+rg -n 'not implemented' internal/api/v1/proxies.go internal/api/v1/orgcharts.go internal/api/v1/teams.go   # prints nothing (exit 1)
 ```
 
-## Done Criteria
+### Done Criteria (session 462)
 
-- [ ] 24 operations implemented (no stub message left in the three files); tests pass with `-race`; gofmt clean
+- [ ] 24 operations implemented (no stub message left); listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

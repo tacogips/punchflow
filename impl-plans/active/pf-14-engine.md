@@ -101,19 +101,40 @@ Implement every ticket state change behind the `internal/engine/engine.go` contr
 - TestArchive: author archives draft -> archived; author archives in_progress -> 403 missing_permission; hr-manager (ticket_write) archives completed -> ok; again -> 422 invalid_state
 - TestComments: add with `<@uuid of accountant>` -> mentioned users; edit by non-author -> 403; delete -> deletedAt set, body "", comment_updated
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 3. **Depends on**: PF-06, PF-07, PF-08, PF-10 (and transitively PF-02).
+**State at 410d3d8**: not started. `internal/engine/engine.go` (111 lines) holds only the PF-10 stubs. Implement this whole plan as written above, with these session-462 corrections:
+
+- Enum values come only from `internal/model` (`design-api-coverage.md` enum contract rule 1).
+  - Statuses: `model.TicketStatus*`, `model.StepStatus*`; step types: `model.StepType*`; events: `model.WebhookEvent*`.
+  - Withdraw sets `model.TicketStatusRejected`; there is no withdrawn status.
+  - Send-back and deny change the ticket, never a step status to `approved`/`denied`/`remanded`, which do not exist.
+  - Events are exactly `ticket_created`, `ticket_updated`, `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected`, `ticket_denied`, `ticket_completed`, `ticket_withdrawn`, `ticket_archived`, `comment_created`, `comment_updated`.
+- Conditional sections (after PF-02/PF-07): a `form` section with `Conditional == true` is shown only when its own `ConditionFields` match under its `CombinationType` (`all`/`any`). There is no separate `conditional` section type. `leave-request`: `reason` = `other` -> the "Other details" section is visible and `detail` is required.
+- Slip items: `SlipItemInput.SlipSectionCode` matches `WorkflowSection.Code` (`expense-claim` slip section code `lines`). `SlipSectionID` matches the section `id`.
+- Route targets: `RouteTarget.GradeSymbol` is `*string`. `nil` means no grade filter; `any_of` means the membership grade is in `GradeCodes`.
+- Fallback: `RouteStep.FallbackType` values come from `model.FallbackTypes`. Store `ticket_steps.fallback_result` with the same value.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf14-build.log
-go vet ./internal/engine/... ./internal/store/... 2>&1 | tee /tmp/pf14-vet.log
-go test -race ./internal/engine/... 2>&1 | tee /tmp/pf14-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf14-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/engine/... ./internal/store/... 2>&1 | tee /tmp/pf14-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/engine/... 2>&1 | tee /tmp/pf14-s462-test.log'; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf14-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf14-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf14-s462-test.log)"
 gofmt -l internal/engine internal/store/tickets.go internal/store/engine_lookup.go   # prints nothing
-wc -l internal/engine/*.go internal/store/tickets.go internal/store/engine_lookup.go   # every file < 1000
+wc -l internal/engine/*.go internal/store/tickets.go internal/store/engine_lookup.go | sort -n | tail -2   # every file < 1000
+rg -n '"(in_progress|completed|rejected|denied|archived|draft|pending|skipped|approve|confirm|none|ticket_[a-z]+|comment_[a-z]+)"' internal/engine --glob '!*_test.go'   # prints nothing: production code uses model constants
 ```
 
-## Done Criteria
+Evidence: exit 0 for each command; FAIL=0; SKIP=0. Each of the 17 listed tests (`TestSubmitMultiStepApproveCompletes` ... `TestComments`) appears as `--- PASS`.
 
-- [ ] All engine methods implemented with unchanged signatures; every listed test exists and passes with `-race`; gofmt clean; files < 1000 lines
+### Done Criteria (session 462)
+
+- [ ] All engine methods implemented with unchanged PF-10 signatures; the 17 listed tests pass uncached with `-race`, with counts recorded
+- [ ] Engine production code uses only `internal/model` enum constants (rg check empty); conditional sections and slip codes follow the PF-02 model
+- [ ] build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 

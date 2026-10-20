@@ -64,18 +64,26 @@ An `httptest.Server` serving `/.well-known/openid-configuration` (issuer = serve
 - `returnTo=//evil.example` -> redirect target `/`
 - empty issuer -> `NewOIDC` returns nil and the routes answer 404 `endpoint_not_found`
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 3. **Depends on**: PF-05.
+**State at 410d3d8**: not started. `internal/auth/oidc.go` is the 30-line PF-05 stub. Implement this plan as written. `ActivateOnLogin` (PF-05) writes `model.UserStatusActive` (`activated`); the invited-user test asserts `activated`. Name the new tests `TestOIDC*`. Do not edit other PF-05 files.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf17-build.log
-go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-vet.log
-go test -race ./internal/auth/... 2>&1 | tee /tmp/pf17-test.log   # PF-05 tests must still pass
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf17-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/auth/... 2>&1 | tee /tmp/pf17-s462-test.log'; echo "exit=$?"   # whole package: oidc.go is shared with PF-05, whose tests must stay green
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf17-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf17-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf17-s462-test.log)"
+grep -c -- '--- PASS: TestOIDC' /tmp/pf17-s462-test.log   # >= 6 (success, state cases, token cases, user cases, returnTo, empty issuer)
 gofmt -l internal/auth   # prints nothing
+git diff --quiet -- go.mod go.sum && echo "go.mod unchanged"
 ```
 
-## Done Criteria
+### Done Criteria (session 462)
 
-- [ ] Signatures unchanged; all listed tests pass with `-race`; no new go.mod entries
+- [ ] Signatures unchanged; all listed OIDC tests pass uncached with `-race`; PF-05 tests still pass; counts recorded; no go.mod/go.sum change
 
 ## Execution Protocol
 

@@ -119,18 +119,60 @@ Seed rows with SQL in a test helper (default fixtures are not loadable in this w
 - every timestamp matches `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+09:00$`
 - missing id -> `errors.Is(err, store.ErrNotFound)`
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 2. **Depends on**: PF-02 (phase 1: `RouteTarget.GradeSymbol *string`, `WorkflowSection.Code/Conditional/CombinationType`, enum lists; PF-02 also changed two `GradeSymbol` literals in `present_test.go` to `pf08String("equal")`, so re-hash that file before editing).
+**Design**: `architecture.md#fixtures` (CF-02 input ID data flow: store read + presenter hop); `design-api-coverage.md` enum contract (Section type row); `notes.md` CF-02.
+
+### State at 410d3d8 (audited)
+
+- `store.GetGeneralMasterItem` (`internal/store/read_masters.go:55`) does not select `input_ids`.
+- `present.GeneralMasterItem` (`internal/present/master.go:47`) emits the field ID as `inputs[].id`, which is wrong (CF-02).
+- `present/workflow_form.go:24` emits `sectionType` straight from the def and has no `code`, `conditional` or `combinationType` keys.
+- The session-460 tests never ran uncached with counts.
+
+### File-level changes
+
+1. `internal/store/read_masters.go`: `GetGeneralMasterItem` and `GetGeneralMasterItems` select `input_ids` and decode it into `model.GeneralMasterItem.InputIDs`, mirroring the existing `inputs` decode (`{}` -> empty non-nil map).
+2. `internal/present/master.go` `GeneralMasterItem`:
+   - `inputs[].id = m.InputIDs[fieldID]`.
+   - If a field ID in `m.Inputs` has no entry in `InputIDs`, return an error (`present: general master item <id>: field <fieldId> has no input id`). Never fall back to the field ID.
+   - Keep the `field` object and the `fieldOrder` sorting.
+3. `internal/present/workflow_form.go` section shape (`SectionListItem`):
+   - Slip sections add `code` (from `WorkflowSection.Code`).
+   - Form sections add `conditional` (bool) and, when `conditional` is true, `combinationType`.
+   - `sectionType` is the def value (always `form`/`slip` after PF-02/PF-07).
+   - Keep the existing keys.
+4. `internal/present/route.go` needs no code change: `t.GradeSymbol` is now `*string` and marshals as `null`. A test asserts that.
+5. `internal/present/present_test.go`:
+   - Update the master item seed at line ~47 to also insert `input_ids` (e.g. `{"fld":"in1"}`).
+   - Add the test cases below. Keep PF-02's `pf08String("equal")` literals.
+
+### Tests (input -> expected)
+
+- `TestPresentMasterItemInputIDs`: an item seeded with `input_ids {"fld":"in1"}` -> `inputs[0].id == "in1"` and `inputs[0].field.id == "fld"`. An item seeded with an `inputs` value but `input_ids` `{}` -> error.
+- `TestPresentSectionShapes`: a def with a slip section (`Code: "lines"`) and a conditional form section (`Conditional: true, CombinationType: "all"`) -> slip JSON has `code: "lines"`; form JSON has `conditional: true, combinationType: "all"`; a non-conditional form section has `conditional: false` and no `combinationType` key.
+- `TestPresentRouteTargetGradeSymbolNull`: target with nil `GradeSymbol` -> JSON `"gradeSymbol": null`.
+- Existing `TestPresentCoreKeySets` and `TestWorkflowPresenterContracts` still pass. Update their expected key sets only for the added section keys.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf08-build.log
-go vet ./internal/present/... ./internal/store/... 2>&1 | tee /tmp/pf08-vet.log
-go test ./internal/present/... 2>&1 | tee /tmp/pf08-test.log
-gofmt -l internal/present internal/store   # prints nothing for this plan's files
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf08-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/present/... ./internal/store/... 2>&1 | tee /tmp/pf08-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v ./internal/present/... 2>&1 | tee /tmp/pf08-s462-test.log'; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf08-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf08-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf08-s462-test.log)"
+gofmt -l internal/present internal/store/read_users.go internal/store/read_org.go internal/store/read_roles.go internal/store/read_classification.go internal/store/read_masters.go internal/store/read_definitions.go internal/store/read_proxies.go   # prints nothing
+wc -l internal/present/*.go | sort -n | tail -2   # every file < 1000
 ```
 
-## Done Criteria
+Evidence: exit 0; FAIL=0; SKIP=0; the 3 new tests appear as `--- PASS`. (`internal/present` has only PF-08 tests in phase 2; PF-15 adds ticket tests in phase 3.)
 
-- [x] All contract functions and store read helpers exist; tests assert key sets for every presenter; gofmt clean; files < 1000 lines
+### Done Criteria (session 462)
+
+- [ ] CF-02 read/present half closed: `inputs[].id` is the persisted input ID; a missing ID is an error; tests prove both
+- [ ] Section JSON carries `code` (slip) and `conditional`/`combinationType` (form); `gradeSymbol` null renders as `null`
+- [ ] Uncached present tests pass with counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 

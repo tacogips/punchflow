@@ -149,19 +149,35 @@ Persona tokens and users are pinned in PF-07: Admin `pf_pat_dev_admin` (admin), 
 - default round-trip (`internal/fixtures/default_roundtrip_test.go`): `Validate(Parse(default))` nil; `Export(Load(default))` byte-identical to every `fixtures/default/*.json`. If not identical, regenerate: run `go run ./cmd/punchflow fixtures export --db <tmp db> --out <tmp dir outside the repo>`, confirm that `Parse` of the old and new sets gives equal `Set` values (reflect.DeepEqual), then replace each `fixtures/default/<name>.json` atomically (`cp` to `fixtures/default/<name>.json.tmp`, then `mv` over the target) so that PF-14, which loads these files in the same wave, never reads a partial file. Log the regeneration and re-run.
 - testutil self-test (`internal/testutil/testutil_test.go`): for each persona, `Do(p, GET, /v1/user)` returns a status other than 401 (handler-body independent); with persona "" it returns 401. `Env.CallerFor` (user code, default `admin`) selects the `X-Caller-Id` for the Integration persona.
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 3. **Depends on**: PF-04, PF-05, PF-06, PF-07, PF-08, PF-09, PF-10.
+**State at 410d3d8**: not started. `internal/server`, `internal/webui`, `internal/admin` and `internal/testutil` do not exist; `internal/cli/cli.go` is the 31-line PF-01 skeleton (PF-01 is accepted; keep its `Run` signature and its existing `TestRunVersion`/`TestRunPlaceholdersAndUsage` cases green, adjusting only placeholder expectations that this plan replaces with real subcommands). Implement this plan as written, with these session-462 corrections:
+
+- The default round trip (`internal/fixtures/default_roundtrip_test.go`, test name `TestDefaultRoundTrip`) now depends on PF-06 (input IDs, `inputs: []`) and PF-07 (canonical enum data, merged conditional section). If bytes differ, follow the regeneration procedure above. Regeneration must not reintroduce banned values: run the PF-07 rg check after regenerating.
+- Persona permissions come from the corrected `roles.json`. Admin (Super Admin) holds all 19 kickflow permissions, so tests needing `user`, `team`, `role`, `audit`, `tenant` or `integration` use Admin. Do not rely on the removed invented permissions.
+- The admin skeleton `Operations()` has 23 rows. Webhook event types are validated with `model.WebhookEventTypes`; the dispatcher statuses are `pending|succeeded|failed`.
+- `Serve` owns the dispatcher goroutine. The CLI smoke test (PF-26) depends on graceful exit 0; never start a background process from tests.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf16-build.log
-go vet ./... 2>&1 | tee /tmp/pf16-vet.log
-go test -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... ./internal/fixtures/... 2>&1 | tee /tmp/pf16-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf16-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... 2>&1 | tee /tmp/pf16-s462-test.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -run 'TestDefaultRoundTrip' ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s462-roundtrip.log"; echo "exit=$?"
+for f in /tmp/pf16-s462-test.log /tmp/pf16-s462-roundtrip.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
 gofmt -l internal/server internal/webui internal/admin internal/cli internal/testutil internal/fixtures/default_roundtrip_test.go   # prints nothing
-go run ./cmd/punchflow version 2>&1 | tee /tmp/pf16-version.log   # "punchflow 0.1.0"
+bash -o pipefail -c 'go run ./cmd/punchflow version 2>&1 | tee /tmp/pf16-s462-version.log'; echo "exit=$?"   # "punchflow 0.1.0"
 ```
 
-## Done Criteria
+Evidence: exit 0 for each command; FAIL=0 in both logs. In the main log, SKIP may be 1, and only for `TestEmbeddedBuild` (the web build is absent until PF-27; that skip is expected). Any other SKIP fails the check. `TestDefaultRoundTrip` must PASS.
 
-- [ ] Contracts exist; server assembled exactly as above; CLI subcommands, flags and env vars match `command.md`; all tests pass with `-race`; default fixtures validate and round-trip byte-identically
+### Done Criteria (session 462)
+
+- [ ] Contracts exist; server assembled as specified; CLI subcommands, flags and env vars match `command.md`
+- [ ] Uncached `-race -v` tests of the five PF-16 packages pass; `TestDefaultRoundTrip` passes (Validate nil; byte-identical export); counts recorded
+- [ ] build/vet exit 0; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 

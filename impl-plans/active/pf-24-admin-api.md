@@ -83,18 +83,33 @@ Implement the 23 punchflow-only `/admin/api` endpoints, whose route table and st
 - faults: add `{pathPrefix:"/v1/tickets", status:503, code:"feature_disabled", remaining:1}` -> next `/v1/tickets` 503 `feature_disabled`, then normal; repeat for `gateway_timeout` 504, `email_not_verified` 401, `license_purchase_required` 403, `option_purchase_required` 403, `internal_server_error` 500 (INF-32 catalog)
 - fixtures: export has 14 files; reset without flag -> 404; with `WithAdminReset()` -> 200 and a ticket created earlier is gone, `pf_pat_dev_admin` still works
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 4. **Depends on**: PF-14, PF-15, PF-16.
+**State at 410d3d8**: not started (`internal/admin` is created by PF-16 in phase 3). Implement this plan as written. Session-462 points:
+
+- Webhook `eventTypes` are validated against the 12 non-ping values of `model.WebhookEventTypes`. The fire endpoint accepts all 13 (`ping` only with `webhookIds`). The table test iterates `model.WebhookEventTypes`, so it covers exactly the kickflow 13. `ticket_submitted` or `comment_deleted` -> 422.
+- Webhook event `status` in responses is `pending|succeeded|failed` (`model.WebhookStatus*`).
+- Tenant PATCH validates `plan` and `mode` against the `model.TenantPlan*`/`model.TenantMode*` constants. Permissions are `model.PermissionIntegration` (service accounts, webhooks) and `model.PermissionTenant` (tenant, faults, fixtures).
+- Fixtures export/reset now include the CF-02 input IDs. The test "export has 14 files" also asserts that `general-masters.json` items have non-empty `inputs[].id`.
+- Name tests `TestAdmin*` or by resource (`TestTokens*`, `TestServiceAccount*`, `TestWebhooks*`, `TestTenant*`, `TestFaults*`, `TestFixtures*`); prefix helpers with `pf24`. PF-16's `routes_test.go` lives in the same package; it must stay green.
+
+### Verification
 
 ```bash
-go build ./... 2>&1 | tee /tmp/pf24-build.log
-go vet ./internal/admin/... ./internal/store/... 2>&1 | tee /tmp/pf24-vet.log
-go test -race ./internal/admin/... 2>&1 | tee /tmp/pf24-test.log
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf24-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/admin/... 2>&1 | tee /tmp/pf24-s462-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/admin/... 2>&1 | tee /tmp/pf24-s462-test.log'; echo "exit=$?"
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf24-s462-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf24-s462-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf24-s462-test.log)"
 gofmt -l internal/admin internal/store/admin.go   # prints nothing
 ```
 
-## Done Criteria
+Evidence: exit 0; FAIL=0; SKIP=0; the fault-code table test shows 6 passing subtests; the fire-event table test shows 13.
 
-- [ ] 23 endpoints implemented; every "Fault" catalog code proven; tests pass with `-race`; gofmt clean
+### Done Criteria (session 462)
+
+- [ ] 23 endpoints implemented; every "Fault" catalog code proven; fire covers exactly the 13 kickflow events
+- [ ] Uncached `-race -v` admin tests pass with counts recorded; build/vet exit 0; gofmt clean
 
 ## Execution Protocol
 

@@ -59,12 +59,16 @@ Pin the data shapes every later plan compiles against: Go module dependencies, d
 - `internal/store/store_test.go`
 - `internal/store/migrations/0001_init.sql`
 - `internal/fixtures/types.go`
+- `internal/model/enums_test.go`
+- `internal/fixtures/enum_rules_test.go`
 
 ### sharedPaths
-- (none)
+- `internal/fixtures/validate.go`
+- `internal/present/present_test.go`
 
 ### sharedPathNotes
-- (none)
+- `internal/fixtures/validate.go`: owned by PF-06; session 462 phase 1 only: replace enum literal checks with the `internal/model` Go lists and add the enum checks listed in Continuation task 5; nothing else
+- `internal/present/present_test.go`: owned by PF-08; session 462 phase 1 only: change the two `RouteTarget` `GradeSymbol` literals to `pf08String("equal")` so the package compiles after the `*string` change
 
 ### artifactRoots
 - (none; `go get` downloads into GOMODCACHE outside the repository, and `go.sum` is the in-repo digest record)
@@ -167,23 +171,132 @@ One struct per fixture file (`TenantFile`, `[]GradeFixture`, `[]UserFixture`, `[
 - ResolveID by id and by code on `users` -> same id; unknown -> ErrNotFound; non-whitelisted table -> error
 - a `json.Unmarshal` round-trip test of a small `WorkflowDef`/`RouteDef` literal (keeps the JSON tags honest)
 
-## Verification
+## Continuation (session 462) - read first; overrides the older Verification and Done Criteria
+
+**Phase**: 1 (runs alone; every other plan compiles against `internal/model`). **Depends on**: accepted PF-01 only.
+**Design**: `design-docs/specs/design-api-coverage.md#enum-contract-frozen-in-pf-02` (table and rules 1-5), `design-docs/specs/notes.md` CF-01/CF-02/CF-03, `design-docs/specs/architecture.md#fixtures` (input IDs), `#verification-command-rule-session-462`.
+
+### Why
+
+Carried finding CF-01 (high) is still open. The previous correction fixed only step types and `activated`. In the tree at 410d3d8:
+- `internal/model/enums.go:49-62` defines invented events (`ticket_submitted`, `ticket_remanded`, `ticket_resubmitted`, `comment_deleted`) and lacks `ticket_updated`, `ticket_opened`, `ticket_confirmed` and `ticket_rejected`.
+- `enums.go:66-84` defines 19 invented permissions instead of the kickflow 19.
+- It keeps the non-kickflow constants `StepTypeGrade`, `StepTypeParallel`, `TicketStatusWithdrawn`, `TicketStatusPending`, `StepStatusApproved`, `StepStatusDenied` and `StepStatusRemanded`. `WebhookStatusDelivered = "delivered"` contradicts `design-webhooks.md` (`succeeded`).
+- `internal/fixtures/validate.go:222` accepts only `user|team|grade|parallel`.
+- `model.RouteTarget.GradeSymbol` is a non-nullable `string` (so routes.json must write `""`).
+- `model.WorkflowSection` cannot express a conditional form section or a slip section code (fixtures fake it with `sectionType: "conditional"`).
+
+PF-02 owns the frozen model. In this phase no other plan runs, so PF-02 also makes the few consumer edits that keep the tree compiling and the validator canonical. Fixture JSON data is fixed later (PF-07 default set, PF-06 testdata).
+
+### Non-goals (this session)
+
+- Do not edit fixture JSON (`fixtures/default/*`, `internal/fixtures/testdata/*`). Do not edit `load.go`/`export.go` (PF-06), presenters (PF-08), auth (PF-05) or the web app.
+- Do not add a migration. `0001_init.sql` stays as is (D-06: the in-place `input_ids` edit is accepted pre-release).
+- No `go mod tidy`. Do not edit `go.mod`/`go.sum`: `gopkg.in/yaml.v3` is already required (indirect), and importing it from a test compiles as is.
+
+### File-level changes
+
+Path additions for this session: `internal/model/enums_test.go` and `internal/fixtures/enum_rules_test.go` (writePaths, new). `internal/fixtures/validate.go` and `internal/present/present_test.go` (sharedPaths, see notes below).
+
+1. `internal/model/enums.go`: rewrite the constants and add one exported `[]string` list per row of the design enum table, with exactly these names: `TicketStatuses`, `StepStatuses`, `ActionTypes`, `StepTypes`, `FallbackTypes`, `ManagerSelectionTypes`, `GradeSymbols`, `StepConditionTypes`, `StepCombinationTypes`, `StepConditionFieldKeys`, `RouteConditionTypes`, `RouteCombinationTypes`, `SectionTypes`, `RouteStatuses`, `WorkflowStatuses`, `UserStatuses`, `UserTypes`, `Permissions`, `MasterFieldTypes`, `MasterSortKeys`, `WebhookEventTypes`.
+   - Add one constant per value. Naming: `<Enum><Value>` in Go camel case, e.g. `PermissionWorkflowMisc = "workflow_misc"`, `WebhookEventTicketOpened = "ticket_opened"`, `UserTypeNormal = "normal"`, `SectionTypeForm = "form"`, `RouteStatusVisible = "visible"`, `WorkflowStatusInvisible = "invisible"`, `GradeSymbolAnyOf = "any_of"`, `FallbackHigherTeam = "higher_team"`.
+   - Keep `UserStatusActive = "activated"` (name unchanged, used by PF-05). Keep the existing `TicketStatus*`, `StepStatus*`, `ActionType*` and `StepType*` names for the canonical values.
+   - Delete every invented or non-kickflow constant: the 4 invented events, the 19 invented permissions, `StepTypeGrade`, `StepTypeParallel`, `TicketStatusWithdrawn`, `TicketStatusPending`, `StepStatusApproved`, `StepStatusDenied`, `StepStatusRemanded`. `StepTypeGrade`/`StepTypeParallel` are referenced only by `validate.go:222`, which task 5 fixes in the same session.
+   - Punchflow-only enums stay: tenant plan/mode, token kind, webhook delivery status. Rename `WebhookStatusDelivered` to `WebhookStatusSucceeded = "succeeded"`; nothing else references it.
+   - Excluded values (`permanently_deleted`, `raised`, `other_variable`, `custom`) are NOT in the lists.
+2. `internal/model/definition.go`:
+   - `RouteTarget.GradeSymbol` becomes `*string` with tag `json:"gradeSymbol"` (no omitempty), so "no filter" is `null`. Leave the other `RouteTarget` tags unchanged.
+   - `WorkflowSection` gets, in this order: `ID`, `Code string json:"code,omitempty"` (slip sections only), `Title`, `SectionType`, `Conditional bool json:"conditional,omitempty"`, `CombinationType string json:"combinationType,omitempty"`, then the existing `FormFields`, `SlipFields`, `ConditionFields`. Struct field order is the canonical fixture key order (PF-06/PF-07 depend on it).
+3. `internal/model/enums_test.go` (new, `package model`): `TestEnumListsMatchOpenAPI`. It is table-driven, one row per Go list with an OpenAPI source: `{list, schema, propertyPath, excluded}`. Sources:
+
+   | List | Schema and property | Excluded |
+   |---|---|---|
+   | `TicketStatuses` | `TicketSummary.status` | `permanently_deleted` |
+   | `StepStatuses` | `TicketStep.status` | `raised` |
+   | `ActionTypes` | `RouteStep.actionType` | - |
+   | `StepTypes` | `RouteStep.stepType` | - |
+   | `FallbackTypes` | `RouteStep.fallbackType` | - |
+   | `ManagerSelectionTypes` | `RouteStep.managerSelectionType` | - |
+   | `GradeSymbols` | `RouteStepTarget.gradeSymbol` | - |
+   | `StepConditionTypes` | `RouteStepCondition.conditionType` | - |
+   | `StepCombinationTypes` | `RouteStepCondition.combinationType` | - |
+   | `StepConditionFieldKeys` | `RouteStepConditionField.fieldKey` | `other_variable` |
+   | `RouteConditionTypes` | `WorkflowRouteCondition.conditionType` | - |
+   | `RouteCombinationTypes` | `WorkflowRouteCondition.combinationType` | `custom` |
+   | `SectionTypes` | `SectionListItem.sectionType` | - |
+   | `RouteStatuses` | `Route.status` | - |
+   | `WorkflowStatuses` | `Workflow.status` | - |
+   | `UserStatuses` | `User.status` | - |
+   | `UserTypes` | `User.userType` | - |
+   | `Permissions` | `RoleDetail.permissionList.permission` | - |
+   | `MasterFieldTypes` | `GeneralMasterField.fieldType` | - |
+   | `MasterSortKeys` | `GeneralMaster.defaultSortBy` | - |
+
+   - Load `../../design-docs/references/kickflow-openapi.yaml` (the test working directory is the package dir) with `gopkg.in/yaml.v3` into `map[string]any`.
+   - Add a helper `pf02Enum(doc, schema string, path ...string) []string`. It starts at `components.schemas.<schema>`. For each path element it descends into `properties.<name>`, searching through `allOf`/`anyOf`/`oneOf` members and `items` when the name is not found directly (`RoleDetail` uses `allOf` + `items`). At the leaf it collects the string values of `enum`, including the `enum` of each `anyOf` member (fallbackType, gradeSymbol). It ignores `null`.
+   - Assert set equality (sort both). Failure message: missing and extra values.
+   - `TestWebhookEventTypesMatchReference`: `WebhookEventTypes` equals the 13 literals of the design table, in that order.
+   - `TestEnumListsHaveNoDuplicates`.
+4. `internal/store/store_test.go`: delete `TestModelEnumValuesMatchDesign` (superseded by task 3). Change the seed literals at lines ~188 and ~281 from `"active"`/`"member"` to `model.UserStatusActive`/`model.UserTypeNormal`.
+5. `internal/fixtures/validate.go` (shared; PF-06 owns the file): replace every hard-coded enum literal list with the Go lists. Change only enum checks. Keep problem paths and messages the same; where a new check is added, use the message `invalid <field>`.
+   - Already checked, switch to Go lists: user `status`, role `permission`, `stepType`, `actionType`, step condition `conditionType`/`combinationType`/`fieldKey` (keep the distinct `other_variable is unsupported` message for INF-18 wherever `other_variable` is checked), route condition `conditionType`, master `fieldType`, webhook `eventTypes`.
+   - Add checks:
+     - `userType` (`UserTypes`)
+     - route `status` (`RouteStatuses`) and workflow `status` (`WorkflowStatuses`)
+     - `fallbackType` (nil allowed, else `FallbackTypes`) and `managerSelectionType` (`ManagerSelectionTypes`)
+     - route target and workflow `availableTeams` `gradeSymbol` (nil allowed, else `GradeSymbols`)
+     - section `sectionType` (`SectionTypes`); a section with `conditional: true` must be `form` and have `combinationType` in `StepCombinationTypes`; `custom` -> `combinationType custom is unsupported` (INF-18)
+     - route condition `combinationType` (empty allowed only for non-`field` types, else `RouteCombinationTypes`; `custom` keeps the INF-18 message)
+   - Tighten master `defaultSortBy` to `MasterSortKeys` (today it also accepts `""` and `createdAt`).
+   - Do not touch the ID walk, references, trees, tokens or anything else.
+6. `internal/present/present_test.go` (shared; PF-08 owns the file): a compile fix only. The two `model.RouteTarget{... GradeSymbol: "equal" ...}` literals at line ~52 become `GradeSymbol: pf08String("equal")`. No other change.
+
+### Invariants
+
+- After this session `go build ./...` and `go vet` on every touched package succeed. The build may not be left broken for phase 2.
+- Exported names that other plans already use stay unchanged: `UserStatusActive`, `UserStatusInvited`, `UserStatusSuspended`, `UserStatusDeactivated`, `TokenKind*`, `TenantPlan*`, `TenantMode*`, `ActionType*`, canonical `StepType*`/`StepStatus*`/`TicketStatus*`, `WebhookEventTypes`, `Permissions`.
+- No package other than `internal/model` defines the 21 enums; the Go lists are the only source.
+
+### Tests (input -> expected)
+
+- `TestEnumListsMatchOpenAPI`: each of the 20 rows -> PASS. Temporarily adding `"grade"` to `StepTypes` makes it fail (check this manually once; do not commit the change).
+- `TestWebhookEventTypesMatchReference` -> PASS with exactly 13 values.
+- `internal/fixtures/enum_rules_test.go` (new, `package fixtures`; prefix helpers `pf02`): `TestEnumRule*`, table-driven. Each case does `Parse(os.DirFS("../../fixtures/default"))`, mutates one field, calls `Validate`, and checks for a `Problem` at a specific `File`+`Path`. It asserts presence or absence at that path only, never the full problem list, because the default data is fixed later by PF-07. Cases:
+  - step type `grade` on `routes[0].steps[0]` -> problem at `[0].steps[0].stepType`; `manager` -> none at that path
+  - permission `audit_read` on `roles[0].permissionList[0]` -> problem; `workflow_misc` -> none
+  - `users[0].userType` `member` -> problem; `normal` -> none
+  - `routes[0].status` `active` -> problem; `visible` -> none
+  - `routes[0].steps[0].targets[0].gradeSymbol` pointer to `""` -> problem; nil -> none (pick a step that has targets)
+  - a section with `sectionType` `conditional` -> problem
+  - an appended webhook fixture with event `ticket_submitted` -> problem; `ticket_opened` -> none
+  - master `defaultSortBy` `createdAt` -> problem
+- Store tests still pass (11 tests at attempt 5 minus the deleted one).
+
+### Verification (run in order; rules in `impl-plans/README.md` rule 11)
 
 ```bash
-go mod verify 2>&1 | tee /tmp/pf02-modverify.log         # "all modules verified"
-go list -m all 2>&1 | tee /tmp/pf02-modules.log          # must list the 5 modules
-go build ./... 2>&1 | tee /tmp/pf02-build.log
-go vet ./internal/store/... ./internal/model/... ./internal/fixtures/... 2>&1 | tee /tmp/pf02-vet.log
-go test ./internal/store/... ./internal/model/... ./internal/fixtures/... 2>&1 | tee /tmp/pf02-test.log
-gofmt -l internal/store internal/model internal/fixtures   # prints nothing
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf02-s462-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/model/... ./internal/store/... ./internal/fixtures/... ./internal/present/... 2>&1 | tee /tmp/pf02-s462-vet.log'; echo "exit=$?"   # vet compiles present_test.go
+bash -o pipefail -c 'go test -count=1 -v ./internal/model/... ./internal/store/... 2>&1 | tee /tmp/pf02-s462-test.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -run 'TestEnumRule' ./internal/fixtures/... 2>&1 | tee /tmp/pf02-s462-fixtures-test.log"; echo "exit=$?"
+for f in /tmp/pf02-s462-test.log /tmp/pf02-s462-fixtures-test.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
+gofmt -l internal/model internal/store internal/fixtures/validate.go internal/fixtures/enum_rules_test.go internal/present/present_test.go   # prints nothing
+rg -n -e 'ticket_submitted|ticket_remanded|ticket_resubmitted|comment_deleted|ticket_admin|audit_read|StepTypeGrade|StepTypeParallel|StepStatus(Approved|Denied|Remanded)|TicketStatus(Withdrawn|Pending)|WebhookStatusDelivered' -e '\b(user|org|workflow|role|file|proxy)_(read|write)\b' internal/model internal/fixtures/validate.go internal/store   # prints nothing, exit 1
+go mod verify 2>&1 | tee /tmp/pf02-s462-modverify.log   # all modules verified
 ```
 
-## Done Criteria
+Evidence: every `exit=` is 0 (except the `rg` line, which must print nothing). Both test logs have FAIL=0, SKIP=0 and PASS>0. The model log shows `TestEnumListsMatchOpenAPI` with its 20 subtests passing.
 
-- [x] 5 required modules in go.mod with go.sum entries; `go mod verify` passes; `go-toolchain.json` records go version, each selected compatible `go get` with exit code 0 and resolved version, and the verify result
-- [x] Schema contains every table above; migration idempotent
-- [x] Model and fixture types compile with documented JSON tags; every file < 1000 lines
-- [x] Tests pass across all Go packages; focused PF-02 tests pass and gofmt is clean.
+### Done Criteria (session 462)
+
+- [ ] `enums.go` has the 21 Go lists and constants named above; no invented or non-kickflow constant remains (rg check empty)
+- [ ] `RouteTarget.GradeSymbol` is `*string` `json:"gradeSymbol"`; `WorkflowSection` has `Code`, `Conditional`, `CombinationType` in the stated order
+- [ ] `TestEnumListsMatchOpenAPI` (20 rows), `TestWebhookEventTypesMatchReference` and `TestEnumListsHaveNoDuplicates` pass uncached
+- [ ] `validate.go` uses the Go lists for every enum check listed in task 5; the `TestEnumRule*` cases pass
+- [ ] Store test seeds use canonical values; `TestModelEnumValuesMatchDesign` removed
+- [ ] build/vet exit 0; gofmt clean; every touched Go file < 1000 lines; progress log has exit status, log path and counts for each command
+
+Earlier criteria (modules, schema, idempotent migration) were satisfied in session 460. They stay satisfied: do not touch them.
 
 ## Execution Protocol
 
