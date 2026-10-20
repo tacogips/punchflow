@@ -128,6 +128,20 @@ Session 464 wave-A findings, carried into session 465 at checkpoint `ea385c7`. E
 | CF-08 | mid | Evidence-reporting misuse tripped the progress gate. An expected non-zero `rg` exit was listed as verification, and remaining assigned work was reported as findings and risks. | The evidence-reporting rule (s465 rule 3), stated in every plan's Shared Execution Protocol | every plan | no s465 report lists an expected non-zero command in `verification`, and remaining work appears only as `implementationIncomplete: true` plus `implPlanUpdates` |
 | CF-09 | high | Baseline failure at `ea385c7`: `TestLoadExportRoundTripMinimal` (`internal/fixtures/fixtures_test.go:56`). The CF-04 UTC export now writes tenant timestamps in UTC, but `testdata/minimal/tenant.json` still has `+09:00`. The test file and the minimal testdata belonged to accepted PF-06. | Transfer `fixtures_test.go` and the 14 `testdata/minimal/*.json` files to PF-16; rewrite the minimal tenant timestamps to the same instant in UTC | PF-16 | the whole `go test -count=1 -v ./internal/fixtures/...` passes, including `TestLoadExportRoundTripMinimal` and `TestDefaultRoundTrip`, both byte-identical |
 
+
+### Closing notes (session 467)
+
+- CF-01: Closed in session 467; `TestRepoInvariants/cf01_ban` and `negative_tests_present` pass (gate line 7), and the line 14 ban grep exits 1. Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-02: Closed in session 467; `TestGeneralMasterItemsAndInputIDHop` and `TestDefaultRoundTrip` pass (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-03: Closed in session 467; `punchflow/internal/auth` reports `ok` (gate line 9). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-04: Closed in session 467; `TestDefaultRoundTrip` passes (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-05: Closed in session 467; `TestDoRawResolvesRelativeURLs` passes (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-06: Closed in session 467; `go build ./...` and `go vet ./...` exit 0 (gate lines 5-6), and every package reports `ok` (line 9). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-07: Closed in session 467; `TestSubmitMultiStepApproveCompletes`, `TestStepConditionAndFallback`, `TestConditionOperators`, `TestFormFieldTypes` and `TestUpdateFormMerge` pass (gate line 7), and `punchflow/internal/engine` reports `ok` (line 9). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-08: Closed in session 467; the s466 and s467 manifest `verification` arrays contain only must-pass forms (gate line 8 and lines 13-16). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- CF-09: Closed in session 467; `TestLoadExportRoundTripMinimal` passes (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+- PF-26 split: Closed in session 467; `TestContractLiveTickets`, `TestContractLiveCommentsFiles`, `TestContractLiveUsersGrades`, `TestContractLiveOrgChartsTeams`, `TestContractLiveMasters`, `TestContractLiveProxiesRoles` and `TestContractOperationCoverage` (96 unique operations) pass (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
+
 ### Intentional divergences from kickflow
 
 These are scope cuts, not inferences. Each is visible to API clients only as a constant value.

@@ -37,62 +37,48 @@ Large features are split into multiple related plans with cross-references.
 
 ## Active Plans (punchflow dummy kickflow server)
 
-Design source of truth: `design-docs/specs/architecture.md` and the documents it links (coverage matrix `design-docs/specs/design-api-coverage.md`, INF/DIV register `design-docs/specs/notes.md`).
-
-Session 463 continuation (from checkpoint commit f82e374). The session-462 integration review accepted PF-01..PF-13 and PF-17. They are external dependencies (`acceptedDependencies` in `punchflow-kickflow-dummy-s463-dispatch.json`): do not re-implement or re-dispatch them, and keep them green. The 13 remaining plans each carry a "Continuation (session 463)" section. It overrides the session-462 log names, wave and Done Criteria. The tasks, tests, Path Declarations and session-462 corrections stay authoritative unless the s463 section says otherwise. For wave and dependencies, this table and the s463 section are authoritative over the `**Wave**`/`**Depends On**` header line. Design: `design-docs/specs/architecture.md`, "Path-ownership and fanout rule (session 463)" and "Continuation order (session 463)".
-
-| Plan | Wave (s463) | Depends On | Status |
-|------|------|------------|--------|
-| [pf-01-foundation-primitives](./active/pf-01-foundation-primitives.md) | accepted | - | Accepted (f82e374) |
-| [pf-02-data-contract](./active/pf-02-data-contract.md) | accepted | - | Accepted (f82e374) |
-| [pf-03-web-scaffold](./active/pf-03-web-scaffold.md) | accepted | - | Accepted (f82e374) |
-| [pf-04-httpx](./active/pf-04-httpx.md) | accepted | - | Accepted (f82e374) |
-| [pf-05-auth-core](./active/pf-05-auth-core.md) | accepted | - | Accepted (f82e374) |
-| [pf-06-fixtures-loader](./active/pf-06-fixtures-loader.md) | accepted | - | Accepted (f82e374) |
-| [pf-07-fixtures-default-keycloak](./active/pf-07-fixtures-default-keycloak.md) | accepted | - | Accepted (f82e374) |
-| [pf-08-present-core](./active/pf-08-present-core.md) | accepted | - | Accepted (f82e374) |
-| [pf-09-webhook-delivery](./active/pf-09-webhook-delivery.md) | accepted | - | Accepted (f82e374) |
-| [pf-10-api-contracts](./active/pf-10-api-contracts.md) | accepted | - | Accepted (f82e374) |
-| [pf-11-web-tickets](./active/pf-11-web-tickets.md) | accepted | - | Accepted (f82e374) |
-| [pf-12-web-readviews](./active/pf-12-web-readviews.md) | accepted | - | Accepted (f82e374) |
-| [pf-13-web-integration](./active/pf-13-web-integration.md) | accepted | - | Accepted (f82e374) |
-| [pf-14-engine](./active/pf-14-engine.md) | - | - | Superseded by PF-14a/b/c (s465; not dispatched) |
-| [pf-14a-engine-lifecycle](./active/pf-14a-engine-lifecycle.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
-| [pf-14b-engine-routing](./active/pf-14b-engine-routing.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
-| [pf-14c-engine-forms-create](./active/pf-14c-engine-forms-create.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
-| [pf-15-present-ticket-payloads](./active/pf-15-present-ticket-payloads.md) | A | PF-06, PF-07, PF-08, PF-09 (accepted) | Ready |
-| [pf-16-server-cli-testutil](./active/pf-16-server-cli-testutil.md) | A | PF-04..PF-10 (accepted) | Ready |
-| [pf-17-auth-oidc](./active/pf-17-auth-oidc.md) | accepted | - | Accepted (f82e374) |
-| [pf-18-api-users-grades](./active/pf-18-api-users-grades.md) | B1 | PF-08, PF-16 | Ready |
-| [pf-19-api-proxies-org](./active/pf-19-api-proxies-org.md) | B1 | PF-08, PF-16 | Ready |
-| [pf-20-api-definitions-masters](./active/pf-20-api-definitions-masters.md) | B1 | PF-06, PF-08, PF-16 | Ready |
-| [pf-21-api-roles-audit](./active/pf-21-api-roles-audit.md) | B1 | PF-08, PF-16 | Ready |
-| [pf-22-api-tickets](./active/pf-22-api-tickets.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
-| [pf-23-api-comments-files](./active/pf-23-api-comments-files.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
-| [pf-24-admin-api](./active/pf-24-admin-api.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
-| [pf-25-readme](./active/pf-25-readme.md) | A | PF-07 (accepted) | Ready |
-| [pf-26-contract-smoke](./active/pf-26-contract-smoke.md) | - | - | Superseded by PF-26a..PF-26f (s466; not dispatched) |
-| [pf-26a-contract-tickets](./active/pf-26a-contract-tickets.md) | A (s466) | none (accepted at a2a82de) | Ready |
-| [pf-26b-contract-comments-files](./active/pf-26b-contract-comments-files.md) | A (s466) | none (accepted at a2a82de) | Ready |
-| [pf-26c-contract-users-grades](./active/pf-26c-contract-users-grades.md) | A (s466) | none (accepted at a2a82de) | Ready |
-| [pf-26d-contract-orgcharts-teams](./active/pf-26d-contract-orgcharts-teams.md) | A (s466) | none (accepted at a2a82de) | Ready |
-| [pf-26e-contract-masters](./active/pf-26e-contract-masters.md) | A (s466) | none (accepted at a2a82de) | Ready |
-| [pf-26f-contract-proxies-roles](./active/pf-26f-contract-proxies-roles.md) | A (s466) | none (accepted at a2a82de) | Ready |
-| [pf-27-finalize](./active/pf-27-finalize.md) | B (s466; serial, last) | PF-26a..PF-26f | Ready |
-
-Session 466: PF-01..PF-25, including PF-14a/b/c, are accepted at `a2a82de`. Status cells above that still read "Ready" for those plans are stale. PF-27 sets them to Completed when it archives. The Wave column for PF-26a..PF-27 follows rule 16.
-
-Dispatch manifests:
-- `punchflow-kickflow-dummy-s466-dispatch.json` is the current and final manifest. It stays in `active/` after the run, and the operator archives it.
-- `punchflow-kickflow-dummy-s465-dispatch.json` is superseded. PF-27 archives it last.
-- `punchflow-kickflow-dummy-s463-dispatch.json` and `punchflow-kickflow-dummy-s464-dispatch.json` are superseded. PF-27 archives them.
-- `punchflow-kickflow-dummy-s460-dispatch.json` and `punchflow-kickflow-dummy-s462-dispatch.json` are historical. They remain the path-declaration sources for accepted plans (s460: PF-01, PF-03, PF-11, PF-12, PF-13; s462: PF-02, PF-04..PF-10, PF-17). PF-27 archives both.
+All plans are completed and archived in session 467. `active/` holds only `punchflow-kickflow-dummy-s467-dispatch.json`, the final manifest. The s460 and s462..s466 manifests are in `completed/`.
 
 ## Completed Plans
 
 | Plan | Completed | Design Reference |
 |------|-----------|------------------|
-| (No completed plans yet) | - | - |
+| [pf-01-foundation-primitives](./completed/pf-01-foundation-primitives.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-02-data-contract](./completed/pf-02-data-contract.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-03-web-scaffold](./completed/pf-03-web-scaffold.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-04-httpx](./completed/pf-04-httpx.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-05-auth-core](./completed/pf-05-auth-core.md) | 2026-10-21 (s467) | `design-docs/specs/design-auth-admin.md` |
+| [pf-06-fixtures-loader](./completed/pf-06-fixtures-loader.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-07-fixtures-default-keycloak](./completed/pf-07-fixtures-default-keycloak.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-08-present-core](./completed/pf-08-present-core.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-09-webhook-delivery](./completed/pf-09-webhook-delivery.md) | 2026-10-21 (s467) | `design-docs/specs/design-webhooks.md` |
+| [pf-10-api-contracts](./completed/pf-10-api-contracts.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-11-web-tickets](./completed/pf-11-web-tickets.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-12-web-readviews](./completed/pf-12-web-readviews.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-13-web-integration](./completed/pf-13-web-integration.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-14-engine](./completed/pf-14-engine.md) | Superseded (archived s467) | `design-docs/specs/design-approval-engine.md` |
+| [pf-14a-engine-lifecycle](./completed/pf-14a-engine-lifecycle.md) | 2026-10-21 (s467) | `design-docs/specs/design-approval-engine.md` |
+| [pf-14b-engine-routing](./completed/pf-14b-engine-routing.md) | 2026-10-21 (s467) | `design-docs/specs/design-approval-engine.md` |
+| [pf-14c-engine-forms-create](./completed/pf-14c-engine-forms-create.md) | 2026-10-21 (s467) | `design-docs/specs/design-approval-engine.md` |
+| [pf-15-present-ticket-payloads](./completed/pf-15-present-ticket-payloads.md) | 2026-10-21 (s467) | `design-docs/specs/design-webhooks.md` |
+| [pf-16-server-cli-testutil](./completed/pf-16-server-cli-testutil.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-17-auth-oidc](./completed/pf-17-auth-oidc.md) | 2026-10-21 (s467) | `design-docs/specs/design-auth-admin.md` |
+| [pf-18-api-users-grades](./completed/pf-18-api-users-grades.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-19-api-proxies-org](./completed/pf-19-api-proxies-org.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-20-api-definitions-masters](./completed/pf-20-api-definitions-masters.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-21-api-roles-audit](./completed/pf-21-api-roles-audit.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-22-api-tickets](./completed/pf-22-api-tickets.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-23-api-comments-files](./completed/pf-23-api-comments-files.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-24-admin-api](./completed/pf-24-admin-api.md) | 2026-10-21 (s467) | `design-docs/specs/design-auth-admin.md` |
+| [pf-25-readme](./completed/pf-25-readme.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [pf-26-contract-smoke](./completed/pf-26-contract-smoke.md) | Superseded (archived s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-26a-contract-tickets](./completed/pf-26a-contract-tickets.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-26b-contract-comments-files](./completed/pf-26b-contract-comments-files.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-26c-contract-users-grades](./completed/pf-26c-contract-users-grades.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-26d-contract-orgcharts-teams](./completed/pf-26d-contract-orgcharts-teams.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-26e-contract-masters](./completed/pf-26e-contract-masters.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-26f-contract-proxies-roles](./completed/pf-26f-contract-proxies-roles.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
+| [pf-27-finalize](./completed/pf-27-finalize.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -103,17 +89,13 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Depends On |
 |-------|--------|------------|
-| A | READY | accepted PF-01..PF-25 (incl. PF-14a/b/c) at a2a82de (session 466) |
-| B | BLOCKED | PF-26a..PF-26f accepted |
+| A | COMPLETED | - |
+| B | COMPLETED | A |
 
 ### Phase to Plans Mapping
 
 ```
-PHASE_TO_PLANS = {   # session 466 final continuation (manifest punchflow-kickflow-dummy-s466-dispatch.json); PF-01..PF-25 accepted and not dispatched; pf-14-engine.md and pf-26-contract-smoke.md are superseded indexes
-  "A": ["pf-26a-contract-tickets.md", "pf-26b-contract-comments-files.md", "pf-26c-contract-users-grades.md",
-        "pf-26d-contract-orgcharts-teams.md", "pf-26e-contract-masters.md", "pf-26f-contract-proxies-roles.md"],
-  "B": ["pf-27-finalize.md"]
-}
+PHASE_TO_PLANS = {}  # all plans completed (session 467); final manifest punchflow-kickflow-dummy-s467-dispatch.json
 ```
 
 ## Shared Execution Protocol (applies to every pf-* plan)
