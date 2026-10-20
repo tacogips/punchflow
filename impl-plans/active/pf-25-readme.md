@@ -94,9 +94,25 @@ rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|
 - [ ] All 9 sections present; `grep -c MISSING /tmp/pf25-s463-grep.log` prints 0; the banned-enum rg over README.md prints nothing
 - [ ] The progress log has exit status and log path for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B. It starts only after PF-14, PF-15 and PF-16 are accepted. **Depends on**: PF-07 (accepted at `44e40cc`) and PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json`. Paths are unchanged: `README.md` and this plan file. Logs are `/tmp/pf25-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-25/attempt-<n>/`.
+
+**Intent**: unchanged. Write `README.md` as specified, including the session-463 points: uncached evidence commands, flag names taken from `command.md` and `internal/cli/config.go`, persona tokens and e-mails from the fixtures and the realm.
+
+**Session-464 notes**:
+- Read persona tokens and e-mails from the canonical `fixtures/default/tokens.json` and `users.json`, as rewritten by PF-16 in wave A. Values are unchanged; only order and dropped zero-value keys may differ.
+- Never edit any file other than `README.md` and this plan file.
+
+### Done Criteria (session 464)
+
+- [ ] All 9 sections present; `grep -c MISSING /tmp/pf25-s464-grep.log` prints 0; the banned-enum rg over README.md prints nothing
+- [ ] The progress log has exit status and log path for every command
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`.
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13).
 
 ## Progress Log
 

@@ -193,9 +193,31 @@ Manual check left to the user (documented in README by PF-25): Keycloak login vi
 - [ ] `mise.toml` `test` task is uncached; `go-toolchain.json` and `web/toolchain.json` each have one appended record.
 - [ ] 27 plans and the s460/s462 manifests are in `impl-plans/completed/`. `impl-plans/README.md` is updated. The s463 manifest is untouched in `active/`.
 
+## Continuation (session 464) - read first; overrides the session-463 log names, archival list and Done Criteria above
+
+**Wave**: D (serial, last). **Depends on**: every other plan; accepted PF-01..PF-13 and PF-17 are at `44e40cc`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json`. This plan's `writePaths` (35, of which 3 are `artifactRoots`) and `sharedPaths` (37) give 69 source entries with no directory entry. They are authoritative.
+
+**Session-464 changes**:
+1. Log names: replace every `-s463-` in the Verification block above with `-s464-`. Copy the logs to `tmp/punchflow-kickflow-dummy-s464/PF-27/attempt-<n>/`. The 16 commands are otherwise identical; the manifest `verification` array has them.
+2. Archival:
+   - Archive the 27 plans and three historical manifests: s460, s462 and s463. Move s463 last, after the gate passes, as `impl-plans/completed/punchflow-kickflow-dummy-s463-dispatch.json`.
+   - The s464 manifest stays in `impl-plans/active/`. Name it in `impl-plans/README.md` as the final manifest that the operator archives.
+3. `design-docs/specs/notes.md`: append closing notes for CF-01, CF-02 and CF-03 under "Status at session 463", and for CF-04, CF-05 and CF-06 below the session-463 wave-A findings table. Cite the evidence:
+   - CF-04: PF-16 jqnorm and roundtrip logs plus `TestDefaultRoundTrip` in the full gate
+   - CF-05: `TestDoRawResolvesRelativeURLs` in the full gate
+   - CF-06: the wave progress logs' compile-gate lines
+4. Repair routing: a failing gate in a foreign file goes to its owner from the s464 ownership index (`ownershipTransfers[]` first). PF-27 never edits it, and re-runs its whole gate after each routed repair.
+
+### Done Criteria (session 464)
+
+- [ ] Verification lines 1-16 (with `-s464-` logs) passed in one final uninterrupted run, each with exit status, log path and counts. Full gate: FAIL=0, SKIP=0, zero `(cached)`, every package `ok`, and `TestRepoInvariants` (4 subtests), `TestEmbeddedBuild`, `TestServeSmoke` and `TestDefaultRoundTrip` PASS.
+- [ ] CF-01..CF-06 closing notes appended to `notes.md`; the `mise.toml` `test` task is uncached; `go-toolchain.json` and `web/toolchain.json` each have one appended record.
+- [ ] 27 plans and the s460/s462/s463 manifests are in `impl-plans/completed/`; `impl-plans/README.md` is updated; the s464 manifest is untouched in `active/`.
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`, except that this plan runs `go mod tidy` and builds `web/dist/app` and `./punchflow`. Record pre/post `shasum -a 256` for every shared file you edit. Do not commit (the workflow commits).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13), except that this plan runs `go mod tidy` and builds `web/dist/app` and `./punchflow`. Record pre/post `shasum -a 256` for every shared file you edit. Do not commit (the workflow commits).
 
 ## Progress Log
 

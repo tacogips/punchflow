@@ -140,9 +140,32 @@ rg -n 'not implemented' internal/api/v1/categories.go internal/api/v1/folders.go
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, the CF-02 create/update/get tests PASS, and the `not implemented` rg prints nothing
 - [ ] The progress log has the intent snapshot, pre/post hashes of the four shared files, the INF candidates, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B. It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-06, PF-08 (accepted at `44e40cc`) and PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (`writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-api-coverage.md` operation rows 43-55 and 73-82; `architecture.md#fixtures`, the general master item input ID data flow (CF-02).
+
+**Intent**: unchanged. Implement 23 operations (categories, folders, workflows/routes, general masters) and close the CF-02 API hop.
+
+**Session-464 changes**:
+1. `internal/api/v1/categories.go`, `folders.go`, `definitions.go` and `general_masters.go` are in this plan's `writePaths`, transferred from PF-10. `sharedPaths` is empty. Replace bodies only. Never edit `api.go`, `routes.go`, `routes_test.go`, `internal/testutil/*`, `internal/server/*`, `internal/fixtures/*` or `fixtures/default/*` (PF-16).
+2. Fixture ids: PF-16 rewrote `fixtures/default/*.json` in canonical form in wave A. Only array order changed and zero-value keys were dropped; ids and codes are unchanged. Tests that read `inputs[].id` from `fixtures/default/general-masters.json` must parse the file, not hard-code positions.
+3. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/api/v1/...`.
+   - Log each result.
+   - Prefixes: unexported identifiers start with `pf20`. New exported store functions start with `Category`, `Folder`, `Workflow`, `Route` or `GeneralMaster`.
+4. Guard: the manifest `-run 'TestPF10'` line must PASS. Logs are `/tmp/pf20-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-20/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; the CF-02 create/update/get tests PASS; PF10 guard PASS; the `not implemented` rg empty
+- [ ] INF candidates recorded in the progress log; pre/post hashes of the four transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-10 (stub creator).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). Handler files were transferred from PF-10 in session 464.
 
 ## Progress Log
 

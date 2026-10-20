@@ -146,9 +146,41 @@ wc -l internal/api/v1/ticket*.go internal/store/ticket_queries.go | sort -n | ta
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, the 10 ticket events asserted by `eventType`, the `not implemented` rg empty, and every file < 1000 lines
 - [ ] The progress log has the intent snapshot, pre/post hashes of the shared files, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B. It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-14 (engine), PF-15 (ticket presenters and payloads), PF-16 (testutil, receiver, server).
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (`writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-api-coverage.md` operation rows 56-70 and the webhook event matrix; `design-approval-engine.md`; `design-webhooks.md`; INF-11, INF-12, INF-24, INF-34, INF-36 in `notes.md`.
+
+**Intent**: unchanged. Implement 15 ticket operations. Prove the ten `ticket_*` events through HTTP plus the testutil receiver, with verified `X-Kickflow-Signature`.
+
+**Session-464 changes**:
+1. `internal/api/v1/tickets.go`, `ticket_actions.go` and `ticket_viewers.go` are in this plan's `writePaths`, transferred from PF-10. `sharedPaths` is empty. Replace bodies only.
+2. Use the engine, presenter and testutil contracts exactly as PF-14/PF-15/PF-16 left them. Read their progress logs for the final exported names. Never edit:
+   - `internal/engine/*`
+   - `internal/present/*`
+   - `internal/webhook/*`
+   - `internal/testutil/*`
+   - `internal/server/*`
+   - `api.go`, `routes.go`, `routes_test.go`
+
+   A missing behavior there is a reconciliation request to PF-14, PF-15 or PF-16 (README rule 12).
+3. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/api/v1/...`.
+   - Log each result.
+   - Prefixes: unexported identifiers start with `pf22`. New exported store functions start with `TicketQuery`, which is not used by PF-15's `Ticket*` read helpers: grep first.
+4. Webhook tests call `Env.DeliverWebhooks` and use the fake clock. Never `time.Sleep`, and never start the dispatcher.
+5. Guard: the manifest `-run 'TestPF10'` line must PASS. Logs are `/tmp/pf22-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-22/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; the 10 ticket events asserted by `eventType`; PF10 guard PASS; the `not implemented` rg empty; every file < 1000 lines
+- [ ] Pre/post hashes of the transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-10 (stub creator).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). Handler files were transferred from PF-10 in session 464.
 
 ## Progress Log
 

@@ -109,9 +109,37 @@ rg -n 'not implemented' internal/api/v1/comments.go internal/api/v1/files.go int
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0 in both the files and API logs, and the `not implemented` rg prints nothing
 - [ ] The progress log has the intent snapshot, pre/post hashes of the three shared files, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B. It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-14, PF-15, PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (`writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-api-coverage.md` operation rows 71-72 and 91-95; `architecture.md#files`; INF-22, INF-26, INF-27, INF-30, INF-37 and INF-39 in `notes.md`.
+
+**Intent**: unchanged. Implement 7 operations (comments, files), the signed download handler, and `comment_created`/`comment_updated` delivery through the receiver. There is no `comment_deleted` event.
+
+**Session-464 changes**:
+1. `internal/api/v1/comments.go`, `internal/api/v1/files.go` and `internal/files/files.go` are in this plan's `writePaths`, transferred from PF-10. `sharedPaths` is empty.
+   - Keep the `files.New/Save/SignedURL/DownloadHandler/MaxBytes` signatures, because `internal/server/server.go` (PF-16) calls them.
+   - Set `present.AttachmentURL` in `New`.
+2. Never edit `internal/engine/*`, `internal/present/*`, `internal/webhook/*`, `internal/testutil/*`, `internal/server/*`, `api.go`, `routes.go` or `routes_test.go`. Missing behavior there is a reconciliation request to its owner.
+3. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet <pkg>`.
+   - Log each result.
+   - Prefixes: unexported identifiers start with `pf23`. New exported store functions start with `File`.
+4. Guards:
+   - The whole `./internal/files/...` package must pass.
+   - The manifest `-run 'TestPF10'` line must PASS.
+   - Logs are `/tmp/pf23-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-23/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0 in both the files and API logs; PF10 guard PASS; the `not implemented` rg empty
+- [ ] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. Shared paths: `internal/api/v1/comments.go`, `internal/api/v1/files.go`, `internal/files/files.go` (stubs from PF-10).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `internal/api/v1/comments.go`, `internal/api/v1/files.go` and `internal/files/files.go` were transferred from PF-10 in session 464.
 
 ## Progress Log
 

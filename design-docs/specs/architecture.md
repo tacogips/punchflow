@@ -117,6 +117,19 @@ Rules: dependencies point downward only; small interfaces at consumer side (`kft
   - Edited migration: `0001_init.sql` was changed in place, which breaks the forward-only rule. That is acceptable only because nothing has been released (all commits are local). A database created before 410d3d8 must be deleted or `reset`.
 - Operations: `load` (into an empty DB), `reset` (delete all rows in FK-safe order and uploaded files, then load), `export` (definitions and org data only; tickets, comments, files, audit logs, sessions and webhook history are state, not fixtures). Runtime-issued tokens are not exported (no plaintext); fixture-seeded tokens are (INF-04).
 - Canonical form: export writes 2-space indented JSON with a fixed key order and arrays sorted by `code` (ordered collections such as sections, fields and steps keep their order). The committed default fixtures are stored in canonical form, so the round-trip test asserts `export(load(fixtures/default))` is byte-identical to the files, and `export(load(export(...)))` is stable.
+- Canonical form, precise definition (session 464, CF-04): the canonical bytes are whatever `fixtures.Export` writes. The exporter's ordering is not changed. Grades, users, categories, general masters, routes and workflows are sorted by `code`. Org charts, roles, proxies, tokens and webhooks are sorted by `id`. Teams, memberships, folders, master fields and master items keep load order: fixture order, with a parent inserted before its children. Keys follow the field order of `internal/fixtures/types.go`, which is frozen. `omitempty` fields (in `internal/fixtures/types.go` and in the `internal/model` definition structs) that hold a Go zero value are left out: `null`, `false`, `""`, `[]` or `{}`. Examples: `startsOn`, `endsOn`, `description`, `parentCode`, `descendants` (`model.RouteTarget`, `false`), `gradeCodes`, `teamCode`. This bullet replaces the "arrays sorted by `code`" wording of the bullet above wherever the two differ. Two loader/exporter rules make the canonical form a fixed point:
+  - Tenant `createdAt`/`updatedAt` are fixture data. `Load` and `Reset` store the values from `tenant.json` and use the load clock only when a value is absent. `Export` writes them in UTC RFC 3339 (`2026-10-20T00:00:00Z`), whatever the machine time zone.
+    - Today the loader writes the clock time, and `store.Time` returns local time.
+    - Both are fixed in `internal/fixtures/load.go` and `internal/fixtures/export.go` only: export converts with `.UTC()`. `internal/store/ids.go` (PF-02) is not changed.
+    - No other row's timestamps are exported.
+  - `fixtures/default/*.json` are rewritten to the exporter output.
+    - The rewrite may only reorder arrays and drop `omitempty` keys whose value is a Go zero value (`null`, `false`, `""`, `[]`, `{}`).
+    - It is accepted only when each of the 14 files is equal in its `44e40cc` version and its new version after this normalization, compared with `diff` and expected to print nothing: `jq -S 'walk(if type=="object" then with_entries(select(.value!=null and .value!=false and .value!="" and .value!=[] and .value!={})) else . end) | walk(if type=="array" then sort else . end)'`. The old version is read with `git show 44e40cc:fixtures/default/<file>`.
+    - The filter removes those values recursively (bottom-up), then sorts every array.
+    - No integer or interface `omitempty` field drops a zero today: `model` has none, and `any` is omitted only when nil. So `0` is not normalized.
+    - Ids, codes, names, enum values and references never change, so the Keycloak realm users and the persona tokens stay valid.
+    - `internal/model/definition.go` and every JSON tag stay unchanged (PF-02, not transferred).
+    - `TestDefaultRoundTrip` keeps its byte-identical assertion.
 - Default content (must exist): tenant `punchflow-dev` (plan enterprise); at least 5 grades; at least 8 users including one `suspended` and one `invited`; one active org chart with at least 6 teams over 3 levels and leaders, plus one inactive chart; roles Super Admin (all permissions), Ticket Admin (`ticket_read`, `ticket_write`), Master Editor (`master`, `master_read`), Integration Admin (`integration`); 3 categories; root folder plus 2 children; 2 general masters with custom fields and items (one expired); at least 4 routes; at least 3 workflows (`expense-claim`, `purchase-request`, `leave-request`) that together exercise every `stepType`, all `actionType`s, branch types `always`/`field`/`field_otherwise` plus a refusal branch, all step condition types, fallbacks `skip` and `higher_manager`, a parallel group with an "any" step and an "all" step, one slip section, one workflow with `commentingEnabled: false`, one with `availableToEveryone: false`; one proxy approver and one proxy applicant registration; dev tokens: PATs for the super admin, a manager, a finance approver and a plain employee, and one service account token. Token values are obviously fake, low-entropy dev strings (for example `pf_pat_dev_admin`) documented in the README.
 
 ### Files
@@ -198,6 +211,10 @@ This rule fixes two failures from the previous run: test evidence came from the 
 5. Foreign breakage is a blocker, not a fix. If a scoped command fails because of a file owned by another plan, the plan records the file:line and the owning plan as a reconciliation blocker and does not edit that file. Wave partitioning (below) keeps plans that share a package in dependency order, so this should be rare.
 6. Accepted plans stay green. Session 463 accepted set: PF-01..PF-13 and PF-17 at commit `f82e374`. They are not re-implemented or re-dispatched. Their packages are covered by the PF-27 full gate (`go test -count=1 -v ./...` includes `internal/kftime`, `kferr`, `build`, `model`, `store`, `httpx`, `auth`, `fixtures`, `present`, `webhook`, `api/v1` and root `.`; `cd web && bun test` covers PF-03/11/12/13). PF-27 records their PASS counts per package. A remaining plan whose scoped command fails inside an accepted package follows rule 5.
 7. Fresh log names. Session 463 logs are `/tmp/<plan-id>-s463-<step>.log`, and per-attempt evidence copies go under `tmp/punchflow-kickflow-dummy-s463/<planId>/attempt-<n>/`. A session-462 log is never evidence for session 463.
+8. Session 464 values (these override items 6 and 7):
+   - Accepted set: PF-01..PF-13 and PF-17 at commit `44e40cc`. That commit adds the operator's PF-06 repair (`internal/fixtures/load.go` chart-local team lookup and the new `internal/fixtures/load_orgcharts_test.go`) and partial PF-14/PF-16 work.
+   - Logs are `/tmp/<plan-id>-s464-<step>.log`. Evidence copies go under `tmp/punchflow-kickflow-dummy-s464/<planId>/attempt-<n>/`.
+   - Logs named `-s462-` or `-s463-`, and anything under `tmp/punchflow-kickflow-dummy-s463/`, are history, not evidence.
 
 #### Path-ownership and fanout rule (session 463)
 
@@ -238,6 +255,50 @@ Session 462 stopped at dispatch. PF-27 declared whole source trees (`internal`, 
 
 The `rg` commands in `notes.md` remain manual cross-checks.
 
+#### Shared-tree compile and ownership-transfer rule (session 464)
+
+Session 463's wave A ended with PF-14, PF-15 and PF-16 all blocked. The evidence is under `tmp/punchflow-kickflow-dummy-s463/PF-1{4,5,6}/attempt-1/`. The causes, recorded as CF-04..CF-06 in `notes.md`:
+
+- PF-15 saved `internal/webhook/payload.go` with references to `present.WebhookTenant`, `present.Comment`, `present.TicketWithStep` and `present.TicketDetail` before it defined them. `go build ./...` then failed for every sibling. The file was restored to `f82e374` in `44e40cc`.
+- PF-14 briefly left `internal/store/tickets.go:56` with `undefined: time`, which broke PF-15's vet and test runs in the shared package.
+- Accepted PF-06's loader failed every fixture-loading test with `UNIQUE constraint failed: team_memberships`. The operator fixed it in `44e40cc`.
+- PF-16's `TestDefaultRoundTrip` needed edits to files it did not own. The s463 tie-break also contradicted the working practice: by the tie-break `payload.go` belongs to PF-09, while PF-16's reconciliation request routed it to PF-15.
+
+Every s464 plan follows these rules:
+
+1. Define before reference. A new type or function is written completely, in a file that compiles, before any file that references it is saved. PF-15 runs in this order:
+   1. Write its `internal/present` files and `internal/store/read_tickets.go`.
+   2. Check that `go build ./...` exits 0.
+   3. Edit `internal/webhook/payload.go` in a single write that references only symbols that already exist.
+2. Compile gate after every write:
+   - After writing a non-test `.go` file, run `go build ./...`.
+   - After writing a `_test.go` file, run `go vet <that package>`. This compiles the tests that siblings will run.
+   - If the failure is in a file you just wrote, fix it before any other edit. Never start a verification step, or end the turn, while one of your files breaks the build.
+   - Contract stubs (`engine.go`, `payload.go`, `files.go`, the `internal/api/v1` handler stubs, the admin stubs) keep every exported identifier and signature. Only bodies change.
+3. Sibling breakage. A failure in a file owned by another in-flight plan is checked again at your next verification step. It becomes a reconciliation request (verification rule item 5) only if it is still there at your final verification. You never edit that file.
+4. One owner per path, by transfer.
+   - When a remaining plan must edit a file that an accepted plan declares in `writePaths`, the s464 manifest moves that file into the remaining plan's `writePaths`. It also records the move in a top-level `ownershipTransfers[]` list as `{path, fromPlan, toPlan, declaringManifest, reason, guardVerification}`.
+   - A transfer overrides the s460/s462 declaration in the ownership index. A repair of a transferred file therefore goes to the receiving plan.
+   - The receiving plan's verification runs the giving plan's tests for that package, uncached (`guardVerification`). That keeps accepted behavior green.
+   - The same applies to stub files created by an earlier-wave remaining plan and filled by a later one: the PF-16 admin stubs go to PF-24.
+   - After the transfers, `sharedPaths` is only for a file that two plans in the same wave both edit. It needs a `sharedPathNote`, and the plan author expects none in s464.
+5. Complete transfer list for s464:
+
+   | Paths | From -> to | Guard verification |
+   |---|---|---|
+   | The 14 `fixtures/default/*.json` files, which replace PF-16's `fixtures/default` directory entry (`.gitkeep` stays PF-01) | PF-07 -> PF-16 | whole `./internal/fixtures/...`; the CF-01 ban grep; the `jq` normalization equality from `#fixtures` (drops `null`, `false`, `""`, `[]` and `{}`) |
+   | `internal/fixtures/load.go`, `internal/fixtures/export.go` | PF-06 -> PF-16 | whole `./internal/fixtures/...`, including `load_orgcharts_test.go`, which stays PF-06's |
+   | `internal/cli/cli.go`, `internal/cli/cli_test.go` | PF-01 -> PF-16 | whole `./internal/cli/...` |
+   | `internal/engine/engine.go` | PF-10 -> PF-14 | whole `./internal/engine/...` |
+   | `internal/webhook/payload.go` | PF-09 -> PF-15 | whole `./internal/webhook/...` |
+   | `internal/files/files.go` | PF-10 -> PF-23 | whole `./internal/files/...` |
+   | The `internal/api/v1` handler stub files each wave-B plan fills (today's `sharedPaths` of PF-18..PF-23) | PF-10 -> that plan | the plan's `-run` pattern, plus `-run 'TestPF10'` (PF-10's `TestPF10OperationsMatchCoverageMatrix` and `TestPF10DispatchPatternsAndCatchAll`) |
+   | `internal/admin/{tokens,service_accounts,webhooks,tenant,faults,fixtures}.go` (present at `44e40cc`) | PF-16 -> PF-24 | whole `./internal/admin/...` |
+
+6. Fanout. The transfers move entries between lists and do not add files. PF-16 drops `fixtures/default` (15 entries) and the six admin stubs, and gains 16 file entries. PF-27 now also archives the s463 manifest: about 71 entries, all of them files. Every plan stays well under 300.
+7. Manifests. `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` supersedes the s463 manifest. Its `ownershipIndex` reads the accepted plans from the s460/s462 manifests, the remaining plans from s464, and then applies `ownershipTransfers[]`. `acceptedDependencies[].commit` is `44e40cc`. The s464 manifest stays in `impl-plans/active/`. PF-27 archives the s460, s462 and s463 manifests as its last step, after its gate passes.
+8. Resume, don't restart. PF-14 and PF-16 continue from their partial files at `44e40cc`. PF-14 has 8 of its 17 tests. PF-16 has its server, CLI, admin skeleton and testutil. For both, the remaining work is what their Done Criteria still leave unchecked. PF-16 must also fix `testutil.Env.DoRaw` (CF-05). It sends a clone of the request with `RequestURI` cleared and a relative URL resolved against `Env.URL`. No testutil helper ever sets `Request.RequestURI` on a client request, because `net/http` rejects it.
+
 ### Delivery waves (input for implementation plans)
 
 | Wave | Work | Depends on |
@@ -262,5 +323,14 @@ Continuation order (session 463, from checkpoint `f82e374`). PF-01..PF-13 and PF
 | D | PF-27 (serial, last) | every other plan done |
 
 Wave B plans share `internal/api/v1` and `internal/store` only through files that the PF-10 or PF-02 stubs already created, or through new files that each plan creates for itself. No plan in wave B edits a router or registration file: the PF-10 `Operations()` table (`routes.go`) is accepted and fixed at 96 entries. Each plan replaces handler bodies in its own declared stub files.
+
+Continuation order (session 464, from checkpoint `44e40cc`). The waves are the s463 waves. Session 463 did not fail because of dependency order. It failed on the shared-tree, ownership and loader problems listed in the session-464 rule section above, so the waves stay and the rules change.
+
+| Wave | Plans | Ready because | Gate before the next wave |
+|---|---|---|---|
+| A | PF-14, PF-15, PF-16 (parallel, under the compile rule; PF-15 uses the define-before-reference order) | PF-01..PF-13 and PF-17 accepted at `44e40cc`; the PF-06 loader repair has landed | every wave-A plan accepted; `go build ./...` exits 0 |
+| B | PF-18, PF-19, PF-20, PF-21, PF-22, PF-23, PF-24, PF-25 (parallel) | PF-14/15/16 accepted: engine, ticket presenters, payloads, testutil, server and admin skeleton | every wave-B plan accepted |
+| C | PF-26 | PF-17 accepted, PF-18..PF-24 accepted | PF-26 accepted |
+| D | PF-27 (serial, last) | every other plan accepted | - |
 
 ---

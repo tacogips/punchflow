@@ -106,9 +106,33 @@ Evidence: exit 0; FAIL=0; SKIP=0. The contract log shows the 96-route test, 96 s
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, >= 109 `TestContract` subtests PASS, and `--- PASS: TestServeSmoke`
 - [ ] Every non-test failure seen during the work is listed under "Reconciliation requests" with its owner and its resolution
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: C (alone). It starts after PF-18..PF-24 are accepted. **Depends on**: PF-17 (accepted at `44e40cc`) and PF-18..PF-24.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json`. Paths are unchanged (10 files). Logs are `/tmp/pf26-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-26/attempt-<n>/`.
+
+**Intent**: unchanged. The contract test covers:
+- 96/96 routes
+- 96/96 schema-validated scenarios
+- the exact 13 webhook payloads
+- `TestServeSmoke`
+
+**Session-464 changes**:
+1. Repair routing uses the s464 ownership index: `ownershipTransfers[]` first. For example:
+   - a `/v1` handler shape bug goes to the PF-18..PF-23 plan that now owns that handler file, not PF-10
+   - a fixture data bug goes to PF-16
+   - a payload bug goes to PF-15
+2. Compile rule (README rule 13): after each `_test.go` write, run `go vet ./internal/contract/...` (or `./internal/cli/...` for the smoke test) and log it.
+3. Failure handling as in session 463: never loosen the validator, skip a scenario or special-case an operation.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, >= 109 `TestContract` subtests PASS, and `--- PASS: TestServeSmoke`
+- [ ] Every non-test failure seen during the work is listed under "Reconciliation requests" with its s464 owner and its resolution
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`.
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13).
 
 ## Progress Log
 

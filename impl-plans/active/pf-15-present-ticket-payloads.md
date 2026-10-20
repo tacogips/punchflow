@@ -137,9 +137,63 @@ Name the payload tests `TestPayload*` in `payload_test.go`, and the presenter te
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0 in both the present and webhook logs, and the webhook log shows the PF-09 tests passing
 - [ ] The progress log has the intent snapshot, pre/post hashes of `internal/webhook/payload.go`, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: A (parallel with PF-14 and PF-16). **Depends on**: PF-06, PF-07, PF-08, PF-09, all accepted at `44e40cc`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (this plan's `writePaths` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-webhooks.md`; `design-docs/specs/design-api-coverage.md` webhook event matrix; `design-docs/specs/architecture.md` "Shared-tree compile and ownership-transfer rule (session 464)" item 1; `design-docs/specs/notes.md` INF-16, INF-30, INF-33, INF-40, CF-06.
+
+**Intent**: provide the ticket, comment, viewer and tenant presenters and the 13-event webhook payload builder. PF-22/PF-23/PF-24 depend on these in wave B.
+
+**Why s463 failed (CF-06)**: the s463 attempt saved `internal/webhook/payload.go` referencing `present.WebhookTenant`, `present.Comment`, `present.TicketWithStep` and `present.TicketDetail` before any of them existed. `go build ./...` failed for PF-14 and PF-16. `44e40cc` restored `payload.go` to the PF-09 stub. No `internal/present` ticket/comment/viewer/tenant files exist. This is a fresh start for PF-15.
+
+**Ownership change**: `internal/webhook/payload.go` is now in this plan's `writePaths` (transferred from PF-09). Keep `NewPayloads()`, the `Build` signature and default `json.Marshal` HTML escaping. `sharedPaths` is empty.
+
+**Mandatory order (define before reference)**:
+1. Write the intent snapshot, then record the pre-edit hash of `internal/webhook/payload.go`.
+2. Create the presenter files and the store read file, each compiling on its own:
+   - `internal/present/tenant.go` (`WebhookTenant`)
+   - `internal/present/comment.go` (`Comment`, `Comments`, `AttachmentURL` variable)
+   - `internal/present/viewer.go` (`TicketViewers`)
+   - `internal/present/ticket.go` (`TicketSummary`, `Ticket`, `Tickets`, `TicketWithStep`, `TicketsWithStep`, `ProxyUserIDs`)
+   - `internal/present/ticket_detail.go` (`TicketDetail`)
+   - `internal/store/read_tickets.go`
+
+   Run `go build ./...` after each file write and log the exit status. Signatures are the "Contracts" block above.
+3. Write `internal/present/ticket_test.go` and `comment_test.go`. After each, run `go vet ./internal/present/...` and log the result.
+4. Only after `go build ./...` exits 0 with every presenter in place: edit `internal/webhook/payload.go` in one write that references only existing symbols. Run `go build ./...` immediately and log it.
+5. Write `internal/webhook/payload_test.go`, then run `go vet ./internal/webhook/...`.
+
+**Pitfalls**:
+- `internal/store` is shared with PF-14 in the same wave. Exported store functions you add start with `Ticket` or `Comment`; never `Eng`. Unexported helpers start with `pf15`.
+- Imitate the existing presenter style: `internal/present/user.go:User`, `internal/present/workflow.go`, and the `store.Querier` reads in `internal/store/read_*.go`.
+- Do not import `internal/engine`. `Build` uses only the passed Querier and is called inside the engine transaction.
+- `Build` accepts exactly the 13 `model.WebhookEventTypes`. Any other type, including the banned `ticket_submitted` and `comment_deleted`, returns an error.
+- INF-33: never call `SetEscapeHTML(false)` and never add a trailing newline.
+- Never edit PF-08's `internal/present` files, `internal/store/read_*.go` other than `read_tickets.go`, `internal/model/*`, or any `internal/webhook` file other than `payload.go` and `payload_test.go`.
+
+**Test cases**: the "Tests" bullets above, with the INF-33 escaping correction: a title containing `<b>` -> payload bytes contain `<b>` and do not contain raw `<b>`. Plus:
+- a table test over all 13 event types -> each builds without error
+- `ticket_submitted` -> error
+
+### Verification (session 464)
+
+The manifest `verification` array for PF-15 (logs `/tmp/pf15-s464-*.log`), copied to `tmp/punchflow-kickflow-dummy-s464/PF-15/attempt-<n>/`. Evidence:
+- build/vet exit 0
+- present log: exit 0, FAIL=0, SKIP=0, PASS>0
+- webhook whole-package log: exit 0, FAIL=0, SKIP=0, with PF-09's `sign_test.go`, `service_test.go` and `dispatcher_test.go` tests visible as `--- PASS`
+- gofmt prints nothing
+
+### Done Criteria (session 464)
+
+- [ ] The progress log shows the order: presenters, then build exit 0, then the `payload.go` write, then build exit 0 (with timestamps or sequence numbers)
+- [ ] `Build` handles exactly the 13 event types (table test) and rejects others; the HTML-escape and JST timestamp tests PASS
+- [ ] Present and webhook logs pass uncached with counts; PF-09 tests stay green
+- [ ] Pre/post hashes of `payload.go` recorded; gofmt clean; files < 1000 lines
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/webhook/payload.go` is a shared path created by PF-09: record its hash before editing and keep its exported signatures.
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `internal/webhook/payload.go` is a transferred path from PF-09 (session 464): record its hash before editing and keep its exported signatures.
 
 ## Progress Log
 

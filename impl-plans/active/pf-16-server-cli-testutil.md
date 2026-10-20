@@ -201,9 +201,85 @@ Evidence: exit 0 for each command; FAIL=0 in both logs. In the main log, SKIP ma
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, the only allowed SKIP is `TestEmbeddedBuild`, `TestDefaultRoundTrip` PASS, and the version log prints `punchflow 0.1.0`
 - [x] The progress log lists the wave-B contracts (admin Operations count 23, testutil exported names) and pre/post hashes of the shared files
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections and the "Path Declarations" above
+
+**Wave**: A (parallel with PF-14 and PF-15). **Depends on**: PF-04..PF-10, all accepted at `44e40cc`. PF-17 is accepted too.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json`. This plan's `writePaths` (36 files, `sharedPaths` empty) and `verification` arrays are authoritative.
+**Design**: `design-docs/specs/architecture.md` "#fixtures" (canonical form, precise definition), "Shared-tree compile and ownership-transfer rule (session 464)" items 4-8; `design-docs/specs/command.md`; `design-docs/specs/notes.md` CF-04, CF-05, CF-06.
+
+**Intent**: finish the server, CLI and testutil. Close CF-04 (default fixture round trip) and CF-05 (`DoRaw` RequestURI) so wave B can build on stable contracts. Resume from the partial files at `44e40cc`.
+
+**Path changes vs s463**:
+- Gained, transferred from accepted plans:
+  - the 14 `fixtures/default/*.json` files (PF-07; replaces the old `fixtures/default` directory entry; `fixtures/default/.gitkeep` stays PF-01)
+  - `internal/fixtures/load.go` and `internal/fixtures/export.go` (PF-06)
+  - `internal/cli/cli.go` and `internal/cli/cli_test.go` (PF-01; now `writePaths`, no longer shared)
+- Lost: `internal/admin/{tokens,service_accounts,webhooks,tenant,faults,fixtures}.go` now belong to PF-24. They exist as compiling stubs at `44e40cc`; do not edit them. PF-16 keeps `admin.go`, `routes.go` and `routes_test.go`.
+
+**State at 44e40cc**:
+- server, webui, admin skeleton (23 `Operations()` rows), CLI subcommands and testutil exist.
+- s463 left two failures: `TestDefaultRoundTrip` fails on folders, proxy-applicants, proxy-approvers, routes and tenant (reviewer run, step 3), and `TestDoRawResolvesRelativeURLs` fails.
+- The full race suite, build/vet and the version command were never verified.
+
+**Tasks**:
+1. Intent snapshot; pre-edit hashes of every existing file you will touch, including all 14 fixture files, `load.go` and `export.go`.
+2. Baseline: run the manifest commands once (logs `-s464-baseline-*`).
+3. CF-05, in `internal/testutil/env.go`:
+   - `DoRaw` sends a clone of the request (`req.Clone(ctx)`), sets `RequestURI = ""` on the clone, and resolves a relative URL against `Env.URL`.
+   - No testutil helper ever sets `Request.RequestURI` on a client request.
+   - The existing test may keep using `httptest.NewRequest`.
+4. CF-04 code, in `internal/fixtures/load.go` and `export.go` only:
+   - `Load` and `Reset` write `tenant.created_at`/`updated_at` from `tenant.json` (`store.Millis(t.CreatedAt)`), using the load clock only when the value is zero.
+   - `Export` returns those timestamps with `.UTC()` applied before marshaling.
+   - Do not change export ordering, key order, other rows' timestamps, `internal/store/ids.go`, `internal/model/*` or `internal/fixtures/types.go`.
+   - Imitate the existing insert/scan code at `load.go:100` and `export.go:24-27`.
+5. CF-04 data:
+   - Regenerate the 14 files with `go run ./cmd/punchflow fixtures export --db <tmp db> --out <tmp dir outside the repo>`, using a DB loaded from the current defaults.
+   - Replace each `fixtures/default/<name>.json` atomically: `cp` to `<name>.json.tmp` in the same directory, then `mv` over the target. PF-14 loads these files in the same wave.
+   - Then run the jq normalization check (manifest line with `/tmp/pf16-s464-jqnorm.log`). It must print `same` for all 14 files and give DIFF count 0. A DIFF means the change is not just reordering or dropping a zero value: stop and record a reconciliation request; never hand-edit to force equality.
+   - Run the CF-01 ban grep (manifest).
+6. Finish the remaining session-462 tests and contracts. Keep the wave-B contracts stable: `server.Config/New/Handler/Serve/Close`, the testutil exports listed in the s463 progress log, and the 23 admin `Operations()` rows.
+7. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet <pkg>`.
+   - Log each result.
+
+**Pitfalls**:
+- Do not weaken `TestDefaultRoundTrip`. It stays byte-identical. Add a second-round assertion: `export(load(export))` equals the first export.
+- `TZ=Asia/Tokyo` must not change the export bytes (manifest line `/tmp/pf16-s464-roundtrip-tz.log`).
+- The whole `./internal/fixtures/...` package is your guard. PF-06's `load_orgcharts_test.go` (chart-local team ids), `fixtures_test.go`, `validate_test.go` and `enum_rules_test.go` must stay PASS. Do not edit those test files or `internal/fixtures/testdata/**`.
+- Never write `./punchflow` or `web/dist/app`. `TestEmbeddedBuild` may SKIP; it is the only allowed SKIP.
+- Unexported identifiers you add in shared packages start with `pf16`.
+
+**Test cases (input -> expected)**: the "Tests" bullets above, plus:
+- `DoRaw(httptest.NewRequest(GET, "/healthz", nil))` -> 200, no client error
+- default round trip -> byte-identical on rounds 1 and 2
+- `tenant.json` `createdAt` `2026-10-20T00:00:00Z` -> exported unchanged under `TZ=Asia/Tokyo`
+- tenant fixture without timestamps -> load succeeds using the clock (unit test in `default_roundtrip_test.go` or `load.go`'s existing tests; add it to `default_roundtrip_test.go` as a pf16 subtest)
+
+### Verification (session 464)
+
+The manifest `verification` array for PF-16 (logs `/tmp/pf16-s464-*.log`), copied to `tmp/punchflow-kickflow-dummy-s464/PF-16/attempt-<n>/`. Evidence:
+- build and vet exit 0
+- test log: exit 0, FAIL=0, at most one SKIP (`TestEmbeddedBuild`), with `TestDoRawResolvesRelativeURLs` PASS
+- fixtures log: exit 0, FAIL=0, SKIP=0, with `--- PASS: TestDefaultRoundTrip`
+- TZ log: exit 0 with `TestDefaultRoundTrip` PASS
+- jqnorm: 14 `same`, DIFF 0
+- the CF-01 grep and the frozen-files `git diff --quiet` both pass
+- gofmt prints nothing
+- the version log prints `punchflow 0.1.0`
+
+### Done Criteria (session 464)
+
+- [ ] CF-04 closed: `TestDefaultRoundTrip` PASS, also under `TZ=Asia/Tokyo`, with the second-round fixed point; jq normalization 14/14 `same`; CF-01 grep empty; `internal/model`, `internal/fixtures/types.go` and `internal/store/ids.go` unchanged versus `44e40cc`
+- [ ] CF-05 closed: `TestDoRawResolvesRelativeURLs` PASS
+- [ ] Every manifest verification line passes with exit status, log path and counts; the only SKIP is `TestEmbeddedBuild`
+- [ ] Wave-B contracts listed in the progress log are unchanged from `44e40cc`, or the change is recorded; the six admin stubs are untouched (hashes equal to `44e40cc`)
+- [ ] Every source write followed by a logged compile gate with exit 0; gofmt clean; files < 1000 lines
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. Shared paths: `internal/cli/cli.go`, `internal/cli/cli_test.go` (from PF-01), `fixtures/default` (from PF-07; regenerate only as described).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). In session 464 every edited file is in this plan's `writePaths`: the transferred PF-01 CLI files, the PF-06 loader/exporter and the PF-07 fixture data. Record pre/post hashes and keep accepted tests green.
 
 ## Progress Log
 

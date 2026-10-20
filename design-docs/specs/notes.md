@@ -112,6 +112,14 @@ Status at session 463 (checkpoint `f82e374`; the session-462 integration review 
 - CF-02: the PF-02, PF-06 and PF-08 halves are accepted. Still open: the PF-20 API hop (`createGeneralMasterItem` / `updateGeneralMasterItem` input IDs) and the PF-16 `TestDefaultRoundTrip`.
 - CF-03: closed by the accepted PF-05 at `f82e374`. PF-27 records the PF-05 PASS counts from the full gate.
 
+Session 463 wave-A findings, carried into session 464 at checkpoint `44e40cc`. Evidence is under `tmp/punchflow-kickflow-dummy-s463/`. Resolutions are in `architecture.md`, "Shared-tree compile and ownership-transfer rule (session 464)".
+
+| ID | Sev | Finding | Design resolution | Owner (s464) | Closed when |
+|---|---|---|---|---|---|
+| CF-04 | high | `TestDefaultRoundTrip` cannot pass. The default files are not in exporter order: folder order differs, and the files carry explicit `omitempty` zero-value keys that the exporter drops: `endsOn`/`startsOn` set to null, and `descendants: false` (4 in `routes.json`, from `model.RouteTarget`). The reviewer's run of `TestDefaultRoundTrip` failed on folders, proxy-applicants, proxy-approvers, routes and tenant. The tenant `createdAt`/`updatedAt` come from the load clock and are exported in local time. The PF-06 loader bug (team ids looked up across charts) was fixed in `44e40cc`. | The precise canonical-form definition in `architecture.md#fixtures`; the transfer of `fixtures/default/*.json` and `load.go`/`export.go` to PF-16 | PF-16 | `TestDefaultRoundTrip` PASS (byte-identical, plus a fixed point on the second round); the whole `./internal/fixtures/...` package PASS; for all 14 files, the `jq` normalization from `architecture.md#fixtures` (it drops `null`, `false`, `""`, `[]` and `{}` recursively and sorts arrays) prints no `diff` between `git show 44e40cc:fixtures/default/<file>` and the new file; `internal/model/definition.go` is unchanged; the CF-01 ban grep prints nothing |
+| CF-05 | mid | `TestDoRawResolvesRelativeURLs` fails. The test builds its request with `httptest.NewRequest`, which sets `RequestURI`, and `Env.DoRaw` passes it unchanged to `http.Client`, which rejects such a request. | `DoRaw` sends a clone with `RequestURI` cleared and a resolved URL | PF-16 | the whole `./internal/testutil/...` package PASS |
+| CF-06 | high | The shared working tree stopped compiling. PF-15's `payload.go` referenced presenter types it had not defined yet, and PF-14 briefly broke `internal/store/tickets.go:56`. | The define-before-reference order and the compile gate after every write | every plan; PF-15 order | every s464 progress log shows `go build ./...` exit 0 after each source write, and no reconciliation request is caused by an in-flight compile break |
+
 ### Intentional divergences from kickflow
 
 These are scope cuts, not inferences. Each is visible to API clients only as a constant value.

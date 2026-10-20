@@ -152,9 +152,55 @@ Evidence: exit 0 for each command; FAIL=0; SKIP=0. Each of the 17 listed tests (
 - [ ] Every session-462 Done Criteria item is met and proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, and all 17 listed tests show `--- PASS`
 - [ ] The progress log has the intent snapshot, pre/post `shasum -a 256` of `internal/engine/engine.go`, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: A (parallel with PF-15 and PF-16). **Depends on**: PF-06, PF-07, PF-08, PF-10, all accepted at `44e40cc`. The PF-06 loader bug that failed all 8 s463 tests (`UNIQUE constraint failed: team_memberships`) was fixed in `44e40cc`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (this plan's `writePaths` and `verification` arrays are authoritative).
+**Design**: `design-docs/specs/design-approval-engine.md`; `design-docs/specs/architecture.md` "Shared-tree compile and ownership-transfer rule (session 464)"; `design-docs/specs/notes.md` INF-11..INF-41 and CF-06.
+
+**Intent**: finish the engine so that the PF-22/PF-23/PF-24 handlers can drive real ticket lifecycles and webhook events. Resume from the partial files at `44e40cc`; do not rewrite working code.
+
+**State at 44e40cc** (static inspection; run the tests first to learn the real state):
+- Present: `actions.go`, `comments.go`, `conditions.go`, `create.go`, `engine.go`, `forms.go`, `numbering.go`, `routing.go`, `update.go`, `visibility.go`, `setup_test.go`, `lifecycle_test.go`; `internal/store/tickets.go`, `internal/store/engine_lookup.go`.
+- Missing files from `writePaths`: `progression.go` (may stay absent if the logic lives in `actions.go`; record which), `forms_test.go`, `routing_test.go`, `events_test.go`, `comments_test.go`.
+- Present tests (8): `TestSubmitMultiStepApproveCompletes`, `TestDenyIsTerminal`, `TestSendBackToApplicantAndResubmit`, `TestSendBackToEarlierStep`, `TestWithdraw`, `TestParallelAllAndAny`, `TestProxyApproval`, `TestRouteBranching`.
+- Missing tests (9), as specified in "Tests" above: `TestPurchaseConditionsAndNomination`, `TestLeaveAssigneeCustomizableAndAuthorConfirm` (put in `routing_test.go`); `TestCommentRules`, `TestComments` (`comments_test.go`); `TestFormValidation` (`forms_test.go`); `TestCreationRestricted`, `TestAdminWorking`, `TestVisibility`, `TestArchive` (`events_test.go` or `lifecycle_test.go`).
+
+**Ownership change**: `internal/engine/engine.go` is now in this plan's `writePaths` (transferred from PF-10, `ownershipTransfers[]`). Its exported types, method names and signatures stay byte-identical; only bodies change. `sharedPaths` is empty.
+
+**Steps**:
+1. Write the intent snapshot and the pre-edit `shasum -a 256` of every existing file you will touch.
+2. Run the manifest's `go build` and `go test` commands once, unchanged, to get the baseline (log `-s464-baseline`). Fix failures in the 8 existing tests first.
+3. Add the 9 missing tests, then implement or fix the behavior until all 17 PASS.
+4. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/engine/...`.
+   - Log each result. Fix your own breakage before any other edit.
+
+**Pitfalls**:
+- `internal/store` is shared with PF-15 (`read_tickets.go`) in the same wave. New exported store functions start with `Eng`; never `Ticket*` or `Comment*`. Unexported helpers start with `pf14`. Never leave `tickets.go` with a missing import: s463 broke PF-15 with `undefined: time` at `tickets.go:56`.
+- Never edit `internal/fixtures/*`, `fixtures/default/*` (now PF-16's), `internal/model/*`, `internal/store/*` files other than your two, or `internal/present/*`. PF-16 may atomically replace `fixtures/default/*.json` during this wave. Ids, codes and values do not change, so tests keyed by user/workflow codes stay valid. If a fixture load fails mid-wave, re-run once before filing a reconciliation request.
+- Tests use the fake clock from `setup_test.go`; no `time.Sleep`.
+
+**Test-case contract**: the 17 bullets in "Tests" above (input -> expected) are the acceptance tests; names must match exactly.
+
+### Verification (session 464)
+
+The manifest `verification` array for PF-14 (log names `/tmp/pf14-s464-*.log`), copied to `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-<n>/`. Evidence:
+- build/vet exit 0
+- `go test -count=1 -v -race ./internal/engine/...` exit 0, FAIL=0, SKIP=0, and 17 `--- PASS` lines, one per listed test name (check with `grep -c -- '--- PASS: Test' /tmp/pf14-s464-test.log`; subtests may add more)
+- gofmt prints nothing; every file < 1000 lines; the enum `rg` prints nothing
+
+### Done Criteria (session 464)
+
+- [ ] All 17 listed tests PASS uncached with `-race` (exit 0, FAIL=0, SKIP=0), with counts and log paths recorded
+- [ ] `engine.go` exported signatures unchanged (`git diff 44e40cc -- internal/engine/engine.go` shows only body changes; note this in the log)
+- [ ] Every source write was followed by a logged compile gate with exit 0 (rule 13)
+- [ ] New exported store functions start with `Eng`; gofmt clean; files < 1000 lines; enum rg empty
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/engine/engine.go` is a shared path created by PF-10: record its hash before editing and keep all exported signatures.
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `internal/engine/engine.go` is a transferred path from PF-10 (session 464): record its hash before editing and keep all exported signatures.
 
 ## Progress Log
 

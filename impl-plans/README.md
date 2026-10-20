@@ -90,15 +90,15 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Depends On |
 |-------|--------|------------|
-| A | READY | accepted PF-01..PF-13, PF-17 |
-| B | BLOCKED | Wave A |
-| C | BLOCKED | Wave B |
-| D | BLOCKED | Wave C |
+| A | READY | accepted PF-01..PF-13, PF-17 at 44e40cc (session 464) |
+| B | BLOCKED | Wave A accepted and `go build ./...` exit 0 |
+| C | BLOCKED | Wave B accepted |
+| D | BLOCKED | Wave C accepted |
 
 ### Phase to Plans Mapping
 
 ```
-PHASE_TO_PLANS = {   # session 463 continuation; accepted PF-01..PF-13 and PF-17 are not dispatched
+PHASE_TO_PLANS = {   # session 464 continuation (manifest punchflow-kickflow-dummy-s464-dispatch.json); accepted PF-01..PF-13 and PF-17 are not dispatched
   "A": ["pf-14-engine.md", "pf-15-present-ticket-payloads.md", "pf-16-server-cli-testutil.md"],
   "B": ["pf-18-api-users-grades.md", "pf-19-api-proxies-org.md", "pf-20-api-definitions-masters.md",
         "pf-21-api-roles-audit.md", "pf-22-api-tickets.md", "pf-23-api-comments-files.md",
@@ -143,6 +143,17 @@ All plans of a wave run at the same time on the same branch and working director
       - remaining plan: back to its implementer, within its declared paths;
       - accepted plan: a repair item limited to the named files, under that plan's declaring-manifest paths and scoped verification, followed by re-acceptance.
     - No plan's expansion (`writePaths` + `sharedPaths` minus `artifactRoots`) may reach 300 files.
+    - **Session 464 override** (design: architecture.md "Shared-tree compile and ownership-transfer rule (session 464)" items 4-7): the active manifest is `punchflow-kickflow-dummy-s464-dispatch.json`. Its `ownershipTransfers[]` (43 files) are resolved first and override the s460/s462 declarations. Every file a remaining plan edits is in that plan's own `writePaths`. All remaining plans except PF-27 have empty `sharedPaths`. The tie-break above therefore matters only for PF-27's archival and doc files. Accepted commit: `44e40cc`. Logs: `/tmp/<plan-id>-s464-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s464/<planId>/attempt-<n>/`. Anything `-s462-`, `-s463-` or under `tmp/punchflow-kickflow-dummy-s463/` is history, not evidence.
+13. **Shared-tree compile rule (session 464; design: architecture.md "Shared-tree compile and ownership-transfer rule (session 464)" items 1-3; CF-06)**. Session 463 failed because two plans left the shared tree uncompilable for their siblings.
+    - Define before reference. A new type or function is written completely, in a file that compiles, before any file that references it is saved. Never save a file that names a symbol that does not exist yet.
+    - Compile gate:
+      - After every write of a non-test `.go` file, run `go build ./...`.
+      - After every write of a `_test.go` file, run `go vet <that package>`.
+      - Record each result (exit status) as one line in your progress log.
+      - If the failure is in a file you just wrote, fix it before any other edit.
+    - Never start a verification step, or end the turn, while a file of yours breaks the build.
+    - Contract stubs keep every exported identifier and signature; only bodies change. That covers `internal/engine/engine.go`, `internal/webhook/payload.go`, `internal/files/files.go`, the `internal/api/v1` handler stubs and the `internal/admin` stubs.
+    - A compile failure in a file owned by another in-flight plan is checked again at your next verification step. It becomes a reconciliation request (rule 11) only if it is still there at your final verification. Never edit that file.
 
 ## Workflow
 

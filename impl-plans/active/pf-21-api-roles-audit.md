@@ -111,9 +111,32 @@ rg -n 'not implemented' internal/api/v1/roles.go internal/api/v1/audit_logs.go  
 - [ ] `rg -l 'audit_read' internal/api/v1/roles_test.go` lists the file
 - [ ] The progress log has the intent snapshot, pre/post hashes of the shared files, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B. It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-08 (accepted at `44e40cc`) and PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (`writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-api-coverage.md` operation rows 83-90 and 96 and the enum contract; INF-29 and INF-43 in `notes.md`; CF-01.
+
+**Intent**: unchanged. Implement 9 operations (roles, audit logs). Keep the literal `audit_read` -> 400 negative case in `roles_test.go`: PF-27's `negative_tests_present` invariant requires it.
+
+**Session-464 changes**:
+1. `internal/api/v1/roles.go` and `audit_logs.go` are in this plan's `writePaths`, transferred from PF-10. `sharedPaths` is empty. Replace bodies only. Never edit `api.go`, `routes.go`, `routes_test.go`, `internal/testutil/*` or `internal/server/*`.
+2. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/api/v1/...`.
+   - Log each result.
+   - Prefixes: unexported identifiers start with `pf21`. New exported store functions start with `Role` or `AuditLog`.
+3. Do not put a banned enum literal in production code. `audit_read` may appear only in `roles_test.go`.
+4. Guard: the manifest `-run 'TestPF10'` line must PASS. Logs are `/tmp/pf21-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-21/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; PF10 guard PASS; the `not implemented` rg empty; `rg -l 'audit_read' internal/api/v1/roles_test.go` lists the file
+- [ ] Pre/post hashes of the transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-10 (stub creator).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). Handler files were transferred from PF-10 in session 464.
 
 ## Progress Log
 

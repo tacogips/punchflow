@@ -130,9 +130,33 @@ Evidence: exit 0; FAIL=0; SKIP=0; PASS covers every case in the Tests section.
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, and the `not implemented` rg prints nothing
 - [ ] The progress log has the intent snapshot, pre/post hashes of `users.go` and `grades.go`, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B (parallel with PF-19..PF-25). It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-08 (accepted at `44e40cc`) and PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (this plan's `writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-api-coverage.md` operation rows 1-18 and the cross-cutting conventions; `design-docs/specs/architecture.md` "Shared-tree compile and ownership-transfer rule (session 464)".
+
+**Intent**: unchanged. Implement operations 1-18 (users, grades) with the httptest coverage described above.
+
+**Session-464 changes**:
+1. `internal/api/v1/users.go` and `grades.go` are now in this plan's `writePaths`, transferred from PF-10. `sharedPaths` is empty. Replace handler bodies only. Keep every handler name that `internal/api/v1/routes.go` references. Never edit `api.go`, `routes.go`, `routes_test.go`, `internal/testutil/*` or `internal/server/*`.
+2. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/api/v1/...`.
+   - Log each result.
+   - Seven wave-B plans write into `internal/api/v1` and `internal/store` at the same time, and a broken file blocks all of them.
+3. Prefixes: unexported identifiers start with `pf18`. New exported store functions start with `User` or `Grade`. Grep `internal/store` before adding one.
+4. Guard: the manifest line `-run 'TestPF10'` must PASS. It proves the 96-row table and dispatch still match after your edits.
+5. Logs are `/tmp/pf18-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-18/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; the PF10 guard log PASS; the `not implemented` rg prints nothing
+- [ ] Pre/post hashes of `users.go` and `grades.go`; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. `users.go` and `grades.go` are shared with PF-10 (stub creator); record hashes before editing.
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `users.go` and `grades.go` were transferred from PF-10 in session 464; record hashes before editing.
 
 ## Progress Log
 

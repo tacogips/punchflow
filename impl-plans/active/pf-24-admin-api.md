@@ -128,9 +128,43 @@ Evidence: exit 0; FAIL=0; SKIP=0; the fault-code table test shows 6 passing subt
 - [ ] `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`
 - [ ] The progress log has the intent snapshot, pre/post hashes of the six shared stub files, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B. It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-14, PF-15, PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (`writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-auth-admin.md`, the dev admin API table (23 operations); `design-webhooks.md` manual operations; INF-04, INF-09, INF-32 in `notes.md`; CF-01.
+
+**Intent**: unchanged. Implement the 23 `/admin/api` endpoints:
+- the fault catalog (6 subtests)
+- `fire` covering exactly the 13 kickflow events (13 subtests)
+- export with non-empty `inputs[].id`
+- the literal `ticket_submitted` and `comment_deleted` -> 422 negative cases in `webhooks_test.go`, required by PF-27's `negative_tests_present`
+
+**Session-464 changes**:
+1. `internal/admin/{tokens,service_accounts,webhooks,tenant,faults,fixtures}.go` are in this plan's `writePaths`, transferred from PF-16. They are compiling stubs at `44e40cc`. `sharedPaths` is empty. Keep every function name that `internal/admin/routes.go` (PF-16) references; `routes_test.go` must keep reporting 23 operations.
+2. Never edit:
+   - `internal/admin/admin.go`, `routes.go`, `routes_test.go` (PF-16)
+   - `internal/testutil/*`, `internal/server/*`
+   - `internal/webhook/*`, `internal/fixtures/*`, `fixtures/default/*`
+
+   Missing behavior there is a reconciliation request to its owner.
+3. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/admin/...`.
+   - Log each result.
+   - Prefixes: unexported identifiers start with `pf24`. New exported store functions start with `Admin`.
+4. The reset endpoint stays flag-gated: 404 `endpoint_not_found` when `EnableAdminReset` is false. Tests use `testutil.WithAdminReset()`.
+5. Logs are `/tmp/pf24-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-24/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0; 6 fault subtests and 13 fire subtests PASS; PF-16's `routes_test.go` PASS
+- [ ] `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`
+- [ ] Pre/post hashes of the six transferred stub files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-16 (stub creator).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). The six handler files were transferred from PF-16 in session 464.
 
 ## Progress Log
 

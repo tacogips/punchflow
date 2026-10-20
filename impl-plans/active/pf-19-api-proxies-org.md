@@ -120,9 +120,32 @@ rg -n 'not implemented' internal/api/v1/proxies.go internal/api/v1/orgcharts.go 
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, and the `not implemented` rg prints nothing
 - [ ] The progress log has the intent snapshot, pre/post hashes of the three shared files, and exit status, log path and counts for every command
 
+## Continuation (session 464) - read first; overrides the session-462/463 sections
+
+**Wave**: B (parallel with PF-18, PF-20..PF-25). It starts only after PF-14, PF-15 and PF-16 are accepted and `go build ./...` exits 0. **Depends on**: PF-08 (accepted at `44e40cc`) and PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` (`writePaths`, `transferredFileNotes` and `verification` are authoritative).
+**Design**: `design-docs/specs/design-api-coverage.md` operation rows 19-42; INF-16 and INF-23 in `notes.md`.
+
+**Intent**: unchanged. Implement operations 19-42 (proxies, org charts, teams).
+
+**Session-464 changes**:
+1. `internal/api/v1/proxies.go`, `orgcharts.go` and `teams.go` are in this plan's `writePaths`, transferred from PF-10. `sharedPaths` is empty. Replace handler bodies only and keep the handler names that `routes.go` references. Never edit `api.go`, `routes.go`, `routes_test.go`, `internal/testutil/*`, `internal/server/*` or `internal/fixtures/*`.
+2. Compile rule (README rule 13):
+   - After every non-test `.go` write, run `go build ./...`.
+   - After every `_test.go` write, run `go vet ./internal/api/v1/...`.
+   - Log each result.
+3. Prefixes: unexported identifiers start with `pf19`. New exported store functions start with `Proxy`, `OrgChart` or `Team`.
+4. Team codes are unique per organization chart, not globally: the PF-06 repair at `44e40cc`. Every team lookup by code must be scoped to a chart, normally the active one.
+5. Guard: the manifest `-run 'TestPF10'` line must PASS. Logs are `/tmp/pf19-s464-*.log`, copied to `tmp/punchflow-kickflow-dummy-s464/PF-19/attempt-<n>/`.
+
+### Done Criteria (session 464)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; PF10 guard PASS; the `not implemented` rg empty
+- [ ] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md`. The three handler files are shared with PF-10 (stub creator).
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). The three handler files were transferred from PF-10 in session 464.
 
 ## Progress Log
 
