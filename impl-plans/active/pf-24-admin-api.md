@@ -1,0 +1,109 @@
+# PF-24 Dev Admin API Implementation Plan
+
+**Status**: Ready
+**Wave**: 4 | **Depends On**: PF-14, PF-15, PF-16 | **Plan ID**: PF-24
+**Design Reference**: design-docs/specs/design-auth-admin.md#dev-admin-api-internaladmin; design-docs/specs/design-webhooks.md#manual-operations-admin-api-integration-permission; design-docs/specs/design-api-coverage.md (error catalog "Fault" rows); notes.md INF-04, INF-09, INF-29, INF-32
+**Created**: 2026-10-20
+**Last Updated**: 2026-10-20
+
+---
+
+## Intent and Context
+
+Implement the 23 punchflow-only `/admin/api` endpoints, whose route table and stubs PF-16 created: personal tokens, service accounts, webhooks (CRUD, ping, event log, resend, fire), tenant settings, fault rules, fixture export and flag-gated reset. They reuse the kickflow error body, the httpx pagination headers and the RBAC permissions.
+
+## Non-goals
+
+- No changes to `internal/admin/routes.go`/`admin.go` signatures, `internal/webhook`, `internal/fixtures`, `internal/auth`. No UI.
+
+## Files
+
+`internal/admin/tokens.go`, `service_accounts.go`, `webhooks.go`, `tenant.go`, `faults.go`, `fixtures.go` (shared: replace stubs); tests `tokens_test.go`, `webhooks_test.go`, `tenant_test.go`, `faults_test.go`, `fixtures_test.go` (`package admin_test`); `internal/store/admin.go` (new: token and tenant queries not already in `store/auth.go`).
+
+## Path Declarations
+
+### writePaths
+- `impl-plans/active/pf-24-admin-api.md`
+- `internal/admin/tokens_test.go`
+- `internal/admin/webhooks_test.go`
+- `internal/admin/tenant_test.go`
+- `internal/admin/faults_test.go`
+- `internal/admin/fixtures_test.go`
+- `internal/store/admin.go`
+
+### sharedPaths
+- `internal/admin/tokens.go`
+- `internal/admin/service_accounts.go`
+- `internal/admin/webhooks.go`
+- `internal/admin/tenant.go`
+- `internal/admin/faults.go`
+- `internal/admin/fixtures.go`
+
+### sharedPathNotes
+- `internal/admin/tokens.go`: PF-16 stub file; implement the personal token endpoints
+- `internal/admin/service_accounts.go`: PF-16 stub file; implement the service account endpoints
+- `internal/admin/webhooks.go`: PF-16 stub file; implement webhook CRUD, ping, events, resend and fire
+- `internal/admin/tenant.go`: PF-16 stub file; implement tenant GET/PATCH
+- `internal/admin/faults.go`: PF-16 stub file; implement the fault rule endpoints
+- `internal/admin/fixtures.go`: PF-16 stub file; implement fixture export and flag-gated reset
+
+### artifactRoots
+- (none)
+
+## JSON Shapes (camelCase, timestamps via `kftime.Format`)
+
+- Token: `{id, name, createdAt, lastUsedAt}`; create response adds `token` (once). ServiceAccount: `{id, name, description, createdAt, lastUsedAt}` (+ `token` on create).
+- Webhook: `{id, name, url, hasSecret, enabled, workflowIds, eventTypes, firstFailureAt, disabledAt, createdAt, updatedAt}`; create/update responses also include `secret`.
+- WebhookEvent: `{id, webhookId, eventType, ticketId, commentId, status, attemptCount, nextAttemptAt, lastStatusCode, createdAt, body (string, only on GET by id), attempts[] (only on GET by id: {attemptNo, startedAt, durationMs, requestHeaders, statusCode, responseBody, error, manual})}`.
+- Tenant: `{id, publicId, name, plan, mode, ipAllowlist, allowedEmailDomains, selfServiceProxy}`. FaultRule: `httpx.FaultRule` fields camelCased.
+
+## Behavior
+
+- Tokens: list own PATs only; create `{name}` via `Auth.IssueToken(kind pat, principal user)`; delete own or with `integration` (others -> 404 to avoid leaking). Audit `token.create|delete`.
+- Service accounts (`integration`): `kind sat`, `user_id` NULL; audit `serviceAccount.*`.
+- Webhooks (`integration`): validate `url` (http/https, absolute), `eventTypes` subset of the 12 non-ping types, `workflowIds` existing. Create -> insert + `Webhooks.EnqueueTo(ping, [id])`; PATCH changing url or secret -> ping; PATCH `enabled:true` clears `disabledAt`/`firstFailureAt`. Ping endpoint -> `EnqueueTo` ping and return the event. Resend -> `Webhooks.Resend`. Fire `{eventType, ticketId?, commentId?, webhookIds?}` -> validate presence by type (ticket_* need ticketId; comment_* need both, and the comment must belong to the ticket); with `webhookIds` -> `EnqueueTo`, otherwise `Enqueue` (normal filters); actor = principal. Call `Webhooks.Notify()` after every commit that enqueued.
+- Tenant (`tenant`): PATCH validates enums, CIDRs/IPs (`net/netip`), domains (no `@`).
+- Faults (`tenant`): validate `status` 400-599, non-empty `code` and `pathPrefix` starting with `/v1/`; stored in `Deps.Faults`.
+- Fixtures (`tenant`): export -> `fixtures.Export` -> JSON object `{fileName: <parsed JSON>}`; reset -> `Deps.EnableReset` false -> 404 `endpoint_not_found`; else `fixtures.Reset(ctx, db, FixturesFS, FilesDir, clock)`, clear `Deps.Faults`, return `{counts}`. A successful reset invalidates all sessions and runtime tokens, because the tables are truncated; the response tells the caller to use seeded tokens.
+
+## Key Points and Pitfalls
+
+- Never return a token or webhook secret in list responses.
+- Reset runs its own transaction inside `fixtures.Reset`: do not wrap it in another `WithTx` (single connection deadlock).
+- Event types for fire must be one of the 13 (ping allowed with webhookIds only).
+
+## Tests (`package admin_test`, `testutil`)
+
+- tokens: Employee creates PAT -> token works on `GET /v1/user` (stub or real; assert not 401); list shows no `token` key; delete -> token now 401
+- service account: Employee -> 403; Admin create -> SAT + `X-Caller-Id` works
+- webhooks: create with receiver URL -> receiver gets `ping` after `DeliverWebhooks`; list has `hasSecret` true and no `secret`; PATCH url -> second ping; invalid eventType -> 422
+- resend succeeded event -> new attempt with the same delivery id; GET event -> attempts with `manual` true on the last
+- fire `ticket_approved` for a ticket created in the test with `engine.New(env.Clock).Create` inside `env.DB.WithTx` (do not depend on `POST /v1/tickets`, which PF-22 builds in parallel) -> receiver gets it, signature verifies; `comment_created` without commentId -> 400; all 13 event types can be fired (table test)
+- tenant PATCH mode `maintenance` -> `/v1/user` 403 `tenant_maintenance`; invalid CIDR -> 422
+- faults: add `{pathPrefix:"/v1/tickets", status:503, code:"feature_disabled", remaining:1}` -> next `/v1/tickets` 503 `feature_disabled`, then normal; repeat for `gateway_timeout` 504, `email_not_verified` 401, `license_purchase_required` 403, `option_purchase_required` 403, `internal_server_error` 500 (INF-32 catalog)
+- fixtures: export has 14 files; reset without flag -> 404; with `WithAdminReset()` -> 200 and a ticket created earlier is gone, `pf_pat_dev_admin` still works
+
+## Verification
+
+```bash
+go build ./... 2>&1 | tee /tmp/pf24-build.log
+go vet ./internal/admin/... ./internal/store/... 2>&1 | tee /tmp/pf24-vet.log
+go test -race ./internal/admin/... 2>&1 | tee /tmp/pf24-test.log
+gofmt -l internal/admin internal/store/admin.go   # prints nothing
+```
+
+## Done Criteria
+
+- [ ] 23 endpoints implemented; every "Fault" catalog code proven; tests pass with `-race`; gofmt clean
+
+## Execution Protocol
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-16 (stub creator).
+
+## Progress Log
+
+### Session: (not started)
+**Intent snapshot**: -
+**Tasks Completed**: None
+**Verification**: -
+**Reconciliation requests**: -
