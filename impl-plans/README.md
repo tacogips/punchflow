@@ -56,23 +56,29 @@ Session 463 continuation (from checkpoint commit f82e374). The session-462 integ
 | [pf-11-web-tickets](./active/pf-11-web-tickets.md) | accepted | - | Accepted (f82e374) |
 | [pf-12-web-readviews](./active/pf-12-web-readviews.md) | accepted | - | Accepted (f82e374) |
 | [pf-13-web-integration](./active/pf-13-web-integration.md) | accepted | - | Accepted (f82e374) |
-| [pf-14-engine](./active/pf-14-engine.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
+| [pf-14-engine](./active/pf-14-engine.md) | - | - | Superseded by PF-14a/b/c (s465; not dispatched) |
+| [pf-14a-engine-lifecycle](./active/pf-14a-engine-lifecycle.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
+| [pf-14b-engine-routing](./active/pf-14b-engine-routing.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
+| [pf-14c-engine-forms-create](./active/pf-14c-engine-forms-create.md) | A | PF-06, PF-07, PF-08, PF-10 (accepted) | Ready |
 | [pf-15-present-ticket-payloads](./active/pf-15-present-ticket-payloads.md) | A | PF-06, PF-07, PF-08, PF-09 (accepted) | Ready |
 | [pf-16-server-cli-testutil](./active/pf-16-server-cli-testutil.md) | A | PF-04..PF-10 (accepted) | Ready |
 | [pf-17-auth-oidc](./active/pf-17-auth-oidc.md) | accepted | - | Accepted (f82e374) |
-| [pf-18-api-users-grades](./active/pf-18-api-users-grades.md) | B | PF-08, PF-16 | Ready |
-| [pf-19-api-proxies-org](./active/pf-19-api-proxies-org.md) | B | PF-08, PF-16 | Ready |
-| [pf-20-api-definitions-masters](./active/pf-20-api-definitions-masters.md) | B | PF-06, PF-08, PF-16 | Ready |
-| [pf-21-api-roles-audit](./active/pf-21-api-roles-audit.md) | B | PF-08, PF-16 | Ready |
-| [pf-22-api-tickets](./active/pf-22-api-tickets.md) | B | PF-14, PF-15, PF-16 | Ready |
-| [pf-23-api-comments-files](./active/pf-23-api-comments-files.md) | B | PF-14, PF-15, PF-16 | Ready |
-| [pf-24-admin-api](./active/pf-24-admin-api.md) | B | PF-14, PF-15, PF-16 | Ready |
-| [pf-25-readme](./active/pf-25-readme.md) | B | PF-07, PF-16 | Ready |
+| [pf-18-api-users-grades](./active/pf-18-api-users-grades.md) | B1 | PF-08, PF-16 | Ready |
+| [pf-19-api-proxies-org](./active/pf-19-api-proxies-org.md) | B1 | PF-08, PF-16 | Ready |
+| [pf-20-api-definitions-masters](./active/pf-20-api-definitions-masters.md) | B1 | PF-06, PF-08, PF-16 | Ready |
+| [pf-21-api-roles-audit](./active/pf-21-api-roles-audit.md) | B1 | PF-08, PF-16 | Ready |
+| [pf-22-api-tickets](./active/pf-22-api-tickets.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
+| [pf-23-api-comments-files](./active/pf-23-api-comments-files.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
+| [pf-24-admin-api](./active/pf-24-admin-api.md) | B2 | PF-14a, PF-14b, PF-14c, PF-15, PF-16 | Ready |
+| [pf-25-readme](./active/pf-25-readme.md) | A | PF-07 (accepted) | Ready |
 | [pf-26-contract-smoke](./active/pf-26-contract-smoke.md) | C | PF-17 to PF-24 | Ready |
 | [pf-27-finalize](./active/pf-27-finalize.md) | D (serial, last) | all | Ready |
 
+The Wave column follows session 465 (rule 15). Plans are dispatched as soon as their dependencies are accepted.
+
 Dispatch manifests:
-- `punchflow-kickflow-dummy-s463-dispatch.json` is the current manifest. It stays in `active/` during the run (design D-463-13).
+- `punchflow-kickflow-dummy-s465-dispatch.json` is the current manifest. It stays in `active/` after the run, and the operator archives it.
+- `punchflow-kickflow-dummy-s463-dispatch.json` and `punchflow-kickflow-dummy-s464-dispatch.json` are superseded. PF-27 archives them.
 - `punchflow-kickflow-dummy-s460-dispatch.json` and `punchflow-kickflow-dummy-s462-dispatch.json` are historical. They remain the path-declaration sources for accepted plans (s460: PF-01, PF-03, PF-11, PF-12, PF-13; s462: PF-02, PF-04..PF-10, PF-17). PF-27 archives both.
 
 ## Completed Plans
@@ -90,19 +96,21 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Depends On |
 |-------|--------|------------|
-| A | READY | accepted PF-01..PF-13, PF-17 at 44e40cc (session 464) |
-| B | BLOCKED | Wave A accepted and `go build ./...` exit 0 |
-| C | BLOCKED | Wave B accepted |
-| D | BLOCKED | Wave C accepted |
+| A | READY | accepted PF-01..PF-13, PF-17 at ea385c7 (session 465) |
+| B1 | BLOCKED | PF-16 accepted |
+| B2 | BLOCKED | PF-14a, PF-14b, PF-14c, PF-15, PF-16 accepted |
+| C | BLOCKED | PF-18..PF-24 accepted |
+| D | BLOCKED | every other plan accepted |
 
 ### Phase to Plans Mapping
 
 ```
-PHASE_TO_PLANS = {   # session 464 continuation (manifest punchflow-kickflow-dummy-s464-dispatch.json); accepted PF-01..PF-13 and PF-17 are not dispatched
-  "A": ["pf-14-engine.md", "pf-15-present-ticket-payloads.md", "pf-16-server-cli-testutil.md"],
-  "B": ["pf-18-api-users-grades.md", "pf-19-api-proxies-org.md", "pf-20-api-definitions-masters.md",
-        "pf-21-api-roles-audit.md", "pf-22-api-tickets.md", "pf-23-api-comments-files.md",
-        "pf-24-admin-api.md", "pf-25-readme.md"],
+PHASE_TO_PLANS = {   # session 465 continuation (manifest punchflow-kickflow-dummy-s465-dispatch.json); accepted PF-01..PF-13 and PF-17 are not dispatched; pf-14-engine.md is superseded
+  "A": ["pf-14a-engine-lifecycle.md", "pf-14b-engine-routing.md", "pf-14c-engine-forms-create.md",
+        "pf-15-present-ticket-payloads.md", "pf-16-server-cli-testutil.md", "pf-25-readme.md"],
+  "B1": ["pf-18-api-users-grades.md", "pf-19-api-proxies-org.md", "pf-20-api-definitions-masters.md",
+         "pf-21-api-roles-audit.md"],
+  "B2": ["pf-22-api-tickets.md", "pf-23-api-comments-files.md", "pf-24-admin-api.md"],
   "C": ["pf-26-contract-smoke.md"],
   "D": ["pf-27-finalize.md"]
 }
@@ -154,6 +162,17 @@ All plans of a wave run at the same time on the same branch and working director
     - Never start a verification step, or end the turn, while a file of yours breaks the build.
     - Contract stubs keep every exported identifier and signature; only bodies change. That covers `internal/engine/engine.go`, `internal/webhook/payload.go`, `internal/files/files.go`, the `internal/api/v1` handler stubs and the `internal/admin` stubs.
     - A compile failure in a file owned by another in-flight plan is checked again at your next verification step. It becomes a reconciliation request (rule 11) only if it is still there at your final verification. Never edit that file.
+14. **Evidence reporting (session 465; design: architecture.md "Plan split, evidence-reporting and wave rule (session 465)" item 3; CF-08)**. Every plan's Execution Protocol repeats this rule. Session 464 broke it, and the progress gate then ended the run.
+    1. The `verification` array holds only commands that are required to pass, with exit 0, PASS > 0 and FAIL = 0 for test commands. An intentional negative or mutation proof (an expected non-zero exit: an `rg` ban grep that finds nothing and exits 1, a mutated test that must fail, a request that must be rejected) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path. In the s465 manifest, "prints nothing" checks are written in must-pass form (`<rg ...>; test $? -eq 1`, `test -z "$(gofmt -l ...)"`). Those forms may stay in `verification`, because their required result is exit 0.
+    2. When assigned work remains, the report sets `implementationIncomplete: true` and lists the remaining items in `implPlanUpdates` and in the plan's Progress Log. Remaining work is never reported as a High/Medium finding, a risk or a residual risk.
+    3. High and Medium labels are reserved for defects in delivered code, each with `file:line`. A sibling-breakage reconciliation request (rule 13) is reported as a blocker naming the owning plan, not as a finding against the reporting plan.
+    4. Every attempt leaves compiling, incremental progress: `go build ./...` exits 0 at the end of the turn, and the Progress Log records what was completed.
+15. **Session 465 override** (design: architecture.md verification-rule item 9 and "Plan split, evidence-reporting and wave rule (session 465)"):
+    - The active manifest is `punchflow-kickflow-dummy-s465-dispatch.json`. It supersedes s464, and its `ownershipTransfers[]` (58 files) are resolved first.
+    - Accepted commit: `ea385c7`. Logs: `/tmp/<plan-id>-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/<planId>/attempt-<n>/`. Anything named `-s462-`, `-s463-` or `-s464-`, and anything under `tmp/punchflow-kickflow-dummy-s46{3,4}/`, is history, not evidence.
+    - Each plan's "Continuation (session 465)" section overrides its earlier continuation sections for wave, dependencies, log names and Done Criteria.
+    - PF-14 is replaced by PF-14a (`pf-14a-engine-lifecycle.md`), PF-14b (`pf-14b-engine-routing.md`) and PF-14c (`pf-14c-engine-forms-create.md`). They have disjoint files in `internal/engine` and `internal/store`. The cross-file helpers they share are frozen (design-approval-engine.md "Plan ownership (session 465)").
+    - A plan is dispatched as soon as every plan in its `dependsOn` is accepted.
 
 ## Workflow
 

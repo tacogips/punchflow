@@ -215,6 +215,11 @@ This rule fixes two failures from the previous run: test evidence came from the 
    - Accepted set: PF-01..PF-13 and PF-17 at commit `44e40cc`. That commit adds the operator's PF-06 repair (`internal/fixtures/load.go` chart-local team lookup and the new `internal/fixtures/load_orgcharts_test.go`) and partial PF-14/PF-16 work.
    - Logs are `/tmp/<plan-id>-s464-<step>.log`. Evidence copies go under `tmp/punchflow-kickflow-dummy-s464/<planId>/attempt-<n>/`.
    - Logs named `-s462-` or `-s463-`, and anything under `tmp/punchflow-kickflow-dummy-s463/`, are history, not evidence.
+9. Session 465 values (these override item 8):
+   - Accepted set: PF-01..PF-13 and PF-17 at commit `ea385c7`. That commit holds the s464 partial PF-14/PF-15/PF-16 work, including all 17 named PF-14 engine tests.
+   - Logs are `/tmp/<plan-id>-s465-<step>.log`. Evidence copies go under `tmp/punchflow-kickflow-dummy-s465/<planId>/attempt-<n>/`.
+   - Logs named `-s462-`, `-s463-` or `-s464-`, and anything under `tmp/punchflow-kickflow-dummy-s46{3,4}/`, are history, not evidence.
+   - Known baseline failure at `ea385c7`: `go test -count=1 ./...` fails only in `internal/fixtures` (`TestLoadExportRoundTripMinimal`, `fixtures_test.go:56`, "export tenant.json differs from canonical fixture"). It is PF-16's to fix (CF-09). A remaining plan whose scoped command does not include `./internal/fixtures/...` is not affected by it.
 
 #### Path-ownership and fanout rule (session 463)
 
@@ -299,6 +304,51 @@ Every s464 plan follows these rules:
 7. Manifests. `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json` supersedes the s463 manifest. Its `ownershipIndex` reads the accepted plans from the s460/s462 manifests, the remaining plans from s464, and then applies `ownershipTransfers[]`. `acceptedDependencies[].commit` is `44e40cc`. The s464 manifest stays in `impl-plans/active/`. PF-27 archives the s460, s462 and s463 manifests as its last step, after its gate passes.
 8. Resume, don't restart. PF-14 and PF-16 continue from their partial files at `44e40cc`. PF-14 has 8 of its 17 tests. PF-16 has its server, CLI, admin skeleton and testutil. For both, the remaining work is what their Done Criteria still leave unchecked. PF-16 must also fix `testutil.Env.DoRaw` (CF-05). It sends a clone of the request with `RequestURI` cleared and a relative URL resolved against `Env.URL`. No testutil helper ever sets `Request.RequestURI` on a client request, because `net/http` rejects it.
 
+#### Plan split, evidence-reporting and wave rule (session 465)
+
+Session 464's wave A (PF-14, PF-15, PF-16) made real progress, but every branch ended blocked, and the progress gate ends a run whose whole wave is blocked (CF-07, CF-08 in `notes.md`). The s464 rules above stay in force. This section adds four changes. `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json` supersedes the s464 manifest, and `acceptedDependencies[].commit` is `ea385c7`.
+
+1. PF-14 is split into three plans with disjoint `writePaths`. Each one can be finished and verified in one attempt. The boundaries follow the existing files at `ea385c7` (see "Plan ownership (session 465)" in `design-approval-engine.md` for behavior, frozen helpers and tests):
+
+   | Plan | Plan file | `writePaths` (besides its plan file) | Remaining work at `ea385c7` |
+   |---|---|---|---|
+   | PF-14a lifecycle and actions | `impl-plans/active/pf-14a-engine-lifecycle.md` | `internal/engine/engine.go` (transfer PF-10 -> PF-14a, previously -> PF-14), `actions.go`, `comments.go`, `visibility.go`, `numbering.go`, `setup_test.go`, `lifecycle_test.go`, `events_test.go`, `comments_test.go`, `internal/store/tickets.go` | Keep its 14 tests green, and record the per-write compile evidence that s464 left unchecked. Its behavior is complete. |
+   | PF-14b routing and conditions | `impl-plans/active/pf-14b-engine-routing.md` | `internal/engine/routing.go`, `conditions.go`, `routing_test.go`, `conditions_test.go` (new), `internal/store/engine_lookup.go` | The full condition operator set (team ancestry, grade `level`, checkbox membership, master item ids); grade-aware `team`/`manager` target resolution; the `higher_manager`/`higher_team` fallbacks; `TestStepConditionAndFallback`, `TestConditionOperators` |
+   | PF-14c forms, create and update | `impl-plans/active/pf-14c-engine-forms-create.md` | `internal/engine/forms.go`, `create.go`, `update.go`, `forms_test.go`, `create_update_test.go` (new), `internal/store/engine_refs.go` (new) | Type and reference validation for every field kind; proxy-applicant checks on Create/Update; `UpdateForm` merging that keeps untouched fields; `TestFormFieldTypes`, `TestProxyApplicantCreate`, `TestUpdateFormMerge` |
+
+   - `internal/engine/progression.go` is dropped from the declarations. It was never created; step progression (`pf14Advance`) lives in `actions.go` (PF-14a).
+   - `impl-plans/active/pf-14-engine.md` stays as a superseded index. Its status is "Superseded by PF-14a/PF-14b/PF-14c", it keeps its progress log, and it is not dispatched. PF-27 archives it with the other plans.
+   - The three plans share the `internal/engine` package, so the s464 compile gate applies to each write. They also share these rules: a cross-file helper's signature and its existing results are frozen (the list is in `design-approval-engine.md`); each plan's scoped test command is the whole package, `go test -count=1 -v -race ./internal/engine/...`, plus `go vet ./internal/engine/... ./internal/store/...`; a failure in a sibling's file follows s464 rule 3 (sibling breakage).
+   - Accepted-plan guard: each split plan owns one file in `internal/store` (PF-02's package), so each also runs `go test -count=1 -v ./internal/store/...`. Exported store functions added by the split plans keep the `Eng` prefix (README rule 10).
+   - `dependsOn`: PF-14a, PF-14b and PF-14c each depend on PF-06, PF-07, PF-08, PF-10 (all accepted). None depends on another split plan.
+   - Downstream rewiring (PF-14 is replaced everywhere it appears in `dependsOn`):
+
+     | Plan | New `dependsOn` |
+     |---|---|
+     | PF-22 tickets API | PF-14a, PF-14b, PF-14c, PF-15, PF-16 |
+     | PF-23 comments and files API | PF-14a, PF-14b, PF-14c, PF-15, PF-16 (its tests create tickets through `Engine.Create`, which validates file references in PF-14c and builds the route in PF-14b) |
+     | PF-24 admin API | PF-14a, PF-14b, PF-14c, PF-15, PF-16 (its tests create tickets through `Engine.Create`) |
+     | PF-26 contract and smoke | unchanged (PF-17..PF-24); it reaches the engine through PF-22..PF-24 |
+     | PF-27 finalize | PF-14 is replaced by PF-14a, PF-14b, PF-14c |
+
+2. Remaining fixture transfers to PF-16 (CF-09). The s464 list already moves the 14 `fixtures/default/*.json` files and `internal/fixtures/load.go`/`export.go`. The s465 manifest adds these, as individual file entries:
+   - `internal/fixtures/fixtures_test.go` (PF-06 -> PF-16).
+   - The 14 `internal/fixtures/testdata/minimal/*.json` files (PF-06 -> PF-16). They are listed by name; the `internal/fixtures/testdata` and `.../minimal` directories never appear as entries (s463 rule 2).
+   - Guard verification for both: the whole `go test -count=1 -v ./internal/fixtures/...`, including `TestLoadExportRoundTripMinimal`, `TestDefaultRoundTrip` and PF-06's `load_orgcharts_test.go`, `validate_test.go` and `enum_rules_test.go`.
+   - Allowed change to the minimal testdata: rewrite it to the exporter output. Tenant `createdAt`/`updatedAt` become UTC RFC 3339 for the same instant (`2026-10-20T21:00:00+09:00` -> `2026-10-20T12:00:00Z`). Any other change must pass the same `jq` normalization equality as `fixtures/default` (diff against `git show ea385c7:internal/fixtures/testdata/minimal/<file>`). Ids, codes and enum values never change.
+   - Allowed change to `fixtures_test.go`: only what the UTC export needs. The byte-identical assertion and the second-round fixed-point check stay. No test is skipped, deleted or weakened.
+3. Evidence-reporting rule. Every plan's Shared Execution Protocol states it word for word, and Step 6 reports follow it:
+   1. The `verification` array holds only commands that are required to pass, with exit 0, PASS > 0 and FAIL = 0 for test commands. An intentional negative or mutation proof (an expected non-zero exit: an `rg` ban grep that finds nothing and exits 1, a mutated test that must fail, a request that must be rejected) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+   2. When assigned work remains, the report sets `implementationIncomplete: true` and lists the remaining items in `implPlanUpdates` and in the plan's Progress Log. Remaining work is never reported as a High/Medium finding, a risk or a residual risk.
+   3. High and Medium labels are reserved for defects in delivered code, each with `file:line`. A sibling-breakage reconciliation request (s464 rule 3) is reported as a blocker naming the owning plan, not as a finding against the reporting plan.
+   4. Every attempt leaves compiling, incremental progress: the shared tree builds (`go build ./...` exit 0) at the end of the turn, and the Progress Log records what was completed.
+4. Fanout after the split, measured against the projected final tree with the s463 rule-1 measure:
+   - PF-14a: 11 entries. PF-14b: 6. PF-14c: 7.
+   - PF-16: 36 + 1 + 14 = 51.
+   - PF-27: about 80 entries, all files. The s464 total of 72 grows by the three new plan files (active `sharedPaths` + completed `writePaths`) and the s464 manifest (its archive pair). It still declares no directory entry.
+   - Every other plan keeps its s464 count (PF-15: 11, PF-18: 8, PF-19: 9, PF-20: 12, PF-21: 7, PF-22: 9, PF-23: 9, PF-24: 13, PF-25: 2, PF-26: 10).
+   - Every plan is far under the 300 target. The s465 manifest records each plan's computed count and the disjointness of all `writePaths`.
+
 ### Delivery waves (input for implementation plans)
 
 | Wave | Work | Depends on |
@@ -332,5 +382,18 @@ Continuation order (session 464, from checkpoint `44e40cc`). The waves are the s
 | B | PF-18, PF-19, PF-20, PF-21, PF-22, PF-23, PF-24, PF-25 (parallel) | PF-14/15/16 accepted: engine, ticket presenters, payloads, testutil, server and admin skeleton | every wave-B plan accepted |
 | C | PF-26 | PF-17 accepted, PF-18..PF-24 accepted | PF-26 accepted |
 | D | PF-27 (serial, last) | every other plan accepted | - |
+
+Continuation order (session 465, from checkpoint `ea385c7`). A plan is dispatched as soon as every plan in its `dependsOn` is accepted. The waves below are the groups that this produces; they are not extra gates. The s464 wave A had three plans, and all of them were blocked. The s465 wave A has six independent plans, so one blocked branch no longer blocks the whole wave.
+
+| Wave | Plans | Ready because |
+|---|---|---|
+| A | PF-14a, PF-14b, PF-14c, PF-15, PF-16, PF-25 (parallel; PF-15 keeps its define-before-reference order) | Every dependency is accepted at `ea385c7`. PF-25 now depends only on PF-07 (see below). |
+| B1 | PF-18, PF-19, PF-20, PF-21 (parallel) | PF-16 accepted (testutil, server); PF-08 accepted |
+| B2 | PF-22, PF-23, PF-24 (parallel) | PF-14a, PF-14b, PF-14c, PF-15 and PF-16 accepted |
+| C | PF-26 | PF-17 accepted, PF-18..PF-24 accepted |
+| D | PF-27 (serial, last) | every other plan accepted |
+
+- B1 may start while A's engine plans are still running. B1 plans do not touch `internal/engine`.
+- PF-25 (README) dependency change: `dependsOn` is now `[PF-07]`. The README documents the CLI flags, environment variables and `serve` defaults as `command.md` specifies them, and the base URL, tokens and webhook secrets as the fixtures (PF-07) seed them. The README needs nothing that PF-16 adds beyond what `command.md` already fixes. If PF-27's gate finds a mismatch between the README and the PF-16 CLI, it routes the repair to the plan whose file diverges from `command.md` (s463 rule 4).
 
 ---

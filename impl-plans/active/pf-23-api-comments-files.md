@@ -137,9 +137,31 @@ rg -n 'not implemented' internal/api/v1/comments.go internal/api/v1/files.go int
 - [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0 in both the files and API logs; PF10 guard PASS; the `not implemented` rg empty
 - [ ] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: B2 (with PF-22, PF-24). **Depends on**: PF-14a, PF-14b, PF-14c, PF-15, PF-16. The single PF-14 dependency is replaced by its three split plans. Your tests create tickets through `Engine.Create`, which builds the route (PF-14b) and validates the `receipt` file reference (PF-14c). The comment methods are PF-14a's.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (9 files). The manifest `verification` array is authoritative: the s464 commands with `-s465-` log names, and the "prints nothing" checks in must-pass form (`...; test $? -eq 1`, `test -z "$(gofmt -l ...)"`).
+
+**Intent and tasks**: unchanged from the session-464 section: the 7 comment/file operations, the download handler, and `comment_created`/`comment_updated` proven through the receiver (no `comment_deleted`). Logs are `/tmp/pf23-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-23/attempt-<n>/`.
+
+**Pitfalls added in s465**:
+- Since PF-14c, `Engine.Create` rejects unknown file signed ids (`422 validation_failed`, `errors.receipt`). Upload or insert the file first (`POST /v1/files` in an httptest test, or your own `internal/store/files.go` helper), then reference its `signedId`.
+- Never edit `internal/engine/*`. An engine defect is a reconciliation request to the owner by file, as listed in PF-22's s465 section.
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard, files and API tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
+- [ ] Pre/post hashes of the three transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `internal/api/v1/comments.go`, `internal/api/v1/files.go` and `internal/files/files.go` were transferred from PF-10 in session 464.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). `internal/api/v1/comments.go`, `internal/api/v1/files.go` and `internal/files/files.go` were transferred from PF-10 in session 464.
 
 ## Progress Log
 

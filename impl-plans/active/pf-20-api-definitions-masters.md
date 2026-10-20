@@ -163,9 +163,31 @@ rg -n 'not implemented' internal/api/v1/categories.go internal/api/v1/folders.go
 - [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; the CF-02 create/update/get tests PASS; PF10 guard PASS; the `not implemented` rg empty
 - [ ] INF candidates recorded in the progress log; pre/post hashes of the four transferred files; every source write followed by a logged compile gate with exit 0
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: B1 (with PF-18, PF-19, PF-21). It is dispatched as soon as PF-16 is accepted. It may run while PF-14a/b/c are still running. **Depends on**: PF-06, PF-08 (accepted at `ea385c7`), PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (12 files). The manifest `verification` array is authoritative: the s464 commands with `-s465-` log names, and the "prints nothing" checks in must-pass form (`...; test $? -eq 1`, `test -z "$(gofmt -l ...)"`).
+
+**Intent and tasks**: unchanged from the session-464 section: implement the 23 operations, close the CF-02 API hop (create assigns input IDs, update preserves them, get returns the fixture IDs), and keep the PF10 guard green. Logs are `/tmp/pf20-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-20/attempt-<n>/`.
+
+**Pitfalls added in s465**:
+- `internal/store` may still be edited by PF-14a/b/c (`Eng*` names). Use your `Categor*`/`Folder*`/`Definition*`/`Master*` store names.
+- Never touch `internal/engine/*`, `fixtures/default/*` or `internal/fixtures/*` (PF-16).
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0, including the CF-02 create/update/get tests; the `not implemented` check exit 0; gofmt check exit 0
+- [ ] INF candidates recorded; pre/post hashes of the four transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). Handler files were transferred from PF-10 in session 464.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). Handler files were transferred from PF-10 in session 464.
 
 ## Progress Log
 

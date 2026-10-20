@@ -191,9 +191,39 @@ The manifest `verification` array for PF-15 (logs `/tmp/pf15-s464-*.log`), copie
 - [x] Present and webhook logs pass uncached with counts; PF-09 tests stay green
 - [x] Pre/post hashes of `payload.go` recorded; gofmt clean; files < 1000 lines
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: A (with PF-14a, PF-14b, PF-14c, PF-16, PF-25). **Depends on**: PF-06, PF-07, PF-08, PF-09, all accepted at `ea385c7`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (11 files, `sharedPaths` empty), and the manifest `verification` array is authoritative.
+
+**State at `ea385c7`**: s464 attempts 1-3 delivered every task. The final logs: build/vet exit 0; present tests PASS=2 FAIL=0; whole webhook package PASS=29 FAIL=0 SKIP=0; the s464 Done Criteria are all checked. The run ended only because the whole wave was blocked.
+
+**Intent**: re-verify with uncached `-s465-` evidence and get accepted. This is a verification attempt. Edit a PF-15 file only if a verification line fails because of a PF-15 file.
+
+**Tasks**:
+1. Write the intent snapshot and record the `shasum -a 256` of `internal/webhook/payload.go` (expected `e2dcc4806ac3249358abf88dd810aa1a3087c26ae19b4ff167baac14f4bf64d7`).
+2. Run the manifest verification (step names `final-*`).
+3. If a line fails:
+   - in a PF-15 file: fix it with the compile gate (README rule 13), keeping the define-before-reference order;
+   - in a sibling's file (PF-14a/b/c in `internal/store`, PF-16): rule 13 sibling breakage. Never edit it.
+4. Record exit status, log path and counts for every line.
+
+**Pitfalls**: PF-14a/PF-14b/PF-14c edit `internal/store` (`tickets.go`, `engine_lookup.go`, the new `engine_refs.go`) at the same time. Do not add or rename exported store functions. Keep `read_tickets.go` names unchanged.
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes: build/vet exit 0; present and webhook tests exit 0, FAIL=0, SKIP=0, PASS>0 (webhook PASS includes the PF-09 tests); gofmt check exit 0
+- [ ] `payload.go` hash recorded; any edit followed by a logged compile gate; the progress log has exit status, log path and counts for each line
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `internal/webhook/payload.go` is a transferred path from PF-09 (session 464): record its hash before editing and keep its exported signatures.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as the s464 overlay mutation test) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). `internal/webhook/payload.go` is a transferred path from PF-09 (session 464): record its hash before editing and keep its exported signatures.
 
 ## Progress Log
 

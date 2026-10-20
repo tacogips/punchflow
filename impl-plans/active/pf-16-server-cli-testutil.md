@@ -275,9 +275,53 @@ The manifest `verification` array for PF-16 (logs `/tmp/pf16-s464-*.log`), copie
 - [ ] Wave-B contracts listed in the progress log are unchanged from `44e40cc`, or the change is recorded; the six admin stubs are untouched (hashes equal to `44e40cc`)
 - [ ] Every source write followed by a logged compile gate with exit 0; gofmt clean; files < 1000 lines
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections and Path Declarations
+
+**Wave**: A (with PF-14a, PF-14b, PF-14c, PF-15, PF-25). **Depends on**: PF-04..PF-10, all accepted at `ea385c7`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. This plan has 51 `writePaths`, empty `sharedPaths`, and the manifest `verification` array is authoritative.
+**Design**: `architecture.md` "#fixtures" (canonical form) and "Plan split, evidence-reporting and wave rule (session 465)" item 2; `notes.md` CF-04, CF-05, CF-09.
+
+**Path changes vs s464** (transferred PF-06 -> PF-16, manifest `ownershipTransfers[]`):
+- `internal/fixtures/fixtures_test.go`
+- the 14 files `internal/fixtures/testdata/minimal/{categories,folders,general-masters,grades,organization-charts,proxy-applicants,proxy-approvers,roles,routes,tenant,tokens,users,webhooks,workflows}.json`, declared one by one. The `testdata` and `testdata/minimal` directories are never entries. `internal/fixtures/testdata/invalid/**` and `load_orgcharts_test.go`, `validate_test.go`, `enum_rules_test.go` stay PF-06 and are read-only.
+
+**State at `ea385c7`**:
+- CF-04 and CF-05 are closed (s464 log): `TestDefaultRoundTrip` PASS, also under `TZ=Asia/Tokyo`; jq normalization 14/14 `same`; `TestDoRawResolvesRelativeURLs` PASS; scoped server/webui/admin/cli/testutil race suite PASS=22 FAIL=0.
+- Open: CF-09. The whole `./internal/fixtures/...` suite fails only in `TestLoadExportRoundTripMinimal` (`fixtures_test.go:56`), because `testdata/minimal/tenant.json` has `+09:00` timestamps while the export is UTC (`export.go:27`).
+- Unchecked s464 Done items: every verification line in one final run; wave-B contracts unchanged; admin stubs untouched; compile-gate log.
+
+**Tasks**:
+1. Write the intent snapshot and the pre-edit hashes, including `fixtures_test.go` and the 14 minimal files.
+2. Run the baseline verification (step names `baseline-*`).
+3. CF-09 data fix:
+   - In `internal/fixtures/testdata/minimal/tenant.json`, change `createdAt` and `updatedAt` from `2026-10-20T21:00:00+09:00` to `2026-10-20T12:00:00Z` (the same instant in UTC). Change nothing else in that file.
+   - If any other minimal file still differs from the exporter output, regenerate only that file from the export (load the minimal set into a temp DB, export to a temp dir outside the repo, `cp` then `mv` atomically). The manifest's minimal jq check must still print `same` for the 13 non-tenant files.
+4. `fixtures_test.go`: change it only if the UTC timestamp needs an assertion change. Keep the byte-identical comparison and the second-round fixed-point check. Never skip or delete a test.
+5. Run the final verification in one uninterrupted run (step names `final-*`). Check the remaining s464 Done items:
+   - `server.Config/New/Handler/Serve/Close`, the testutil exports and the 23 admin `Operations()` rows are unchanged from `ea385c7` (`git diff ea385c7 -- internal/server internal/testutil internal/admin/routes.go`; record that the diff is empty or the change is listed).
+   - The six PF-24 admin stub files are unchanged (hashes equal to `ea385c7`).
+
+**Pitfalls**:
+- Never weaken UTC export or `TestDefaultRoundTrip`.
+- Never edit `internal/fixtures/types.go`, `internal/model/*`, `internal/store/ids.go`, PF-06's other tests, or `testdata/invalid/**`.
+- PF-14a/b/c and PF-15 load `fixtures/default` in tests during this wave. Do not change `fixtures/default/*.json` in s465 unless a verification line fails on them. Any change keeps ids and codes, and is written atomically.
+
+### Done Criteria (session 465)
+
+- [ ] CF-09 closed: whole `go test -count=1 -v -race ./internal/fixtures/...` exit 0, FAIL=0, SKIP=0, with `--- PASS: TestLoadExportRoundTripMinimal` and `--- PASS: TestDefaultRoundTrip`, also under `TZ=Asia/Tokyo`
+- [ ] Minimal jq check: 13 `same` and DIFF count 0; tenant timestamps are `2026-10-20T12:00:00Z`
+- [ ] Every manifest verification line passes in one final run, with exit status, log path and counts; the only allowed SKIP is `TestEmbeddedBuild`
+- [ ] Wave-B contracts and the six admin stubs unchanged versus `ea385c7`; compile gate logged after every write; gofmt clean
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). In session 464 every edited file is in this plan's `writePaths`: the transferred PF-01 CLI files, the PF-06 loader/exporter and the PF-07 fixture data. Record pre/post hashes and keep accepted tests green.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). In session 464 every edited file is in this plan's `writePaths`: the transferred PF-01 CLI files, the PF-06 loader/exporter and the PF-07 fixture data. Record pre/post hashes and keep accepted tests green.
 
 ## Progress Log
 

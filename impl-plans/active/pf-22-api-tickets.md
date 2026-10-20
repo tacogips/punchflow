@@ -178,9 +178,29 @@ wc -l internal/api/v1/ticket*.go internal/store/ticket_queries.go | sort -n | ta
 - [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; the 10 ticket events asserted by `eventType`; PF10 guard PASS; the `not implemented` rg empty; every file < 1000 lines
 - [ ] Pre/post hashes of the transferred files; every source write followed by a logged compile gate with exit 0
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: B2 (with PF-23, PF-24). **Depends on**: PF-14a, PF-14b, PF-14c, PF-15, PF-16. The single PF-14 dependency is replaced by its three split plans (design `architecture.md` "Plan split, evidence-reporting and wave rule (session 465)" item 1).
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (9 files). The manifest `verification` array is authoritative: the s464 commands with `-s465-` log names, and the "prints nothing" checks in must-pass form (`...; test $? -eq 1`, `test -z "$(gofmt -l ...)"`).
+
+**Intent and tasks**: unchanged from the session-464 section: implement the 15 ticket operations as thin handlers over `engine.Engine`, and prove the ten `ticket_*` events through HTTP plus the testutil receiver with verified signatures. Logs are `/tmp/pf22-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-22/attempt-<n>/`.
+
+**Engine contract in s465**: call only the exported surface of `internal/engine/engine.go` (`New`, `Create`, `Update`, `UpdateForm`, `Approve`, `SendBack`, `Deny`, `Withdraw`, `Archive`, `CanView`, and the input types). It is frozen and unchanged since `ea385c7`. Never edit `internal/engine/*` or the `Eng*` store files. An engine defect becomes a reconciliation request to the owner by file: `actions.go`/`comments.go`/`visibility.go`/`numbering.go` -> PF-14a; `routing.go`/`conditions.go` -> PF-14b; `forms.go`/`create.go`/`update.go` -> PF-14c.
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the 10 ticket events asserted by `eventType`; the `not implemented` check exit 0; every file < 1000 lines; gofmt check exit 0
+- [ ] Pre/post hashes of the transferred files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). Handler files were transferred from PF-10 in session 464.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). Handler files were transferred from PF-10 in session 464.
 
 ## Progress Log
 

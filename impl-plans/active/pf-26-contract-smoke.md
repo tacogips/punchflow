@@ -130,9 +130,29 @@ Evidence: exit 0; FAIL=0; SKIP=0. The contract log shows the 96-route test, 96 s
 - [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, >= 109 `TestContract` subtests PASS, and `--- PASS: TestServeSmoke`
 - [ ] Every non-test failure seen during the work is listed under "Reconciliation requests" with its s464 owner and its resolution
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: C. **Depends on**: PF-17 (accepted at `ea385c7`), PF-18, PF-19, PF-20, PF-21, PF-22, PF-23, PF-24 (unchanged; the engine plans PF-14a/b/c are reached through PF-22..PF-24).
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (10 files). The manifest `verification` array is authoritative: the s464 commands with `-s465-` log names, and the gofmt check in must-pass form.
+
+**Intent and tasks**: unchanged from the session-464 section: 96/96 routes, 96/96 schema-validated scenarios, 13/13 webhook payloads, and `TestServeSmoke`. Logs are `/tmp/pf26-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-26/attempt-<n>/`.
+
+**Repair routing in s465**: a schema or behavior failure in a non-test file is a reconciliation request to the owner from the s465 `ownershipIndex`. Engine files go to PF-14a/PF-14b/PF-14c by file, as listed in `design-approval-engine.md` "Plan ownership (session 465)". Never edit them.
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; contract and smoke tests exit 0, FAIL=0, SKIP=0; >= 109 `TestContract` subtests PASS; `--- PASS: TestServeSmoke`; gofmt check exit 0
+- [ ] Every non-test failure seen during the work is listed under "Reconciliation requests" with its s465 owner and its resolution
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13).
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15).
 
 ## Progress Log
 

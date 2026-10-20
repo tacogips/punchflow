@@ -162,9 +162,29 @@ Evidence: exit 0; FAIL=0; SKIP=0; the fault-code table test shows 6 passing subt
 - [ ] `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`
 - [ ] Pre/post hashes of the six transferred stub files; every source write followed by a logged compile gate with exit 0
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: B2 (with PF-22, PF-23). **Depends on**: PF-14a, PF-14b, PF-14c, PF-15, PF-16. The single PF-14 dependency is replaced by its three split plans. Your fire tests create tickets through `Engine.Create`, which uses all three.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (13 files). The manifest `verification` array is authoritative: the s464 commands with `-s465-` log names, and the gofmt check in must-pass form (`test -z "$(gofmt -l ...)"`).
+
+**Intent and tasks**: unchanged from the session-464 section: the 23 admin endpoints, the fault catalog, `fire` for exactly the 13 kickflow events, and the negative `ticket_submitted`/`comment_deleted` test in `internal/admin/webhooks_test.go` (PF-27's `negative_tests_present` depends on it). Logs are `/tmp/pf24-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-24/attempt-<n>/`.
+
+**Pitfalls added in s465**: never edit `internal/engine/*` or PF-16's `internal/admin/admin.go`, `routes.go` or `routes_test.go`. An engine defect is a reconciliation request to the owner by file, as listed in PF-22's s465 section.
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; admin tests exit 0, FAIL=0, SKIP=0, with 6 fault subtests and 13 fire subtests PASS and PF-16's `routes_test.go` PASS; `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`; gofmt check exit 0
+- [ ] Pre/post hashes of the six transferred stub files; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). The six handler files were transferred from PF-16 in session 464.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). The six handler files were transferred from PF-16 in session 464.
 
 ## Progress Log
 

@@ -215,9 +215,47 @@ Manual check left to the user (documented in README by PF-25): Keycloak login vi
 - [ ] CF-01..CF-06 closing notes appended to `notes.md`; the `mise.toml` `test` task is uncached; `go-toolchain.json` and `web/toolchain.json` each have one appended record.
 - [ ] 27 plans and the s460/s462/s463 manifests are in `impl-plans/completed/`; `impl-plans/README.md` is updated; the s464 manifest is untouched in `active/`.
 
+## Continuation (session 465) - read first; overrides the session-463/464 log names, archival list, verification forms and Done Criteria
+
+**Wave**: D (serial, last). **Depends on**: every other plan. PF-14 is replaced by PF-14a, PF-14b and PF-14c. The accepted PF-01..PF-13 and PF-17 are at `ea385c7`.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. This plan's `writePaths` (39, of which 3 are `artifactRoots`) and `sharedPaths` (41) give 77 source entries with no directory entry. They are authoritative over the "Path Declarations" list above.
+
+**Session-465 changes**:
+1. Paths added (all files):
+   - `writePaths`: `impl-plans/completed/pf-14a-engine-lifecycle.md`, `impl-plans/completed/pf-14b-engine-routing.md`, `impl-plans/completed/pf-14c-engine-forms-create.md`, `impl-plans/completed/punchflow-kickflow-dummy-s464-dispatch.json`
+   - `sharedPaths`: the matching `impl-plans/active/` files of the three split plans, and `impl-plans/active/punchflow-kickflow-dummy-s464-dispatch.json`
+2. Log names: `-s465-`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-27/attempt-<n>/`.
+3. Verification forms (README rule 14). The manifest `verification` array is the 16 s464 commands with these must-pass rewrites. Each must show exit 0:
+   - line 8: `...; grep -c '(cached)' <log>; test $? -eq 1`
+   - line 13: `test -z "$(gofmt -l cmd internal *.go)"`
+   - line 14: CF-01 cross-check `rg ...; test $? -eq 1`
+   - line 15: `test -z "$(git status --porcelain web/dist/app punchflow)"`
+   - line 16: `test ! -e web/package-lock.json && test ! -e web/yarn.lock && test ! -e web/pnpm-lock.yaml`
+4. Archival, only after the gate passes in one uninterrupted run:
+   - 30 plan files: PF-01..PF-27 including the superseded `pf-14-engine.md`, plus `pf-14a`/`pf-14b`/`pf-14c`.
+   - Four historical manifests: s460, s462, s463, s464. Move s464 last.
+   - The s465 manifest stays in `impl-plans/active/`. Name it in `impl-plans/README.md` as the final manifest that the operator archives.
+5. `design-docs/specs/notes.md`: append closing notes for CF-01..CF-06 (as in s464), plus CF-07, CF-08 and CF-09 below the session-464 wave-A findings table:
+   - CF-07: the PF-14a/b/c named-test PASS lines in the full gate
+   - CF-08: s465 reports have no expected-non-zero command in `verification`
+   - CF-09: `TestLoadExportRoundTripMinimal` PASS in the full gate
+6. Repair routing: a failing gate in a foreign file goes to its owner from the s465 ownership index (`ownershipTransfers[]` first; engine files by the PF-14a/b/c split). PF-27 never edits it, and re-runs the whole gate after each routed repair.
+
+### Done Criteria (session 465)
+
+- [ ] Verification lines 1-16 (`-s465-` logs) passed in one final uninterrupted run, each with exit 0, log path and counts. Full gate: FAIL=0, SKIP=0, zero `(cached)`, every package `ok`. `TestRepoInvariants` (4 subtests), `TestEmbeddedBuild`, `TestServeSmoke`, `TestDefaultRoundTrip` and `TestLoadExportRoundTripMinimal` PASS.
+- [ ] CF-01..CF-09 closing notes appended to `notes.md`; the `mise.toml` `test` task is uncached; `go-toolchain.json` and `web/toolchain.json` each have one appended record.
+- [ ] 30 plan files and the s460/s462/s463/s464 manifests are in `impl-plans/completed/`; `impl-plans/README.md` is updated; the s465 manifest is untouched in `active/`.
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13), except that this plan runs `go mod tidy` and builds `web/dist/app` and `./punchflow`. Record pre/post `shasum -a 256` for every shared file you edit. Do not commit (the workflow commits).
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains (for example a routed repair that has not landed), report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. A foreign failure is a reconciliation request that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15), except that this plan runs `go mod tidy` and builds `web/dist/app` and `./punchflow`. Record pre/post `shasum -a 256` for every shared file you edit. Do not commit (the workflow commits).
 
 ## Progress Log
 

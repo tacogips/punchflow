@@ -110,9 +110,35 @@ rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|
 - [ ] All 9 sections present; `grep -c MISSING /tmp/pf25-s464-grep.log` prints 0; the banned-enum rg over README.md prints nothing
 - [ ] The progress log has exit status and log path for every command
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: A (with PF-14a, PF-14b, PF-14c, PF-15, PF-16). **Depends on**: PF-07 only (accepted at `ea385c7`). PF-16 is no longer a dependency (design `architecture.md` "Continuation order (session 465)").
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged (`README.md` and this plan file). Logs are `/tmp/pf25-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-25/attempt-<n>/`.
+
+**Intent**: unchanged. Write `README.md` with the 9 required sections and the session-462/463 points. `README.md` does not exist at `ea385c7`.
+
+**Sources of truth in s465**:
+- CLI flags, environment variables, subcommands, defaults and exit codes: `design-docs/specs/command.md` only. `internal/cli/config.go` (PF-16) exists at `ea385c7` and may be read as a cross-check. If it disagrees with `command.md`, write what `command.md` says and record the mismatch as a reconciliation request to PF-16 (`file:line`). Never edit `internal/cli/*`.
+- Persona tokens and e-mails: `fixtures/default/tokens.json`, `users.json` and `deploy/keycloak/realm-punchflow.json` (ids and values are stable even if PF-16 rewrites the fixture files in this wave).
+- Admin API paths: `design-docs/specs/design-auth-admin.md` "Dev admin API".
+- Webhook events, headers and retry schedule: `design-docs/specs/design-api-coverage.md` webhook event matrix and `design-docs/specs/design-webhooks.md`.
+
+**Verification change**: the manifest commands are the s464 ones with `-s465-` log names. "No MISSING lines" and the banned-enum check are now must-pass (`grep -c MISSING <log>; test $? -eq 1` and `rg ... README.md; test $? -eq 1`), and each must show `exit=0`.
+
+### Done Criteria (session 465)
+
+- [ ] All 9 sections present; the MISSING check and the banned-enum check exit 0; every flag in README appears in `command.md`
+- [ ] The progress log has exit status and log path for every command; any README/CLI mismatch is recorded as a reconciliation request to PF-16
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13).
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code or documents, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15).
 
 ## Progress Log
 

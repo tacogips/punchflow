@@ -149,6 +149,38 @@ A resolved non-skipped step with zero assignees fails submit with `422 validatio
 | TestFormValidation | unknown field code `400`, missing required on submit `422`, draft skips required, approver field rules |
 | TestCircularStepAutoComplete | `actionType: none` completes on activation (INF-15) |
 
+The table above lists scenarios. The PF-14 plan names the tests that cover them with the default fixtures. `TestCircularStepAutoComplete` is covered by `TestLeaveAssigneeCustomizableAndAuthorConfirm` (step 3, `none`); `TestArchiveRules` is `TestArchive`; `TestStepConditionAndFallback` is added by PF-14b (below).
+
+### Plan ownership (session 465)
+
+PF-14 is split into PF-14a, PF-14b and PF-14c, and each owns whole files (`architecture.md`, "Plan split, evidence-reporting and wave rule (session 465)"). The engine surface in `engine.go` (PF-14a) is unchanged: every exported identifier and signature stays as it is at `ea385c7`.
+
+| Plan | Behavior owned | Tests that must PASS by name |
+|---|---|---|
+| PF-14a | State machine, Approve/SendBack/Deny/Withdraw/Archive, step progression (`pf14Advance`), action comments, comments with mentions, visibility, numbering, the INF-41 check order | `TestSubmitMultiStepApproveCompletes`, `TestDenyIsTerminal`, `TestSendBackToApplicantAndResubmit`, `TestSendBackToEarlierStep`, `TestWithdraw`, `TestParallelAllAndAny`, `TestProxyApproval`, `TestRouteBranching` (`lifecycle_test.go`); `TestCreationRestricted`, `TestAdminWorking`, `TestVisibility`, `TestArchive` (`events_test.go`); `TestCommentRules`, `TestComments` (`comments_test.go`) |
+| PF-14b | "Route resolution": branch selection, step conditions, the condition operators, assignee resolution for every `stepType`, fallbacks, and section-visibility condition matching | `TestPurchaseConditionsAndNomination`, `TestLeaveAssigneeCustomizableAndAuthorConfirm` (`routing_test.go`); new `TestStepConditionAndFallback` (a `conditional_skip` step is skipped; a `manager` step whose author team has no leader with a matching grade falls back to `higher_manager` and walks up the ancestry; fallback `skip` marks the step skipped; a `team` target with `descendants: true` includes child-team members) and new `TestConditionOperators` (table test for every operator in "Route resolution" over number, string, checkbox, grade `level`, team ancestry and master item values) (`conditions_test.go`) |
+| PF-14c | "Form validation" rules 1-7, Create, Update, UpdateForm, the proxy application rule | `TestFormValidation` (`forms_test.go`); new `TestFormFieldTypes` (one valid and one invalid value per `fieldType`, including unknown `user`/`team`/`ticket`/master item ids and unknown file signed ids -> `422 validation_failed` with `errors.<fieldCode>`), `TestProxyApplicantCreate` (valid registration -> author = actor, `proxyClientUser` = client; expired, other-workflow or missing registration and a suspended client -> `422 validation_failed`) and `TestUpdateFormMerge` (`UpdateForm` with a subset keeps the other fields' values and referenced ids) (`create_update_test.go`) |
+
+Frozen cross-file helpers. One plan's file calls them and another plan owns them. Their signatures stay fixed, and so do their results for inputs that already work at `ea385c7`. A plan that needs different behavior adds a new helper in its own file. Each helper is listed under the plan that owns the file that defines it. The list comes from a grep at `ea385c7` of every `pf14*`/`mustActiveChart`/`assertPF14*` call and every `store.Eng*` call in `internal/engine/*.go`, matched to the file that defines it. Every function that is defined in one split plan's file and called from another split plan's file is listed. A few same-plan helpers are listed too, which does no harm.
+
+- PF-14a owns:
+  - `actions.go`: `pf14Guard` (called by comments, update), `pf14Event` (comments, create, update), `pf14CanAct` (update), `pf14Advance`.
+  - `numbering.go`: `pf14Number` (create, update).
+  - `engine.go`: the whole exported surface. It calls PF-14c's `pf14Create`/`pf14Update`/`pf14UpdateForm`, which are frozen below.
+  - `internal/store/tickets.go`, which routing, create and update call: `EngLoadTicket`, `EngInsertTicket`, `EngUpdateTicket`, `EngTicketInputs`, `EngReplaceInputs`, `EngReplaceSlipItems`, `EngTicketSteps`, `EngDeleteTicketSteps`, `EngInsertStep`, `EngUpdateStep`, `EngStepAssignees`, `EngInsertAssignee`, `EngUpdateAssignee`, `EngInsertCustomApprovers`, `EngCustomApprovers`, plus the comment and link functions `EngAddComment`, `EngLoadComment`, `EngUpdateComment`, `EngAttachCommentFiles`, `EngLinkTickets`.
+  - Test helpers: `pf14Setup`, `pf14TestEnv` and its methods (`setup_test.go`), `pf14CreateWorkflowTicket`, `pf14EventTypes`, `assertPF14FieldError` (`comments_test.go`), `assertPF14ErrorCode` (`events_test.go`).
+- PF-14b owns:
+  - `routing.go`: `pf14BuildRoute` (create, update), `pf14Contains` (comments, visibility).
+  - `conditions.go`: `pf14InputValues`, `pf14SectionVisible`, `pf14FieldValue`, `pf14Float` (all called by forms), `pf14ConditionMatch`.
+  - `internal/store/engine_lookup.go`: `EngTenantMode`, `EngActiveProxyApprovers` (actions), `EngUserIsActiveMember` (create, update, visibility), `EngUsersByTeam` (visibility), `EngActiveMemberships`, `EngTeamAncestors`, `EngLeadersOfTeam`, `EngSignedFileExists`.
+  - New operators extend `pf14ConditionMatch`; an operator that works today keeps its result. `pf14Float` keeps its numeric parsing. Grade-level comparison goes in a new PF-14b helper.
+- PF-14c owns:
+  - `create.go`/`update.go`: `pf14Create`, `pf14Update`, `pf14UpdateForm` (all called by `engine.go`), `mustActiveChart`, `pf14ErrorContext`, `pf14InputsFromRows` (`update.go`; called by forms).
+  - `forms.go`: `pf14ValidateApprovalInputs` (actions), `pf14NormalizeForm`.
+  - Test helpers: `pf14CompleteInputs` (also called by `setup_test.go`, `lifecycle_test.go`, `routing_test.go`), `pf14FormDefinition` (also called by `routing_test.go`), `pf14Input` (`forms_test.go`).
+  - Its new reference and proxy-applicant lookups go in the new `internal/store/engine_refs.go` with the `Eng` prefix.
+- New test helpers use a plan prefix (`pf14b...`, `pf14c...`) and live in the plan's own test files. No split plan edits `setup_test.go` except PF-14a.
+
 ## References
 
 - `design-docs/references/kickflow-api.md` 1.8, 1.9, 3 (Tickets), 4 (Route*, Ticket*, Workflow*), 6.3-6.5, 6.9

@@ -154,9 +154,31 @@ Evidence: exit 0; FAIL=0; SKIP=0; PASS covers every case in the Tests section.
 - [ ] Every manifest verification line passes with exit status, log path and counts: exit 0, FAIL=0, SKIP=0, PASS>0; the PF10 guard log PASS; the `not implemented` rg prints nothing
 - [ ] Pre/post hashes of `users.go` and `grades.go`; every source write followed by a logged compile gate with exit 0
 
+## Continuation (session 465) - read first; overrides the session-462/463/464 sections
+
+**Wave**: B1 (with PF-19, PF-20, PF-21). It is dispatched as soon as PF-16 is accepted. It may run while the wave-A engine plans (PF-14a/b/c) are still running. **Depends on**: PF-08 (accepted at `ea385c7`), PF-16.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s465-dispatch.json`. Paths are unchanged from s464 (8 files). The manifest `verification` array is authoritative: the s464 commands with `-s465-` log names, and the "prints nothing" checks in must-pass form (`...; test $? -eq 1`, `test -z "$(gofmt -l ...)"`).
+
+**Intent and tasks**: unchanged from the session-464 section: implement the 18 operations, run the listed tests, and keep the PF10 guard green. Logs are `/tmp/pf18-s465-<step>.log`, copied to `tmp/punchflow-kickflow-dummy-s465/PF-18/attempt-<n>/`.
+
+**Pitfalls added in s465**:
+- `internal/store` may still be edited by PF-14a/b/c (wave A, `Eng*` names) and by the other B1 plans. Use only the `User*`/`Grade*` store names your plan lists, and grep `internal/store` before adding one.
+- Never touch `internal/engine/*`.
+
+### Done Criteria (session 465)
+
+- [ ] Every manifest verification line passes with exit status, log path and counts: build/vet exit 0; PF10 guard and plan tests exit 0, FAIL=0, SKIP=0, PASS>0; the `not implemented` check exit 0; gofmt check exit 0
+- [ ] Pre/post hashes of `users.go` and `grades.go`; every source write followed by a logged compile gate with exit 0
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `users.go` and `grades.go` were transferred from PF-10 in session 464; record hashes before editing.
+Evidence reporting (README rule 14; design architecture.md s465 rule 3):
+1. The `verification` array holds only commands that are required to pass. An intentional negative or mutation proof (an expected non-zero exit, such as an `rg` ban grep with no match) never goes there. It goes into the `authorSelfCheck.checks` evidence text, with the command, the expected exit status, the observed exit status and the log path.
+2. When assigned work remains, report `implementationIncomplete: true` and list the remaining items in `implPlanUpdates` and in this Progress Log. Never report remaining work as a High/Medium finding, a risk or a residual risk.
+3. High/Medium labels are only for defects in delivered code, each with `file:line`. Sibling breakage is a blocker that names the owning plan, not a finding.
+4. Every attempt ends with `go build ./...` exit 0 and the completed work recorded here.
+
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-15). `users.go` and `grades.go` were transferred from PF-10 in session 464; record hashes before editing.
 
 ## Progress Log
 

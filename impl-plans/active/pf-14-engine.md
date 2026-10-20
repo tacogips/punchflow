@@ -1,6 +1,6 @@
 # PF-14 Approval Engine Implementation Plan
 
-**Status**: In Progress
+**Status**: Superseded by PF-14a/PF-14b/PF-14c (session 465; not dispatched)
 **Wave**: 3 | **Depends On**: PF-02, PF-06, PF-07, PF-10 | **Plan ID**: PF-14
 **Design Reference**: design-docs/specs/design-approval-engine.md (all); design-docs/specs/notes.md INF-11..INF-25, INF-28, INF-34..INF-36, INF-40, INF-41; design-docs/specs/design-api-coverage.md rows 56-70, 91-95, event matrix
 **Created**: 2026-10-20
@@ -198,9 +198,21 @@ The manifest `verification` array for PF-14 (log names `/tmp/pf14-s464-*.log`), 
 - [ ] Every source write was followed by a logged compile gate with exit 0 (rule 13)
 - [x] New exported store functions start with `Eng`; gofmt clean; files < 1000 lines; enum rg empty
 
+## Continuation (session 465) - superseded index
+
+This plan is no longer dispatched (CF-07; design `architecture.md` "Plan split, evidence-reporting and wave rule (session 465)"). Its files and remaining work are split three ways:
+
+| Plan | File | Owns |
+|---|---|---|
+| PF-14a | `impl-plans/active/pf-14a-engine-lifecycle.md` | `engine.go`, `actions.go`, `comments.go`, `visibility.go`, `numbering.go`, `setup_test.go`, `lifecycle_test.go`, `events_test.go`, `comments_test.go`, `internal/store/tickets.go` |
+| PF-14b | `impl-plans/active/pf-14b-engine-routing.md` | `routing.go`, `conditions.go`, `routing_test.go`, `conditions_test.go`, `internal/store/engine_lookup.go` |
+| PF-14c | `impl-plans/active/pf-14c-engine-forms-create.md` | `forms.go`, `create.go`, `update.go`, `forms_test.go`, `create_update_test.go`, `internal/store/engine_refs.go` |
+
+`internal/engine/progression.go` is dropped (never created; `pf14Advance` is in `actions.go`). This file keeps its "Tests" section and Progress Log as history, and the split plans cite it. Nobody edits it in s465 except PF-27, which archives it to `impl-plans/completed/pf-14-engine.md`.
+
 ## Execution Protocol
 
-Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `internal/engine/engine.go` is a transferred path from PF-10 (session 464): record its hash before editing and keep all exported signatures.
+Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-14). Superseded in session 465; see the split plans.
 
 ## Progress Log
 
