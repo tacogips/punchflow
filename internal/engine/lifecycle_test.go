@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"encoding/json"
 	"testing"
 
 	"punchflow/internal/kferr"
@@ -129,18 +128,16 @@ func TestRouteBranching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	field := ""
-	for _, s := range def.SectionList {
-		for _, f := range s.FormFields {
-			if f.Code == "amount" {
-				field = f.ID
-			}
+	fields := map[string]string{}
+	for _, section := range def.SectionList {
+		for _, formField := range section.FormFields {
+			fields[formField.Code] = formField.ID
 		}
 	}
-	amount, _ := json.Marshal(20000000)
+	inputs := pf14CompleteInputs(fields, map[string]any{"amount": 20000000, "purpose": "client meal"})
 	status := model.TicketStatusInProgress
 	err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
-		_, _, err := e.engine.Create(e.ctx, tx, e.actor("sales-rep"), CreateInput{Status: status, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"), Inputs: &[]FieldInput{{FormFieldID: field, FormFieldCode: "amount", Value: amount}}})
+		_, _, err := e.engine.Create(e.ctx, tx, e.actor("sales-rep"), CreateInput{Status: status, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"), Inputs: &inputs})
 		return err
 	})
 	if api, ok := kferr.As(err); !ok || api.Code != "validation_failed" {

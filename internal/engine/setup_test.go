@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -19,6 +18,8 @@ type pf14TestEnv struct {
 	db     *store.DB
 	engine *Engine
 	clock  *kftime.FakeClock
+	users  map[string]string
+	teams  map[string]string
 }
 
 func pf14Setup(t *testing.T) *pf14TestEnv {
@@ -37,25 +38,57 @@ func pf14Setup(t *testing.T) *pf14TestEnv {
 	if _, err = fixtures.Load(ctx, db, fixtureFS, clock); err != nil {
 		t.Fatal(err)
 	}
-	return &pf14TestEnv{t: t, ctx: ctx, db: db, engine: New(clock), clock: clock}
+	users := map[string]string{}
+	rows, err := db.Q().QueryContext(ctx, `SELECT id, code FROM users`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var id, code string
+		if err := rows.Scan(&id, &code); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		users[code] = id
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	chart, err := store.ActiveOrgChartID(ctx, db.Q())
+	if err != nil {
+		t.Fatal(err)
+	}
+	teams := map[string]string{}
+	rows, err = db.Q().QueryContext(ctx, `SELECT id, code FROM teams WHERE organization_chart_id=?`, chart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var id, code string
+		if err := rows.Scan(&id, &code); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		teams[code] = id
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &pf14TestEnv{t: t, ctx: ctx, db: db, engine: New(clock), clock: clock, users: users, teams: teams}
 }
 func (e *pf14TestEnv) user(code string) string {
 	e.t.Helper()
-	id, err := store.UserIDByCode(e.ctx, e.db.Q(), code)
-	if err != nil {
-		e.t.Fatal(err)
+	id, ok := e.users[code]
+	if !ok {
+		e.t.Fatalf("unknown test user code %q", code)
 	}
 	return id
 }
 func (e *pf14TestEnv) team(code string) string {
 	e.t.Helper()
-	chart, err := store.ActiveOrgChartID(e.ctx, e.db.Q())
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	id, err := store.TeamIDByCode(e.ctx, e.db.Q(), chart, code)
-	if err != nil {
-		e.t.Fatal(err)
+	id, ok := e.teams[code]
+	if !ok {
+		e.t.Fatalf("unknown test team code %q", code)
 	}
 	return id
 }
@@ -75,17 +108,17 @@ func (e *pf14TestEnv) createExpense(actorCode string, amount int, submit bool) s
 			fields[f.Code] = f.ID
 		}
 	}
-	value, _ := json.Marshal(amount)
-	purpose, _ := json.Marshal("client meal")
+	inputs := pf14CompleteInputs(fields, map[string]any{"amount": amount, "purpose": "client meal"})
 	status := model.TicketStatusDraft
 	if submit {
 		status = model.TicketStatusInProgress
 	}
 	actor := Actor{UserID: e.user(actorCode)}
+	teamID := e.team("sales")
 	var id string
 	err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
 		var err error
-		id, _, err = e.engine.Create(e.ctx, tx, actor, CreateInput{Status: status, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"), Inputs: &[]FieldInput{{FormFieldID: fields["amount"], FormFieldCode: "amount", Value: value}, {FormFieldID: fields["purpose"], FormFieldCode: "purpose", Value: purpose}}})
+		id, _, err = e.engine.Create(e.ctx, tx, actor, CreateInput{Status: status, WorkflowID: workflow.ID, AuthorTeamID: teamID, Inputs: &inputs})
 		return err
 	})
 	if err != nil {

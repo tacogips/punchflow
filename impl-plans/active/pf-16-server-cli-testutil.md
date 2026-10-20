@@ -259,20 +259,18 @@ Evidence: exit 0 for each command; FAIL=0 in both logs. In the main log, SKIP ma
 
 ### Verification (session 464)
 
-The manifest `verification` array for PF-16 (logs `/tmp/pf16-s464-*.log`), copied to `tmp/punchflow-kickflow-dummy-s464/PF-16/attempt-<n>/`. Evidence:
-- build and vet exit 0
-- test log: exit 0, FAIL=0, at most one SKIP (`TestEmbeddedBuild`), with `TestDoRawResolvesRelativeURLs` PASS
-- fixtures log: exit 0, FAIL=0, SKIP=0, with `--- PASS: TestDefaultRoundTrip`
-- TZ log: exit 0 with `TestDefaultRoundTrip` PASS
-- jqnorm: 14 `same`, DIFF 0
-- the CF-01 grep and the frozen-files `git diff --quiet` both pass
-- gofmt prints nothing
-- the version log prints `punchflow 0.1.0`
+The manifest `verification` array for PF-16 (logs `/tmp/pf16-s464-*.log`), copied to `tmp/punchflow-kickflow-dummy-s464/PF-16/attempt-<n>/`. Evidence (final-source logs copied to `tmp/punchflow-kickflow-dummy-s464/PF-16/attempt-1/final/`):
+- `go build ./...` exit 0; scoped `go vet` exit 0.
+- Scoped server/webui/admin/cli/testutil race suite exit 0: PASS=22, FAIL=0, SKIP=0; includes `TestRunVersion`, `TestRunPlaceholdersAndUsage` and `TestDoRawResolvesRelativeURLs`.
+- Whole fixtures race suite exit 1: PASS=35, FAIL=1, SKIP=0. `TestDefaultRoundTrip` and `TestTenantTimestampFallback` PASS. `TestLoadExportRoundTripMinimal` fails because `fixtures_test.go` still expects the fixture’s non-UTC `+09:00` tenant bytes, while CF-04 requires UTC export.
+- Focused default round-trip suite exit 0: PASS=2, FAIL=0, SKIP=0; also passes under `TZ=Asia/Tokyo` (PASS=1).
+- jq normalization prints 14 `same`, DIFF=0; CF-01 grep and frozen-file diff are clean; gofmt output is empty; version prints `punchflow 0.1.0`.
+- Baseline and intermediate failed attempts, including the transient shared-tree `internal/store/read_tickets.go` undefined `pf08StringPtr` failure and initial evidence-copy contamination, are preserved in the same attempt directory; final build/vet and scoped tests pass after the shared compile recovered.
 
 ### Done Criteria (session 464)
 
-- [ ] CF-04 closed: `TestDefaultRoundTrip` PASS, also under `TZ=Asia/Tokyo`, with the second-round fixed point; jq normalization 14/14 `same`; CF-01 grep empty; `internal/model`, `internal/fixtures/types.go` and `internal/store/ids.go` unchanged versus `44e40cc`
-- [ ] CF-05 closed: `TestDoRawResolvesRelativeURLs` PASS
+- [x] CF-04 closed: `TestDefaultRoundTrip` PASS, also under `TZ=Asia/Tokyo`, with the second-round fixed point; jq normalization 14/14 `same`; CF-01 grep empty; `internal/model`, `internal/fixtures/types.go` and `internal/store/ids.go` unchanged versus `44e40cc`
+- [x] CF-05 closed: `TestDoRawResolvesRelativeURLs` PASS
 - [ ] Every manifest verification line passes with exit status, log path and counts; the only SKIP is `TestEmbeddedBuild`
 - [ ] Wave-B contracts listed in the progress log are unchanged from `44e40cc`, or the change is recorded; the six admin stubs are untouched (hashes equal to `44e40cc`)
 - [ ] Every source write followed by a logged compile gate with exit 0; gofmt clean; files < 1000 lines
@@ -290,3 +288,11 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). In se
 **Reconciliation requests**: `internal/webhook/payload.go:25,41,45,51` references `present.WebhookTenant`, `present.Comment`, `present.TicketWithStep`, and `present.TicketDetail`, absent while PF-15 is in progress. Owner: PF-15 (`internal/present/{ticket.go,ticket_detail.go,comment.go,tenant.go}` and `internal/webhook/payload.go` per the s463 ownership declarations). Final `go build ./...` rerun exited 1; full log `/tmp/pf16-s463-build-final-attempt.log` copied to `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-1/pf16-s463-build-final-attempt.log`. Resume by rerunning all PF-16 s463 commands after PF-15 lands and those symbols compile; do not modify foreign files.
 **Follow-up verification**: `bash -o pipefail -c "go test -count=1 -v -run 'TestDefaultRoundTrip' ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s463-roundtrip.log"` exited 1; counts PASS=0, FAIL=1, SKIP=0 from `/tmp/pf16-s463-roundtrip-counts.log`. The failure at `internal/fixtures/default_roundtrip_test.go:34` is `UNIQUE constraint failed: team_memberships.team_id, team_memberships.user_id` during `fixtures.Load`, so byte-identical export was not reached. Full log is copied to `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-1/pf16-s463-roundtrip.log`.
 **Additional reconciliation request**: The duplicate membership failure originates in accepted PF-06 `internal/fixtures/load.go` (owner per `punchflow-kickflow-dummy-s462-dispatch.json`). PF-14 independently recorded the same fixture-load failure. Route a repair to PF-06 and rerun `TestDefaultRoundTrip` after it lands. Do not modify the accepted loader from PF-16. Required full build/vet/scoped race tests and version command remain unverified while PF-15's payload symbols are missing; final acceptance criterion remains unchecked.
+
+
+### Session: 2026-10-21 (session 464, PF-16)
+**Intent snapshot**: Pre-edit source hashes and source copies (`.source` extension), tree HEAD/status, and per-edit intentions are under `tmp/punchflow-kickflow-dummy-s464/PF-16/attempt-1/pre-edit/` and `edit-intents.md`. The first snapshot attempt briefly copied `.go` into the evidence tree; its initial build failure was captured, the copies were renamed `.source`, and a clean-tree baseline build passed. All baseline, intermediate and final complete logs are retained under `attempt-1/baseline/`, `attempt-1/`, and `attempt-1/final/`.
+**Tasks Completed**: Fixed `Env.DoRaw` to clear `RequestURI` on its clone while preserving relative URL resolution. Updated tenant Load/Reset insertion to preserve nonzero fixture timestamps independently, with clock fallback for zero values; Export emits UTC timestamps. Extended `TestDefaultRoundTrip` with a second export fixed-point assertion and added Load/Reset clock-fallback assertions. Exported the current default fixtures through the CLI and replaced the 14 JSON files atomically; normalization against `44e40cc` yields 14 `same`, DIFF=0. Frozen `internal/model/*`, `internal/fixtures/types.go`, and `internal/store/ids.go` are unchanged. Admin stub files match `44e40cc`; `Operations()` has 23 rows.
+**Verification**: Final `go build ./...` and scoped `go vet` exited 0. `go test -count=1 -v -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/...` exited 0, PASS=22 FAIL=0 SKIP=0. Focused `TestDefaultRoundTrip` and `TestTenantTimestampFallback` race tests exited 0, PASS=2 FAIL=0 SKIP=0; `TZ=Asia/Tokyo` default round-trip exited 0, PASS=1 FAIL=0 SKIP=0. `go test -count=1 -v -race ./internal/fixtures/...` is not green: PASS=35 FAIL=1 SKIP=0, sole failure `TestLoadExportRoundTripMinimal` at `internal/fixtures/fixtures_test.go:56`; its expected fixture uses `2026-10-20T21:00:00+09:00` while accepted CF-04 requires UTC output. CF-01 grep, gofmt, frozen paths and version checks pass. Test logs and command outputs are in `attempt-1/final/`.
+**Reconciliation request (owner PF-06)**: `internal/fixtures/fixtures_test.go` compares exported bytes to `internal/fixtures/testdata/minimal/tenant.json`, whose `createdAt`/`updatedAt` use `+09:00`; UTC export correctly canonicalizes them to `Z`. PF-16 is explicitly forbidden from editing `internal/fixtures/testdata/**`, and `fixtures_test.go` is outside PF-16 `writePaths`. Route the test expectation/canonical testdata update to PF-06 (accepted owner), scoped to preserving the UTC contract; resume PF-16 when that owner repair lands and rerun the whole `./internal/fixtures/...` race suite. Do not weaken UTC export or edit the foreign test here.
+**Shared-tree compile record**: Builds immediately after edits to `env.go` and `load.go` exited 1 because concurrent PF-15 work left `internal/store/read_tickets.go` referencing undefined `pf08StringPtr`; subsequent build after `export.go` and final build both exited 0 after the shared tree recovered. The PF-16 code caused no compile error. Test-file writes were followed by scoped vet (the first vet caught and then the fix cleared an unqualified external test type).

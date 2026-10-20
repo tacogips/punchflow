@@ -62,6 +62,9 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 		if er != nil {
 			return er
 		}
+		if len(userIDs) == 0 && step.StepType == model.StepTypeAuthorCustomizable {
+			return kferr.ValidationFailed(map[string][]string{"base": {"custom approver is required"}})
+		}
 		if len(userIDs) == 0 && step.StepType != model.StepTypeAuthorCustomizable && step.StepType != model.StepTypeAssigneeCustomizable {
 			if step.FallbackType != nil {
 				fb = true
@@ -214,7 +217,7 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 	default:
 		return nil, fmt.Errorf("engine: unsupported route step type %q", step.StepType)
 	}
-	if ticket.AuthorID != nil && !step.AllowSelfApproval {
+	if ticket.AuthorID != nil && !step.AllowSelfApproval && step.StepType != model.StepTypeAuthor {
 		filtered := ids[:0]
 		for _, id := range ids {
 			if id != *ticket.AuthorID {

@@ -49,9 +49,7 @@
         "targets": [
           {
             "teamCode": "finance",
-            "descendants": false,
-            "gradeSymbol": null,
-            "gradeCodes": []
+            "gradeSymbol": null
           }
         ],
         "routeStepCondition": null,
@@ -155,9 +153,7 @@
         "targets": [
           {
             "teamCode": "finance",
-            "descendants": false,
-            "gradeSymbol": null,
-            "gradeCodes": []
+            "gradeSymbol": null
           }
         ],
         "routeStepCondition": null,
@@ -236,9 +232,7 @@
         "targets": [
           {
             "teamCode": "hr",
-            "descendants": false,
-            "gradeSymbol": null,
-            "gradeCodes": []
+            "gradeSymbol": null
           }
         ],
         "routeStepCondition": null,
@@ -343,7 +337,6 @@
         "targets": [
           {
             "teamCode": "engineering",
-            "descendants": false,
             "gradeSymbol": "greater_than_or_equal",
             "gradeCodes": [
               "manager"

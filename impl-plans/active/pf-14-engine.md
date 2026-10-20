@@ -193,10 +193,10 @@ The manifest `verification` array for PF-14 (log names `/tmp/pf14-s464-*.log`), 
 
 ### Done Criteria (session 464)
 
-- [ ] All 17 listed tests PASS uncached with `-race` (exit 0, FAIL=0, SKIP=0), with counts and log paths recorded
-- [ ] `engine.go` exported signatures unchanged (`git diff 44e40cc -- internal/engine/engine.go` shows only body changes; note this in the log)
+- [x] All 17 listed tests PASS uncached with `-race` (exit 0, FAIL=0, SKIP=0), with counts and log paths recorded
+- [x] `engine.go` exported signatures unchanged (`git diff 44e40cc -- internal/engine/engine.go` is empty; note this in the log)
 - [ ] Every source write was followed by a logged compile gate with exit 0 (rule 13)
-- [ ] New exported store functions start with `Eng`; gofmt clean; files < 1000 lines; enum rg empty
+- [x] New exported store functions start with `Eng`; gofmt clean; files < 1000 lines; enum rg empty
 
 ## Execution Protocol
 
@@ -220,3 +220,41 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `inte
 - PF-06 owns `internal/fixtures/load.go:130-179` (accepted path). The `teamIDs` map is keyed only by team code while memberships from multiple charts are loaded; `go test -count=1 -v -race ./internal/engine/...` fails at fixture load with `UNIQUE constraint failed: team_memberships.team_id, team_memberships.user_id`, log `/tmp/pf14-s463-test.log`. Please repair the chart-specific team ID mapping and re-accept PF-06; resume PF-14 by rerunning the engine tests against the embedded default fixtures.
 - PF-15 owns `internal/webhook/payload.go` (verified in the session-463 ownership index). `go build ./...` fails because the PF-15 payload references four presenter types not yet defined, log `/tmp/pf14-s463-build.log`. Resume the full build after PF-15 lands and rerun this plan's build gate.
 **Reconciliation status**: Behavioral tests and full build remain incomplete pending the owner-routed repairs above. The test file currently contains eight of the plan's 17 named cases; remaining test coverage and any failures after fixture setup are still outstanding.
+
+### Session: 2026-10-21 (session 464, attempt 1)
+**Intent snapshot**: Resume the existing PF-14 implementation; repair fixture-backed test transaction deadlocks in the owned `setup_test.go` helper; preserve the current engine contract and shared worker changes. The intended fix caches user/team IDs before actions enter the single-connection in-memory transaction. No production engine or store file was edited.
+**Pre-edit hashes**: `internal/engine/setup_test.go` `f26365781f4fd6cd43a87db6ef2bc3455805d04d528e66be50b0578d907251dd` (initial read); before the cache-helper edit `b7b10da31918513adb1135eab6e85266246d6753f58d9eae811427613b800099`. Final `setup_test.go` sha256 `74d9aff6d0b3bd6e7de8b6d35388be6df00a172845e0c4e58510e5828e0e5790`. `internal/engine/engine.go` sha256 remains `ff55503a0739acd6b08a791f39604223dfadada78e806e3ebd6b948aa72fe650`; `git diff 44e40cc -- internal/engine/engine.go` is empty, so all exported signatures are unchanged.
+**Tasks completed**: Fixed test setup's deadlock by resolving the sales team ID before `WithTx`, and cached all fixture user/team IDs during setup so `actor()`/`team()` remain transaction-safe. No acceptance tests were added in this attempt; nine required names remain missing: `TestPurchaseConditionsAndNomination`, `TestLeaveAssigneeCustomizableAndAuthorConfirm`, `TestCommentRules`, `TestComments`, `TestFormValidation`, `TestCreationRestricted`, `TestAdminWorking`, `TestVisibility`, `TestArchive`.
+**Verification**:
+- Baseline `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf14-s464-baseline-build.log'` — exit 0; complete log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-baseline-build.log`.
+- Baseline `go test -count=1 -v -race ./internal/engine/...` — first test hung in `pf14TestEnv.createExpense`; the initial run was interrupted before a shell exit footer, so it is not passing evidence. Diagnostic `go test -count=1 -v -race -timeout=20s -run ^TestSubmitMultiStepApproveCompletes$ ./internal/engine` — exit 1 by timeout; stack located reentrant DB access at `setup_test.go:52`; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-diagnose-test.log`.
+- Post-edit focused `go test -count=1 -v -race -timeout=90s -run ^TestSubmitMultiStepApproveCompletes$ ./internal/engine` — exit 0, 1 PASS, 0 FAIL, 0 SKIP; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-diagnostic-fixed-test.log`.
+- `go vet ./internal/engine/...` after each of the two `_test.go` writes — exit 0; logs `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-vet-after-setup.log` and `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-vet-after-cache.log`.
+- Final `go build ./...` — exit 0; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final-build.log`.
+- Final `go vet ./internal/engine/... ./internal/store/...` — exit 0; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final-vet.log`.
+- Final `go test -count=1 -v -race ./internal/engine/...` — exit 0; PASS=8, FAIL=0, SKIP=0; only the eight existing tests ran, so the 17-test acceptance criterion is incomplete; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final-test.log`.
+- `gofmt -l internal/engine internal/store/tickets.go internal/store/engine_lookup.go` — exit 0, no output; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final-gofmt.log`.
+- File-size inventory — max file 418 lines (`internal/engine/actions.go`); log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final-lines.log`.
+- Enum literal `rg` check — exit 1, no matches in non-test engine code; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final-enums.log`.
+**Remaining work**: The nine named tests and their required behaviors have not been implemented or verified. Keep all session-464 Done Criteria unchecked; resume PF-14 implementation before review.
+
+### Session: 2026-10-21 (session 464, attempt 2)
+**Intent snapshot**: Add the nine missing named acceptance tests and repair issues they expose while preserving the accepted engine API and shared files. Change only PF-14-owned engine/test files and this plan's progress record.
+**Implementation updates**:
+- Fixed `setup_test.go` fixture helper reentrant DB access by caching fixture users and active-chart teams before entering the single-connection transaction. Filled all form inputs in existing lifecycle fixtures so they satisfy Create completeness.
+- Added the nine missing tests across `forms_test.go`, `routing_test.go`, `comments_test.go`, and `events_test.go`.
+- Enforced 400 `invalid_parameter` for unknown/duplicate form field references and incomplete Create payloads; excluded approver-only fields from applicant submit validation and added approval-time validation for required approver fields.
+- Required author-customizable nominees at route creation; stored selected assignees as ticket assignee rows; kept the author assigned to explicit author steps; auto-completed activated `none` steps and progressed through consecutive non-actionable groups.
+- Enforced action-comment requirements/disabled-commenting rules and restricted send-back/deny to assignees or proxies on approve steps.
+**Verification**:
+- Final `go build ./...` — exit 0, complete log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-build.log`.
+- Final `go vet ./internal/engine/... ./internal/store/...` — exit 0, complete log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-vet.log`.
+- Final `go test -count=1 -v -race ./internal/engine/...` — exit 0; 24 PASS lines (17 named top-level tests including subtests), FAIL=0, SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-test.log`.
+- `gofmt -l internal/engine internal/store/tickets.go internal/store/engine_lookup.go` — exit 0, no output; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-gofmt.log`.
+- File-size inventory — largest file `internal/engine/actions.go` at 554 lines; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-lines.log`.
+- Enum literal `rg` — exit 1, no matches (expected); log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-enums.log`.
+- Exported engine-store functions all have the `Eng` prefix; listing log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-store-exports.log`.
+- `git diff 44e40cc -- internal/engine/engine.go` — exit 0, empty; log `tmp/punchflow-kickflow-dummy-s464/PF-14/attempt-1/pf14-s464-final2-engine-contract.log`.
+- Shared-tree `go build ./...` passed after the source-file batches: `actions.go` `/tmp/pf14-s464-build-after-actions.log`, `forms.go` `/tmp/pf14-s464-build-after-form-resolution.log`, `create.go` `/tmp/pf14-s464-build-after-create-completeness.log`, approver required-field helper `/tmp/pf14-s464-build-after-approver-required.log`, approval helper `/tmp/pf14-s464-build-after-approval-fields.log`, action call `/tmp/pf14-s464-build-after-check-approval.log`, custom assignees `/tmp/pf14-s464-build-after-custom-approvers.log`, nomination `/tmp/pf14-s464-build-after-nominee.log`, author step `/tmp/pf14-s464-build-after-author-step.log`, none progression `/tmp/pf14-s464-build-after-none-progress.log`; each exited 0. A first two-hunk `actions.go` edit was compiled after both hunks, so the per-write compile log criterion remains unchecked.
+- `go vet ./internal/engine/...` passed after test file writes; logs include `pf14-s464-vet-after-complete-expense.log`, `pf14-s464-vet-after-route-inputs.log`, delegated `pf14-s464-vet-after-forms-test.log`, `pf14-s464-vet-after-routing-test.log`, `pf14-s464-vet-after-complete-inputs.log`, and `pf14-s464-vet-comments-fix3.log`, all under the attempt-1 evidence directory.
+**Incomplete assigned work**: The remaining design-backed implementation gaps still need work before PF-14 is complete: type/reference validation across all form field kinds; the full condition operator set and team ancestry/grade-aware route target resolution; `higher_manager`/`higher_team` fallback resolution; proxy-applicant registration/date/workflow validation for create/update; and merging partial `UpdateForm` values without dropping untouched fields/references. These are PF-14-owned behaviors, not downstream-plan work.

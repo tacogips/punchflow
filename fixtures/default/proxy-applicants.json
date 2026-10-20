@@ -3,8 +3,6 @@
     "id": "12b9dd1d-4255-4bd5-afe6-814a57577e14",
     "userCode": "ceo",
     "proxyUserCode": "assistant",
-    "startsOn": null,
-    "endsOn": null,
     "workflowCodes": [
       "expense-claim"
     ]

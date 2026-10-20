@@ -24,7 +24,7 @@ func Export(ctx context.Context, q store.Querier) (map[string][]byte, error) {
 	if err := q.QueryRowContext(ctx, "SELECT id,public_id,name,plan,mode,ip_allowlist,allowed_email_domains,self_service_proxy,created_at,updated_at FROM tenant").Scan(&t.ID, &t.PublicID, &t.Name, &t.Plan, &t.Mode, &allow, &domains, &self, &created, &updated); err != nil {
 		return nil, fmt.Errorf("fixtures: export tenant: %w", err)
 	}
-	t.CreatedAt, t.UpdatedAt = store.Time(created), store.Time(updated)
+	t.CreatedAt, t.UpdatedAt = store.Time(created).UTC(), store.Time(updated).UTC()
 	var err error
 	if err = json.Unmarshal([]byte(allow), &t.IPAllowlist); err != nil {
 		return nil, err

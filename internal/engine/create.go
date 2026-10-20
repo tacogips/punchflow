@@ -61,6 +61,9 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if in.SlipItems != nil {
 		slips = *in.SlipItems
 	}
+	if err = pf14ValidateCreateCompleteness(def, inputs); err != nil {
+		return "", nil, err
+	}
 	id := store.NewID()
 	normalized, normalizedSlips, err := pf14NormalizeForm(ctx, tx, id, def, inputs, slips, full, store.Millis(now))
 	if err != nil {
@@ -103,6 +106,27 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		events = append(events, pf14Event(model.WebhookEventTicketOpened, id, a.UserID))
 	}
 	return id, events, nil
+}
+
+func pf14ValidateCreateCompleteness(def model.WorkflowDef, inputs []FieldInput) error {
+	for _, section := range def.SectionList {
+		if section.SectionType != model.SectionTypeForm {
+			continue
+		}
+		for _, field := range section.FormFields {
+			found := false
+			for _, input := range inputs {
+				if input.FormFieldID != "" && input.FormFieldID == field.ID || input.FormFieldID == "" && input.FormFieldCode == field.Code {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return kferr.InvalidParameter("Missing form field: " + field.Code)
+			}
+		}
+	}
+	return nil
 }
 
 func mustActiveChart(ctx context.Context, tx *store.Tx) string {

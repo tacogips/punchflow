@@ -109,9 +109,58 @@ func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id strin
 		if !approver {
 			return nil, kferr.MissingPermission("Only current approvers may customize assignees")
 		}
+		if t.RouteID == nil {
+			return nil, kferr.InvalidState("Ticket route is unavailable")
+		}
+		route, er := store.RouteDefByID(ctx, tx, *t.RouteID)
+		if er != nil {
+			return nil, er
+		}
+		ticketSteps, er := store.EngTicketSteps(ctx, tx, id)
+		if er != nil {
+			return nil, er
+		}
 		for _, v := range *in.Approvers {
+			validStep := false
+			for _, routeStep := range route.Steps {
+				if routeStep.Code == v.RouteStepCode && routeStep.StepType == model.StepTypeAssigneeCustomizable {
+					validStep = true
+					break
+				}
+			}
+			var step *model.TicketStep
+			for i := range ticketSteps {
+				if ticketSteps[i].RouteStepCode != nil && *ticketSteps[i].RouteStepCode == v.RouteStepCode {
+					step = &ticketSteps[i]
+					break
+				}
+			}
+			if !validStep || step == nil {
+				return nil, kferr.InvalidParameter("Invalid customizable route step")
+			}
 			if err = store.EngInsertCustomApprovers(ctx, tx, id, v.RouteStepCode, v.UserIDs); err != nil {
 				return nil, err
+			}
+			existing, er := store.EngStepAssignees(ctx, tx, step.ID)
+			if er != nil {
+				return nil, er
+			}
+			present := map[string]bool{}
+			for _, assignee := range existing {
+				present[assignee.UserID] = true
+			}
+			for _, userID := range v.UserIDs {
+				if _, er = store.GetUser(ctx, tx, userID); er != nil {
+					return nil, kferr.ValidationFailed(map[string][]string{"approvers": {"contains an unknown user"}})
+				}
+				if present[userID] {
+					continue
+				}
+				assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: id, UserID: userID, CreatedAt: now, UpdatedAt: now}
+				if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
+					return nil, err
+				}
+				present[userID] = true
 			}
 		}
 		hasUpdate = true

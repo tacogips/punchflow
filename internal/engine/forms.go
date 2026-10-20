@@ -30,17 +30,17 @@ func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, de
 	normalized := []model.TicketInput{}
 	errors := map[string][]string{}
 	for _, in := range inputs {
-		field, ok := fieldByID[in.FormFieldID]
-		if !ok && in.FormFieldCode != "" {
+		field, ok := model.FormField{}, false
+		if in.FormFieldID != "" {
+			field, ok = fieldByID[in.FormFieldID]
+		} else if in.FormFieldCode != "" {
 			field, ok = fieldByCode[in.FormFieldCode]
 		}
 		if !ok {
-			errors["inputs"] = append(errors["inputs"], "contains an unknown form field")
-			continue
+			return nil, nil, kferr.InvalidParameter("Invalid form field code")
 		}
 		if seen[field.ID] {
-			errors[field.Code] = append(errors[field.Code], "must be unique")
-			continue
+			return nil, nil, kferr.InvalidParameter("Form field must be unique")
 		}
 		seen[field.ID] = true
 		value, refs, err := pf14FieldValue(in)
@@ -69,7 +69,7 @@ func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, de
 		}
 		for _, field := range section.FormFields {
 			hidden := field.Hidden != nil && *field.Hidden
-			if full && field.Required && !hidden {
+			if full && field.Required && !field.Approver && !hidden {
 				if !seen[field.ID] || pf14Empty(values[field.Code]) {
 					errors[field.Code] = append(errors[field.Code], "is required")
 				}
@@ -96,7 +96,7 @@ func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, de
 		}
 		for _, in := range item.Inputs {
 			field, ok := fieldByID[in.SlipFieldID]
-			if !ok {
+			if in.SlipFieldID == "" {
 				field, ok = fieldByID[in.SlipFieldCode]
 			}
 			if !ok {
@@ -188,4 +188,20 @@ func pf14Empty(v any) bool {
 	}
 	s, ok := v.(string)
 	return ok && strings.TrimSpace(s) == ""
+}
+
+func pf14ValidateApprovalInputs(def model.WorkflowDef, rows []model.TicketInput) error {
+	inputs := pf14InputsFromRows(def, rows)
+	values := pf14InputValues(def, inputs)
+	for _, section := range def.SectionList {
+		if section.SectionType != model.SectionTypeForm || !pf14SectionVisible(section, values) {
+			continue
+		}
+		for _, field := range section.FormFields {
+			if field.Approver && field.Required && pf14Empty(values[field.Code]) {
+				return kferr.InputRequiredBeforeApprove()
+			}
+		}
+	}
+	return nil
 }

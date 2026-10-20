@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"punchflow/internal/kferr"
@@ -120,6 +121,87 @@ func (e *Engine) pf14CanAct(ctx context.Context, tx *store.Tx, a Actor, t model.
 func pf14Event(kind, id, actor string) model.WebhookEvent {
 	return model.WebhookEvent{Type: kind, TicketID: id, ActorUserID: actor}
 }
+func pf14ValidateActionComment(ctx context.Context, tx *store.Tx, t model.Ticket, comment *string, required bool) error {
+	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
+	if err != nil {
+		return err
+	}
+	hasComment := comment != nil && strings.TrimSpace(*comment) != ""
+	if hasComment && !def.CommentingEnabled {
+		return kferr.ValidationFailed(map[string][]string{"comment": {"comments are disabled"}})
+	}
+	if !hasComment && required {
+		return kferr.ValidationFailed(map[string][]string{"comment": {"is required"}})
+	}
+	return nil
+}
+func pf14RequireApproveActor(ctx context.Context, tx *store.Tx, a Actor, t model.Ticket, active []model.TicketStep, now time.Time) error {
+	hasApproveStep := false
+	for _, step := range active {
+		if step.ActionType != model.ActionTypeApprove {
+			continue
+		}
+		hasApproveStep = true
+		assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
+		if err != nil {
+			return err
+		}
+		for _, assignee := range assignees {
+			if assignee.Completed {
+				continue
+			}
+			if assignee.UserID == a.UserID {
+				return nil
+			}
+			proxy, err := store.EngActiveProxyApprovers(ctx, tx, assignee.UserID, a.UserID, t.WorkflowID, kftime.FormatDate(now))
+			if err != nil {
+				return err
+			}
+			if proxy {
+				return nil
+			}
+		}
+	}
+	if !hasApproveStep {
+		return kferr.InvalidState("Current step does not support rejection or denial")
+	}
+	return kferr.UserNotAssigned()
+}
+func pf14CheckNextCustomApprovers(ctx context.Context, tx *store.Tx, t model.Ticket) error {
+	if t.RouteID == nil {
+		return nil
+	}
+	steps, err := store.EngTicketSteps(ctx, tx, t.ID)
+	if err != nil {
+		return err
+	}
+	nextOrder := 0
+	for _, step := range steps {
+		if step.StepOrder > t.CurrentStep && step.Status != model.StepStatusSkipped && step.Status != model.StepStatusCompleted && (nextOrder == 0 || step.StepOrder < nextOrder) {
+			nextOrder = step.StepOrder
+		}
+	}
+	if nextOrder == 0 {
+		return nil
+	}
+	route, err := store.RouteDefByID(ctx, tx, *t.RouteID)
+	if err != nil {
+		return err
+	}
+	for _, routeStep := range route.Steps {
+		if routeStep.StepOrder != nextOrder || routeStep.StepType != model.StepTypeAssigneeCustomizable {
+			continue
+		}
+		approvers, err := store.EngCustomApprovers(ctx, tx, t.ID, routeStep.Code)
+		if err != nil {
+			return err
+		}
+		if len(approvers) == 0 {
+			return kferr.AssignmentRequiredBeforeApprove()
+		}
+	}
+	return nil
+}
 func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id string, comment *string) ([]model.WebhookEvent, error) {
 	t, err := e.pf14Guard(ctx, tx, a, id)
 	if err != nil {
@@ -129,14 +211,22 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 	if err != nil {
 		return nil, err
 	}
-	if comment == nil || *comment == "" {
-		def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
-		if err != nil {
-			return nil, err
-		}
-		if def.CommentingRequiredOnApproval {
-			return nil, kferr.ValidationFailed(map[string][]string{"comment": {"is required"}})
-		}
+	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	if err = pf14ValidateActionComment(ctx, tx, t, comment, def.CommentingRequiredOnApproval); err != nil {
+		return nil, err
+	}
+	inputs, err := store.EngTicketInputs(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err = pf14ValidateApprovalInputs(def, inputs); err != nil {
+		return nil, err
+	}
+	if err = pf14CheckNextCustomApprovers(ctx, tx, t); err != nil {
+		return nil, err
 	}
 	now := e.clock.Now()
 	anyApprove := false
@@ -235,37 +325,62 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 	if err != nil {
 		return err
 	}
-	groupDone := true
-	for _, s := range steps {
-		if s.StepOrder == t.CurrentStep && s.Status != model.StepStatusCompleted && s.Status != model.StepStatusSkipped {
-			groupDone = false
-		}
-	}
-	if !groupDone {
-		return nil
-	}
-	next := 0
-	for _, s := range steps {
-		if s.StepOrder > t.CurrentStep && s.Status != model.StepStatusSkipped {
-			if next == 0 || s.StepOrder < next {
-				next = s.StepOrder
+	for {
+		groupDone := true
+		for _, step := range steps {
+			if step.StepOrder == t.CurrentStep && step.Status != model.StepStatusCompleted && step.Status != model.StepStatusSkipped {
+				groupDone = false
 			}
 		}
-	}
-	if next == 0 {
-		t.Status = model.TicketStatusCompleted
-		t.CompletedAt = &now
-		t.CurrentStep = 0
-	} else {
+		if !groupDone {
+			break
+		}
+		next := 0
+		for _, step := range steps {
+			if step.StepOrder > t.CurrentStep && step.Status != model.StepStatusSkipped && step.Status != model.StepStatusCompleted && (next == 0 || step.StepOrder < next) {
+				next = step.StepOrder
+			}
+		}
+		if next == 0 {
+			t.Status = model.TicketStatusCompleted
+			t.CompletedAt = &now
+			t.CurrentStep = 0
+			break
+		}
 		t.CurrentStep = next
-		for _, s := range steps {
-			if s.StepOrder == next {
-				s.Status = model.StepStatusInProgress
-				s.UpdatedAt = now
-				if err = store.EngUpdateStep(ctx, tx, s); err != nil {
-					return err
+		actionable := false
+		for i := range steps {
+			step := &steps[i]
+			if step.StepOrder != next || step.Status == model.StepStatusSkipped || step.Status == model.StepStatusCompleted {
+				continue
+			}
+			step.Status = model.StepStatusInProgress
+			step.UpdatedAt = now
+			assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
+			if err != nil {
+				return err
+			}
+			for j := range assignees {
+				if assignees[j].AssignedAt == nil {
+					assignees[j].AssignedAt = &now
+					assignees[j].UpdatedAt = now
+					if err = store.EngUpdateAssignee(ctx, tx, assignees[j]); err != nil {
+						return err
+					}
 				}
 			}
+			if step.ActionType == model.ActionTypeNone {
+				step.Status = model.StepStatusCompleted
+				step.CompletedAt = &now
+			} else {
+				actionable = true
+			}
+			if err = store.EngUpdateStep(ctx, tx, *step); err != nil {
+				return err
+			}
+		}
+		if actionable {
+			break
 		}
 	}
 	t.UpdatedAt = now
@@ -278,6 +393,16 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 	}
 	active, _, err := e.pf14CanAct(ctx, tx, a, t)
 	if err != nil {
+		return nil, err
+	}
+	if err = pf14RequireApproveActor(ctx, tx, a, t, active, e.clock.Now()); err != nil {
+		return nil, err
+	}
+	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	if err = pf14ValidateActionComment(ctx, tx, t, comment, def.CommentingRequiredOnRejection); err != nil {
 		return nil, err
 	}
 	if to < 0 || to >= t.CurrentStep {
@@ -330,7 +455,7 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 		return nil, err
 	}
 	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketRejected, id, a.UserID)}
-	if comment != nil && *comment != "" {
+	if comment != nil && strings.TrimSpace(*comment) != "" {
 		cid, ce, err := e.pf14AddComment(ctx, tx, a, id, *comment, nil)
 		if err != nil {
 			return nil, err
@@ -348,7 +473,18 @@ func (e *Engine) pf14Deny(ctx context.Context, tx *store.Tx, a Actor, id string,
 	if err != nil {
 		return nil, err
 	}
-	if _, _, err = e.pf14CanAct(ctx, tx, a, t); err != nil {
+	active, _, err := e.pf14CanAct(ctx, tx, a, t)
+	if err != nil {
+		return nil, err
+	}
+	if err = pf14RequireApproveActor(ctx, tx, a, t, active, e.clock.Now()); err != nil {
+		return nil, err
+	}
+	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	if err = pf14ValidateActionComment(ctx, tx, t, comment, def.CommentingRequiredOnDenial); err != nil {
 		return nil, err
 	}
 	now := e.clock.Now()
@@ -360,7 +496,7 @@ func (e *Engine) pf14Deny(ctx context.Context, tx *store.Tx, a Actor, id string,
 		return nil, err
 	}
 	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketDenied, id, a.UserID)}
-	if comment != nil && *comment != "" {
+	if comment != nil && strings.TrimSpace(*comment) != "" {
 		cid, ce, err := e.pf14AddComment(ctx, tx, a, id, *comment, nil)
 		if err != nil {
 			return nil, err

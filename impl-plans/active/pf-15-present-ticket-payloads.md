@@ -1,10 +1,10 @@
 # PF-15 Ticket Presenters and Webhook Payloads Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 3 | **Depends On**: PF-06, PF-07, PF-08, PF-09 | **Plan ID**: PF-15
 **Design Reference**: design-docs/specs/design-webhooks.md#payload-and-headers; design-docs/specs/design-api-coverage.md#webhook-event-matrix-13-events; design-docs/references/kickflow-api.md section 4 (TicketSummary, Ticket, TicketWithStep, TicketDetail, TicketStep, TicketAssignee, TicketInput, TicketSection, SlipItem, Comment, TicketViewer, Attachment, WebhookRequestBody*, WebhookTenant); notes.md INF-16, INF-30, INF-33, INF-40, DIV-04
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -186,10 +186,10 @@ The manifest `verification` array for PF-15 (logs `/tmp/pf15-s464-*.log`), copie
 
 ### Done Criteria (session 464)
 
-- [ ] The progress log shows the order: presenters, then build exit 0, then the `payload.go` write, then build exit 0 (with timestamps or sequence numbers)
-- [ ] `Build` handles exactly the 13 event types (table test) and rejects others; the HTML-escape and JST timestamp tests PASS
-- [ ] Present and webhook logs pass uncached with counts; PF-09 tests stay green
-- [ ] Pre/post hashes of `payload.go` recorded; gofmt clean; files < 1000 lines
+- [x] The progress log shows the order: presenters, then build exit 0, then the `payload.go` write, then build exit 0 (with timestamps or sequence numbers)
+- [x] `Build` handles exactly the 13 event types (table test) and rejects others; the HTML-escape and JST timestamp tests PASS
+- [x] Present and webhook logs pass uncached with counts; PF-09 tests stay green
+- [x] Pre/post hashes of `payload.go` recorded; gofmt clean; files < 1000 lines
 
 ## Execution Protocol
 
@@ -210,3 +210,21 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md` (rules 1-13). `inte
 **Post-edit hash**: `internal/webhook/payload.go` a0761a2352540d8946970941f62d2f5e644695217a7e3ac1025a8abd57882697.
 **Verification**: `go build ./...` exit 1 (`/tmp/pf15-s463-build-current.log`, copied to `tmp/punchflow-kickflow-dummy-s463/PF-15/attempt-1/build-current.log`): PF-15 presenter symbols `WebhookTenant`, `Comment`, `TicketWithStep`, and `TicketDetail` are not implemented. Earlier moving-tree runs: vet exit 1 and present/webhook tests exit 1 with zero test cases, all due to a then-visible PF-14 compile error at `internal/store/tickets.go:56`; logs copied under attempt-1. `gofmt -l internal/webhook/payload.go` printed no paths.
 **Reconciliation requests**: PF-14 owner, please ensure `internal/store/tickets.go` builds; observed `undefined: time` at line 56 during the initial moving-tree vet and test attempts (those commands were rerun after the file changed; current build proceeds and fails on the missing PF-15 presenters above).
+
+### Session: 2026-10-21 (s464 attempt 1)
+**Intent snapshot**: Implement only PF-15 ticket/comment/viewer/tenant presenters, the PF-15-owned ticket read surface, and the transferred webhook payload builder; preserve PF-08/PF-09 contracts and default `json.Marshal` escaping. Per-edit intent snapshots and command logs are under `tmp/punchflow-kickflow-dummy-s464/PF-15/attempt-1/`.
+**Pre-edit hashes**: `internal/webhook/payload.go` `27c9581dbb0906ad2a49306b22b3e7edc697533da635863acf70c00f73e12a04`.
+**Tasks Completed**: Added ticket summary/detail/list-step presenters, comments with deleted-body and attachment URL behavior, schema-aligned comment/attachment fields, ticket viewers, webhook tenant, conditional section evaluation, related input resolution and ticket-associated store reads. Replaced the payload stub body while preserving `NewPayloads()` and `Build` signatures; validated exactly 13 event types and rejected removed/unknown values. Added exact key-set, two-step ticket, proxy ID, comment, master input, payload event and escaping contract tests.
+**Source-write/build order**: tenant presenter -> build-01 exit 1 (unrelated PF-16 `tmp/.../pre-edit/internal/fixtures` and `internal/testutil` incomplete snapshot); store read file -> build-02/03 exit 1 (`pf08StringPtr` reference corrected) -> build-04 exit 0; comment presenter -> build-05 exit 0; viewer presenter -> build-06 exit 0; ticket presenter -> build-07 exit 0; ticket detail presenter -> build-08 exit 0; only then payload body write -> build-09 exit 0. Additional detail changes -> build-10 exit 0; cleanup import attempt build-12 exit 1, restored required `encoding/json` import -> build-13 exit 0. Logs copied under attempt-1.
+**Payload hash**: post-edit `e2dcc4806ac3249358abf88dd810aa1a3087c26ae19b4ff167baac14f4bf64d7`.
+**Verification**: final source-matched `go build ./...` exit 0 (`/tmp/pf15-s464-build-final4.log`); final `go vet ./internal/present/... ./internal/webhook/...` exit 0 (`/tmp/pf15-s464-vet-final4.log`); uncached present tests exit 0, PASS=2 FAIL=0 SKIP=0 (`/tmp/pf15-s464-present-final4.log`); uncached whole webhook package race tests exit 0, PASS=29 FAIL=0 SKIP=0 (`/tmp/pf15-s464-webhook-final4.log`; includes PF-09 signature, service and dispatcher tests); `gofmt -l` printed no paths. Earlier present/webhook test logs showed a fixture expectation mismatch and nil timestamp panic; both were corrected and the final source-matched reruns pass. The initial build failures and intermediate vet/test failures are preserved in their numbered attempt logs.
+**Post-modification agent check**: `.claude/agents/check-and-test-after-modify.md` invoked as `/root/check_after_modify`; current-tree build/vet/present/webhook verification all exit 0, PASS=2/29, FAIL=0, SKIP=0; complete logs in `tmp/punchflow-kickflow-dummy-s464/PF-15/attempt-2/`.
+**Reconciliation requests**: None. PF-16 transient incomplete snapshot was absent from final build and no foreign repair was made.
+
+### Session: 2026-10-21 (s464 attempt 3; PF15-TI-01 repair)
+**Intent snapshot**: Correct the removed/unknown event assertion in `internal/webhook/payload_test.go` only. Valid ticket/comment references must ensure only the allowlist gate can reject the three listed event types; require nil body and the explicit `unsupported event type` error. Per-edit intent and complete evidence are under `tmp/punchflow-kickflow-dummy-s464/PF-15/attempt-3/`.
+**Tasks Completed**: Added `TicketID: "ticket"` and `CommentID: "comment"` to each negative event. The test now checks a non-nil error containing `unsupported event type` and a nil body. Kept `ticket_submitted`, `comment_deleted`, and `future_event`. No production payload logic changed.
+**Payload hash**: `internal/webhook/payload.go` remains `e2dcc4806ac3249358abf88dd810aa1a3087c26ae19b4ff167baac14f4bf64d7`.
+**Verification**: `go build -o /dev/null ./...` exit 0 (`attempt-3/build.log`); `go vet ./internal/webhook/...` exit 0 (`attempt-3/vet.log`); `go test -count=1 -v -run 'Test(Ticket|Comment|Viewer|WebhookTenant)' ./internal/present/...` exit 0, PASS=2 FAIL=0 SKIP=0 (`attempt-3/present-test.log`); `go test -count=1 -v -race ./internal/webhook/...` exit 0, PASS=29 FAIL=0 SKIP=0, including PF-09 webhook signing/service/dispatcher package coverage (`attempt-3/webhook-test.log`); `gofmt -l internal/webhook/payload_test.go` printed no paths. The gate-disabled overlay mutation command `go test -count=1 -overlay attempt-3/payload-gate-disabled-overlay.json -run '^TestPayloadsBuildSupportedEventsAndEscaping$' -v ./internal/webhook/` exited 1 as expected and failed on all three accepted removed events (`attempt-3/mutation-test.log`); this demonstrates the repaired assertion detects a disabled gate. The overlay source is isolated to `attempt-3/payload-mutated.go`; repository `payload.go` is unchanged.
+**Post-modification agent check**: `.claude/agents/check-and-test-after-modify.md` invoked as `/root/check_after_modify`; `go build -o /dev/null ./...`, webhook vet and uncached webhook race package checks exit 0. Agent report confirms PASS=29 FAIL=0 SKIP=0; logs at `attempt-3/build.log`, `attempt-3/vet.log`, and `attempt-3/webhook-test.log`.
+**Reconciliation requests**: None.

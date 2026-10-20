@@ -131,6 +131,7 @@ func (e *Env) DoRaw(t *testing.T, req *http.Request) *Response {
 	t.Helper()
 	request := req.Clone(req.Context())
 	request.Header = req.Header.Clone()
+	request.RequestURI = ""
 	if !request.URL.IsAbs() {
 		base, err := url.Parse(e.URL)
 		if err != nil {
