@@ -293,6 +293,152 @@ Session-466 changes:
 - [ ] CF closing notes and the PF-26 split note appended to `notes.md`. `mise.toml` `test` is uncached. Both toolchain files have a `finalizeS466` key and are valid JSON.
 - [ ] 36 plan files and the s460..s465 manifests are in `impl-plans/completed/`. `impl-plans/README.md` is updated. The s466 manifest is untouched in `active/`.
 
+## Continuation (session 467) - read first; overrides every earlier continuation's paths, tasks, archival list, log names and Done Criteria
+
+**Wave**: single (serial, alone). **Depends on**: nothing to dispatch. Every other plan is accepted at `f6f4ba8`: PF-01..PF-13, PF-14a/b/c, PF-15..PF-25 and PF-26a..PF-26f.
+**Manifest**: `impl-plans/active/punchflow-kickflow-dummy-s467-dispatch.json`. Its PF-27 `writePaths` are authoritative. It has no `sharedPaths`.
+**Design**: `design-docs/specs/architecture.md`, "Final gate and archival rule (session 467)" items 1-7.
+
+### Intent and context
+
+Session 466 stopped at gate line 12 (`mise run lint`) because of 40 diagnostics in files owned by other plans. Commit `f6f4ba8` fixed them (v2 `.golangci.yml`, 0 issues). Every source deliverable of PF-27 already exists at HEAD:
+- `repo_invariants_test.go`
+- `internal/contract/coverage_test.go`
+- the uncached `mise.toml` `test` task (`mise.toml:89`)
+- `finalizeS466` in both toolchain JSON files
+- the tidied `go.mod`/`go.sum`
+
+Session 467 is docs and plans only. Three things remain: (1) the ordered gate, (2) the `notes.md` closing notes, (3) the README update and archival.
+
+### Non-goals (s467)
+
+- No edits to any `.go` file, `mise.toml`, `go.mod`, `go.sum`, `go-toolchain.json`, `web/toolchain.json`, `README.md`, `.golangci.yml`, `fixtures/`, `deploy/`, `web/` sources or `design-docs/specs/architecture.md`.
+- No `gofmt -w`, no identifier renames.
+- No git commands that change state. This includes `git mv`: use plain `mv`. The workflow commits.
+- No background `punchflow serve`.
+- Do not edit or move `impl-plans/active/punchflow-kickflow-dummy-s467-dispatch.json`. It stays in `active/` as the final manifest.
+- Never edit an existing row or bullet of `notes.md`.
+
+### Paths (s467; all files, no directory source entries)
+
+- `writePaths` (86 source entries):
+  - `design-docs/specs/notes.md`
+  - `impl-plans/README.md`
+  - `impl-plans/active/pf-27-finalize.md` and `impl-plans/completed/pf-27-finalize.md`
+  - an `impl-plans/active/<f>` / `impl-plans/completed/<f>` pair for each of the 41 other files. These are the 35 plan files other than this one and the six manifests `punchflow-kickflow-dummy-s460/s462/s463/s464/s465/s466-dispatch.json`.
+- `artifactRoots`, which are also in `writePaths` and git-ignored:
+  - `tmp/punchflow-kickflow-dummy-s467`
+  - `web/node_modules`
+  - `web/dist/app`
+  - `punchflow`
+
+### Tasks (s467)
+
+1. **Progress-log setup.**
+   - Append an "Intent snapshot" to this plan's Progress Log that lists the files above.
+   - Record `shasum -a 256` of `design-docs/specs/notes.md`, `impl-plans/README.md`, `go.mod` and `go.sum`.
+2. **Gate, attempt n (start at 1).** Run lines 1-16 below in order, in the foreground, with no edits in between.
+   - Copy every `/tmp/pf27-s467-*.log` to `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-<n>/`.
+   - Record exit status, log path and counts for each line:
+     - bun pass/fail summary (line 1)
+     - PASS/FAIL/SKIP and the `(cached)` count (line 8)
+     - the per-package `ok` lines (line 9)
+     - the count 15 (line 10)
+   - Run `git diff --quiet go.mod go.sum` right after line 3.
+   - On any failure, including a tidy diff:
+     - stop and record a reconciliation request: `file:line`, the owner, the command and the log path.
+     - Find the owner in the s466 ownership index: `impl-plans/active/punchflow-kickflow-dummy-s466-dispatch.json` `ownershipIndex` and `ownershipTransfers[]` first, then the inherited s465 transfers, then the plans' `writePaths`.
+     - A tidy diff goes to PF-02.
+     - Set `implementationIncomplete: true`. Do not archive.
+     - After the routed repair lands, restart from line 1 as attempt n+1.
+3. **notes.md closing notes.** Do this only after one attempt passes all 16 lines.
+   - Insert a new subsection `### Closing notes (session 467)`. It goes after the CF-07..CF-09 table, which ends with the `| CF-09 |` row, and before `### Intentional divergences from kickflow`.
+   - Write exactly 10 bullets, in this order: `- CF-01:` .. `- CF-09:`, then `- PF-26 split:`.
+   - Each bullet says "Closed in session 467" and cites the evidence from the architecture.md s467 item 7 table: the test names, the gate line, the log `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-<n>/pf27-s467-test.log` and its counts.
+   - The PF-26 split bullet names `TestContractLiveTickets`, `TestContractLiveCommentsFiles`, `TestContractLiveUsersGrades`, `TestContractLiveOrgChartsTeams`, `TestContractLiveMasters`, `TestContractLiveProxiesRoles` and `TestContractOperationCoverage` (96 unique operations).
+   - CF-08 cites the s466 PF-27 `verification` array and the s467 manifest `verification` array (must-pass forms only).
+   - This is an insertion only: `git diff --numstat` must show 0 deleted lines for `notes.md`.
+4. **Archive the 35 other plan files.** For each one:
+   - Replace line 3, the first `**Status**:` line, with `**Status**: Completed`. For the two superseded indexes use these instead:
+     - `pf-14-engine.md`: `**Status**: Completed (superseded by PF-14a/PF-14b/PF-14c)`
+     - `pf-26-contract-smoke.md`: `**Status**: Completed (superseded by PF-26a..PF-26f)`
+   - Leave any later `**Status**:` lines inside progress logs (pf-14b, pf-18, pf-24) untouched.
+   - Append this one-line entry at the end of the file: `### Session: 2026-10-21 (session 467, PF-27 archival)` followed by `Archived by PF-27 after the s467 final gate passed (tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-<n>/).`
+   - `mv` the file to `impl-plans/completed/` under the same basename.
+5. **Archive the manifests** with `mv`, bytes unchanged. Order: s460, s462, s463, s464, s465, and s466 last.
+6. **`impl-plans/README.md`** (fresh read and hash first):
+   - Replace the body of `## Active Plans (punchflow dummy kickflow server)`, everything up to `## Completed Plans`, with a short paragraph:
+     - every plan is completed and archived in session 467;
+     - `active/` holds only `punchflow-kickflow-dummy-s467-dispatch.json`, the final manifest;
+     - the s460 and s462..s466 manifests are in `completed/`.
+   - Replace the `## Completed Plans` table with 36 rows, one per plan, PF-01..PF-27 in id order, with PF-14a/b/c after PF-14 and PF-26a..f after PF-26.
+     - Plan: link `[<basename>](./completed/<basename>.md)`.
+     - Completed: `2026-10-21 (s467)`. The two superseded indexes say `Superseded (archived s467)`.
+     - Design Reference:
+       - PF-14* -> `design-docs/specs/design-approval-engine.md`
+       - PF-26* -> `design-docs/specs/design-api-coverage.md`
+       - PF-09 and PF-15 -> `design-docs/specs/design-webhooks.md`
+       - PF-05, PF-17 and PF-24 -> `design-docs/specs/design-auth-admin.md`
+       - every other plan -> `design-docs/specs/architecture.md`
+   - `### Phase Status`: set rows A and B to `COMPLETED`.
+   - `PHASE_TO_PLANS`: replace the block with `PHASE_TO_PLANS = {}` and a comment saying all plans are completed (session 467) and the final manifest is `punchflow-kickflow-dummy-s467-dispatch.json`.
+   - Leave the Shared Execution Protocol and the Workflow and Guidelines sections unchanged.
+   - Afterwards, no `](./active/` link may remain.
+7. **Finish this plan, the last move.**
+   1. Run the pre-move checks: lines 17, 21, 22, 23 and 24 below. If any fails, fix it inside PF-27's own paths and re-run it. A failure caused by a foreign file is a reconciliation request.
+   2. Append the final progress entry to this plan. It holds all gate and pre-move evidence: exit status, log paths and counts.
+   3. Tick the s467 Done Criteria that the evidence supports.
+   4. Set line 3 to `**Status**: Completed`.
+   5. `mv` this file to `impl-plans/completed/pf-27-finalize.md`. Never edit it after the move.
+   6. Run the post-move checks: lines 18, 19, 20 and 25. Their evidence goes into the step report (`verification` and `authorSelfCheck`), not into the moved file.
+
+### Pitfalls
+
+- Archiving before the gate passes, or editing a file between gate lines, invalidates the attempt.
+- `go mod tidy` must not change `go.mod`/`go.sum`. Never "fix" them by hand.
+- `grep -c '(cached)'` exits 1 when nothing is found. That exit is the required result of line 8's `test $? -eq 1`. Do not treat it as a failure.
+- Do not count `--- PASS` lines of subtests for line 10. The pipeline anchors on the trailing space and uses `sort -u`.
+- Lines 7 and 11 each run the full suite. Give each command a long enough timeout (about 10 minutes) and never background it.
+- Do not use a shell variable named `status`.
+
+### Verification (lines 1-16: the gate, before archival; lines 17-25: after archival; every line must print exit=0 or exit 0)
+
+```bash
+bash -o pipefail -c '(cd web && bun install --frozen-lockfile && bun run typecheck && bun test && bun run build) 2>&1 | tee /tmp/pf27-s467-web.log'; echo "exit=$?"   # 1
+bash -o pipefail -c 'mise run build 2>&1 | tee /tmp/pf27-s467-mise-build.log'; echo "exit=$?"   # 2
+bash -o pipefail -c 'go mod tidy 2>&1 | tee /tmp/pf27-s467-tidy.log'; echo "exit=$?"; git diff --quiet go.mod go.sum; echo "tidy-diff-exit=$?"   # 3 (both 0)
+bash -o pipefail -c 'go mod verify 2>&1 | tee /tmp/pf27-s467-modverify.log'; echo "exit=$?"   # 4: all modules verified
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf27-s467-build.log'; echo "exit=$?"   # 5
+bash -o pipefail -c 'go vet ./... 2>&1 | tee /tmp/pf27-s467-vet.log'; echo "exit=$?"   # 6
+bash -o pipefail -c 'go test -count=1 -v -race ./... 2>&1 | tee /tmp/pf27-s467-test.log'; echo "exit=$?"   # 7
+echo "PASS=$(grep -c -- '--- PASS' /tmp/pf27-s467-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf27-s467-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf27-s467-test.log)"; grep -c '(cached)' /tmp/pf27-s467-test.log; test $? -eq 1; echo "exit=$?"   # 8: FAIL=0 SKIP=0
+grep -E '^(ok|FAIL|\?)' /tmp/pf27-s467-test.log; test "$(grep -cE '^FAIL' /tmp/pf27-s467-test.log)" -eq 0; echo "exit=$?"   # 9
+test "$(grep -E -- '--- PASS: (TestRepoInvariants|TestEmbeddedBuild|TestServeSmoke|TestDefaultRoundTrip|TestLoadExportRoundTripMinimal|TestContractOperationCoverage|TestContractWebhookPayloads|TestContractRoutes|TestContractLiveReadScenarios|TestContractLiveTickets|TestContractLiveCommentsFiles|TestContractLiveUsersGrades|TestContractLiveOrgChartsTeams|TestContractLiveMasters|TestContractLiveProxiesRoles) ' /tmp/pf27-s467-test.log | sort -u | wc -l)" -eq 15; echo "exit=$?"   # 10
+bash -o pipefail -c 'mise run test 2>&1 | tee /tmp/pf27-s467-mise-test.log'; echo "exit=$?"; grep -c '(cached)' /tmp/pf27-s467-mise-test.log; test $? -eq 1; echo "nocache-exit=$?"   # 11
+bash -o pipefail -c 'mise run lint 2>&1 | tee /tmp/pf27-s467-mise-lint.log'; echo "exit=$?"   # 12
+test -z "$(gofmt -l cmd internal *.go)"; echo "exit=$?"   # 13
+rg -n -e 'ticket_submitted|ticket_remanded|ticket_resubmitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|org|workflow|role|file|proxy)_(read|write)\b' -e 'StepTypeGrade|StepTypeParallel|StepStatus(Approved|Denied|Remanded)|TicketStatusWithdrawn' -e '"userType": *"member"|"status": *"active"|"sectionType": *"conditional"|"gradeSymbol": *""' internal fixtures --glob '!**/*_test.go' --glob '!internal/fixtures/testdata/invalid/**'; test $? -eq 1; echo "exit=$?"   # 14
+test -z "$(git status --porcelain web/dist/app punchflow)"; echo "exit=$?"   # 15
+test ! -e web/package-lock.json && test ! -e web/yarn.lock && test ! -e web/pnpm-lock.yaml; echo "exit=$?"   # 16
+go build ./...; echo "exit=$?"   # 17: tree still compiles after archival
+test "$(ls impl-plans/completed | wc -l)" -eq 42; echo "exit=$?"   # 18: 36 plans + 6 manifests
+test "$(ls impl-plans/active)" = "punchflow-kickflow-dummy-s467-dispatch.json"; echo "exit=$?"   # 19
+bad=0; n=0; for f in impl-plans/completed/pf-*.md; do n=$((n+1)); sed -n 3p "$f" | grep -q '^\*\*Status\*\*: Completed' || { echo "BAD $f"; bad=1; }; done; test "$bad" -eq 0 && test "$n" -eq 36; echo "exit=$?"   # 20
+bad=0; n=0; for f in impl-plans/completed/punchflow-kickflow-dummy-s46*-dispatch.json; do n=$((n+1)); git show "HEAD:impl-plans/active/$(basename "$f")" | cmp -s - "$f" || { echo "CHANGED $f"; bad=1; }; done; test "$bad" -eq 0 && test "$n" -eq 6; echo "exit=$?"   # 21: six manifests byte-identical
+test "$(git diff --numstat -- design-docs/specs/notes.md | awk '{print $2}')" = 0 && test "$(sed -n '/^### Closing notes (session 467)/,/^### Intentional divergences/p' design-docs/specs/notes.md | grep -cE '^- (CF-0[1-9]|PF-26 split):')" -eq 10; echo "exit=$?"   # 22
+rg -q 'punchflow-kickflow-dummy-s467-dispatch.json' impl-plans/README.md && ! rg -q '\]\(\./active/' impl-plans/README.md; echo "exit=$?"   # 23
+test -z "$(git status --porcelain -- cmd internal fixtures deploy web/src web/package.json web/bun.lock mise.toml go.mod go.sum go-toolchain.json web/toolchain.json README.md embed.go embed_test.go repo_invariants_test.go .golangci.yml design-docs/specs/architecture.md)"; echo "exit=$?"   # 24: no source/foreign edits
+test -e impl-plans/completed/pf-27-finalize.md && test ! -e impl-plans/active/pf-27-finalize.md; echo "exit=$?"   # 25
+```
+
+### Done Criteria (session 467)
+
+- [ ] Lines 1-16 passed in one uninterrupted attempt. Each line has exit 0, a log path and counts. Full gate: FAIL=0, SKIP=0, no `(cached)`, every package `ok`, the 15 named tests PASS. Logs are under `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-<n>/`.
+- [ ] `notes.md` has the `### Closing notes (session 467)` subsection with 10 bullets, CF-01..CF-09 and the PF-26 split, citing gate evidence. Line 22 passes (0 deletions).
+- [ ] The 35 other plan files (line 3 Completed, final entry appended) and the six manifests (byte-identical, line 21) are in `impl-plans/completed/`. Line 17 passes. This plan's own move and the post-move lines 18, 19, 20 and 25 are evidenced in the step report.
+- [ ] `impl-plans/README.md` shows every plan Completed, links point to `./completed/`, and it names the s467 final manifest. Line 23 passes.
+- [ ] No source or foreign file edited (line 24).
+
 ## Execution Protocol
 
 Evidence reporting (README rule 14; design architecture.md s465 rule 3):

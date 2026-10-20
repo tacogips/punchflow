@@ -379,6 +379,46 @@ Session 466 is the final continuation. All s464/s465 rules stay in force. `impl-
 | A | PF-26a, PF-26b, PF-26c, PF-26d, PF-26e, PF-26f (parallel) | Every dependency is accepted at `a2a82de` |
 | B | PF-27 (serial, last) | PF-26a..PF-26f accepted |
 
+#### Final gate and archival rule (session 467)
+
+Session 466 stopped PF-27 at gate line 12 (`mise run lint`): 40 golangci-lint diagnostics in files that other plans own. Commit `f6f4ba8` fixed them and added a v2 `.golangci.yml` that excludes the git-ignored `tmp/` and `web/node_modules`. Session 467 finishes PF-27. The rules from s463 to s466 stay in force, except where the items below override them.
+
+1. Accepted set. PF-01..PF-13, PF-14a, PF-14b, PF-14c, PF-15..PF-25 and PF-26a..PF-26f are all accepted at `f6f4ba8`. They are not dispatched. The superseded indexes `pf-14-engine.md` and `pf-26-contract-smoke.md` are not dispatched either. Logs are named `/tmp/pf27-s467-<step>.log`, with evidence copies under `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-<n>/`. Logs tagged `-s466-` or earlier are history, not evidence.
+2. Docs and plans only. Everything PF-27 changes in source was finished at `f6f4ba8`: `repo_invariants_test.go`, `internal/contract/coverage_test.go`, the uncached `mise.toml` `test` task, the `finalizeS466` keys in `go-toolchain.json` and `web/toolchain.json`, and the tidied `go.mod`/`go.sum`. Session 467 edits none of these files. PF-27 paths, all of them file entries:
+   - `writePaths`:
+     - `design-docs/specs/notes.md`
+     - `impl-plans/README.md`
+     - `impl-plans/active/pf-27-finalize.md` and `impl-plans/completed/pf-27-finalize.md`
+     - for each of the 41 other archived files, its `impl-plans/active/<f>` and `impl-plans/completed/<f>` paths. The 41 files are the 35 plan files other than pf-27-finalize.md and the s460, s462, s463, s464, s465 and s466 manifests.
+   - `artifactRoots`: `tmp/punchflow-kickflow-dummy-s467`, `web/node_modules`, `web/dist/app` and `punchflow`, all git-ignored.
+   - Total: 2 + 2 + 82 = 86 entries, no directory entry, far under 300.
+3. Gate. The gate is the 16 must-pass lines of s466 item 4, with `-s466-` replaced by `-s467-`. Line 10 must count 15. The lines run in order, in the foreground, as one uninterrupted run. Line 3 (`go mod tidy`) must leave `git diff --quiet go.mod go.sum` true. If tidy changes either file, that is a reconciliation request routed to PF-02, not a PF-27 edit. Any failing line is routed through the s466 ownership index (`ownershipTransfers[]` first). After the repair lands, the gate restarts from line 1 as attempt n+1. Archival starts only after one attempt passes all 16 lines.
+4. Manifest archival. This item replaces s463 item 8 and s466 item 5 for this run. Those items kept the then-current manifest in `active/` because it was driving that run's dispatch. The s466 manifest no longer drives dispatch, so PF-27 archives it with the others: s460, s462, s463, s464 and s465 first, then s466 last. Then PF-27 sets its own plan to Completed and moves it, as the very last move.
+   - If the workflow writes a session-467 manifest, it stays in `active/`, and `impl-plans/README.md` names it as the final manifest.
+   - If no s467 manifest exists, `impl-plans/README.md` names `completed/punchflow-kickflow-dummy-s466-dispatch.json` as the final manifest, and `active/` ends up empty. No placeholder file is added.
+5. Plan status on archival. Each archived plan file gets `**Status**: Completed` and one final progress entry, a single line that cites the s467 gate log. The two superseded indexes get `**Status**: Completed (superseded by PF-14a/PF-14b/PF-14c)` and `**Status**: Completed (superseded by PF-26a..PF-26f)`. No other plan content changes. Manifests move with their bytes unchanged.
+6. Stale paths. Only `impl-plans/README.md` is rewritten to point at `completed/`. Path mentions of `impl-plans/active/<f>` in this document, in `notes.md` and inside the archived plans are records of earlier sessions, so they stay as written. After archival, each such path refers to `impl-plans/completed/<f>`. No design doc or plan has a Markdown link into `active/`, so no link breaks.
+7. Closing notes in `notes.md`. They are appended as one new subsection, "Closing notes (session 467)". It goes directly after the CF-07..CF-09 table and before "Intentional divergences". No existing row or bullet is edited. The subsection has one bullet per finding, each citing evidence from `/tmp/pf27-s467-test.log` (copied to the attempt directory) and its gate line, plus the PF-26 split note:
+
+   | ID | Closing evidence |
+   |---|---|
+   | CF-01 | `TestRepoInvariants/cf01_ban` and `/negative_tests_present` PASS (line 7); line 14 `rg` exits 1 |
+   | CF-02 | `TestGeneralMasterItemsAndInputIDHop` and `TestDefaultRoundTrip` PASS |
+   | CF-03 | `internal/auth` reports `ok` (line 9) |
+   | CF-04 | `TestDefaultRoundTrip` PASS |
+   | CF-05 | `TestDoRawResolvesRelativeURLs` PASS |
+   | CF-06 | lines 5 and 6 exit 0, and every package is `ok` (line 9) |
+   | CF-07 | `TestSubmitMultiStepApproveCompletes`, `TestStepConditionAndFallback`, `TestConditionOperators`, `TestFormFieldTypes` and `TestUpdateFormMerge` PASS, and `internal/engine` reports `ok` |
+   | CF-08 | the s466 PF-27 `verification` array, and the s467 one if an s467 manifest exists, hold only must-pass forms (lines 8 and 13-16 end in `test ...`) |
+   | CF-09 | `TestLoadExportRoundTripMinimal` PASS |
+   | PF-26 split | the six `TestContractLive<Group>` PASS lines and `TestContractOperationCoverage` PASS (96 unique operations) |
+
+Session 467 dispatch:
+
+| Wave | Plans | Ready because |
+|---|---|---|
+| - | PF-27 (serial, alone) | every other plan accepted at `f6f4ba8` |
+
 ### Delivery waves (input for implementation plans)
 
 | Wave | Work | Depends on |
