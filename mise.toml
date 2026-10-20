@@ -18,6 +18,7 @@ fi
 
 [tools]
 go = "1.25.4"
+bun = "1.4.3"
 golangci-lint = "latest"
 "go:golang.org/x/tools/gopls" = "latest"
 "go:golang.org/x/tools/cmd/goimports" = "latest"
