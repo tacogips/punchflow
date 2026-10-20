@@ -1,10 +1,10 @@
 # PF-14 Approval Engine Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 3 | **Depends On**: PF-02, PF-06, PF-07, PF-10 | **Plan ID**: PF-14
 **Design Reference**: design-docs/specs/design-approval-engine.md (all); design-docs/specs/notes.md INF-11..INF-25, INF-28, INF-34..INF-36, INF-40, INF-41; design-docs/specs/design-api-coverage.md rows 56-70, 91-95, event matrix
 **Created**: 2026-10-20
-**Last Updated**: 2026-10-20
+**Last Updated**: 2026-10-21
 
 ---
 
@@ -158,8 +158,19 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/engine/e
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (session 463, attempt 1)
+**Intent snapshot**: Implement PF-14 ticket engine behavior while preserving the PF-10 exported contract. Create the engine persistence and lookup helpers, form/condition/routing/action/visibility/comment/numbering implementations, and fixture-backed lifecycle tests. No accepted model, fixture, auth, time, store, or plan-index files are edited.
+**Tasks Completed**: Added engine store persistence and lookups; wired the PF-10 methods to engine implementations; implemented core ticket create/update/submit, route resolution, form checks, progression and actions, visibility, comments and numbering; added eight lifecycle test cases. All newly exported store functions use the `Eng` prefix. Enum use is model-constant based and slip sections resolve by ID or code.
+**Engine contract hash**: pre-edit `internal/engine/engine.go` sha256 `2e2d07ad0adde490754158198551b2a7d09ffbeb1c89e8ce391d8be4acdf2169`; post-edit sha256 `ff55503a0739acd6b08a791f39604223dfadada78e806e3ebd6b948aa72fe650`.
+**Verification**:
+- `bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf14-s463-build.log'; echo "exit=$?"` — exit 1; complete log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-build.log`; build is blocked by PF-15 `internal/webhook/payload.go` undefined `present.WebhookTenant`, `present.Comment`, `present.TicketWithStep`, and `present.TicketDetail`.
+- `bash -o pipefail -c 'go vet ./internal/engine/... ./internal/store/... 2>&1 | tee /tmp/pf14-s463-vet.log'; echo "exit=$?"` — exit 0; complete log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-vet.log`.
+- `bash -o pipefail -c 'go test -count=1 -v -race ./internal/engine/... 2>&1 | tee /tmp/pf14-s463-test.log'; echo "exit=$?"; echo "PASS=$(grep -c -- '--- PASS' /tmp/pf14-s463-test.log) FAIL=$(grep -c -- '--- FAIL' /tmp/pf14-s463-test.log) SKIP=$(grep -c -- '--- SKIP' /tmp/pf14-s463-test.log)` — exit 1; PASS=0 FAIL=8 SKIP=0; complete log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-test.log`; every test fails during fixture setup before its assertions because `fixtures.Load` inserts a duplicate `(team_id,user_id)` membership.
+- `bash -o pipefail -c 'gofmt -l internal/engine internal/store/tickets.go internal/store/engine_lookup.go 2>&1 | tee /tmp/pf14-s463-gofmt.log'; echo "exit=$?"` — exit 0; no output; log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-gofmt.log`.
+- `bash -o pipefail -c 'wc -l internal/engine/*.go internal/store/tickets.go internal/store/engine_lookup.go | sort -n | tail -10 2>&1 | tee /tmp/pf14-s463-lines.log'; echo "exit=$?"` — exit 0; largest file is `internal/engine/actions.go` at 418 lines (all files < 1000); log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-lines.log`.
+- `bash -o pipefail -c 'rg -n '\''"(in_progress|completed|rejected|denied|archived|draft|pending|skipped|approve|confirm|none|ticket_[a-z]+|comment_[a-z]+)"'\'' internal/engine --glob '\''!*_test.go'\'' 2>&1 | tee /tmp/pf14-s463-enums.log'; echo "exit=$?"` — exit 1 (no matches; production engine uses model constants); log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-enums.log`.
+- `bash -o pipefail -c 'grep -c -- "--- PASS" /tmp/pf14-s463-test.log; grep -c -- "--- FAIL" /tmp/pf14-s463-test.log; grep -c -- "--- SKIP" /tmp/pf14-s463-test.log' 2>&1 | tee /tmp/pf14-s463-test-counts.log; echo "exit=$?"` — exit 0; counts 0/8/0; log `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-1/pf14-s463-test-counts.log`.
+**Reconciliation requests**:
+- PF-06 owns `internal/fixtures/load.go:130-179` (accepted path). The `teamIDs` map is keyed only by team code while memberships from multiple charts are loaded; `go test -count=1 -v -race ./internal/engine/...` fails at fixture load with `UNIQUE constraint failed: team_memberships.team_id, team_memberships.user_id`, log `/tmp/pf14-s463-test.log`. Please repair the chart-specific team ID mapping and re-accept PF-06; resume PF-14 by rerunning the engine tests against the embedded default fixtures.
+- PF-15 owns `internal/webhook/payload.go` (verified in the session-463 ownership index). `go build ./...` fails because the PF-15 payload references four presenter types not yet defined, log `/tmp/pf14-s463-build.log`. Resume the full build after PF-15 lands and rerun this plan's build gate.
+**Reconciliation status**: Behavioral tests and full build remain incomplete pending the owner-routed repairs above. The test file currently contains eight of the plan's 17 named cases; remaining test coverage and any failures after fixture setup are still outstanding.

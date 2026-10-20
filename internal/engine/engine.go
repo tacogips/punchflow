@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
@@ -70,42 +69,39 @@ type FormPatch struct {
 	SlipItems []SlipItemInput `json:"slipItems"`
 }
 
-func pf10NotImplemented() error {
-	return kferr.New(500, "internal_server_error", "engine not implemented")
-}
 func (e *Engine) Create(ctx context.Context, tx *store.Tx, a Actor, in CreateInput) (string, []model.WebhookEvent, error) {
-	return "", nil, pf10NotImplemented()
+	return e.pf14Create(ctx, tx, a, in)
 }
 func (e *Engine) Update(ctx context.Context, tx *store.Tx, a Actor, ticketID string, in UpdateInput) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14Update(ctx, tx, a, ticketID, in)
 }
 func (e *Engine) UpdateForm(ctx context.Context, tx *store.Tx, a Actor, ticketID string, in FormPatch) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14UpdateForm(ctx, tx, a, ticketID, in)
 }
 func (e *Engine) Approve(ctx context.Context, tx *store.Tx, a Actor, ticketID string, comment *string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14Approve(ctx, tx, a, ticketID, comment)
 }
 func (e *Engine) SendBack(ctx context.Context, tx *store.Tx, a Actor, ticketID string, to int, comment *string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14SendBack(ctx, tx, a, ticketID, to, comment)
 }
 func (e *Engine) Deny(ctx context.Context, tx *store.Tx, a Actor, ticketID string, comment *string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14Deny(ctx, tx, a, ticketID, comment)
 }
 func (e *Engine) Withdraw(ctx context.Context, tx *store.Tx, a Actor, ticketID string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14Withdraw(ctx, tx, a, ticketID)
 }
 func (e *Engine) Archive(ctx context.Context, tx *store.Tx, a Actor, ticketID string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14Archive(ctx, tx, a, ticketID)
 }
 func (e *Engine) CanView(ctx context.Context, q store.Querier, a Actor, ticketID string) error {
-	return pf10NotImplemented()
+	return e.pf14CanView(ctx, q, a, ticketID)
 }
 func (e *Engine) AddComment(ctx context.Context, tx *store.Tx, a Actor, ticketID, body string, files []string) (string, []model.WebhookEvent, error) {
-	return "", nil, pf10NotImplemented()
+	return e.pf14AddComment(ctx, tx, a, ticketID, body, files)
 }
 func (e *Engine) EditComment(ctx context.Context, tx *store.Tx, a Actor, ticketID, commentID, body string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14EditComment(ctx, tx, a, ticketID, commentID, body)
 }
 func (e *Engine) DeleteComment(ctx context.Context, tx *store.Tx, a Actor, ticketID, commentID string) ([]model.WebhookEvent, error) {
-	return nil, pf10NotImplemented()
+	return e.pf14DeleteComment(ctx, tx, a, ticketID, commentID)
 }

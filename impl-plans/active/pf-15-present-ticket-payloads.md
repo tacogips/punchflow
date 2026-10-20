@@ -148,3 +148,11 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/webhook/
 **Tasks Completed**: None
 **Verification**: -
 **Reconciliation requests**: -
+
+### Session: 2026-10-21 (s463 attempt 1)
+**Intent snapshot**: Implement the PF-15-only ticket/comment presenter and store read surface, its contract tests, and the shared `internal/webhook/payload.go` Build body. Keep PF-08 and PF-09 exported contracts intact; use standard `json.Marshal` HTML escaping. Record all verification under `tmp/punchflow-kickflow-dummy-s463/PF-15/attempt-1/`.
+**Pre-edit hashes**: `impl-plans/active/pf-15-present-ticket-payloads.md` 5857c14b01ba4346614d66f7a9c5a44c7fd7203e9c1a4023fc26b107e9b02907; `internal/webhook/payload.go` 27c9581dbb0906ad2a49306b22b3e7edc697533da635863acf70c00f73e12a04.
+**Tasks Completed**: Replaced the PF-09 stub body with PF-15 event validation, tenant/actor resolution, event-specific data composition, and standard `json.Marshal` serialization. `NewPayloads()` and `Build` signatures are unchanged.
+**Post-edit hash**: `internal/webhook/payload.go` a0761a2352540d8946970941f62d2f5e644695217a7e3ac1025a8abd57882697.
+**Verification**: `go build ./...` exit 1 (`/tmp/pf15-s463-build-current.log`, copied to `tmp/punchflow-kickflow-dummy-s463/PF-15/attempt-1/build-current.log`): PF-15 presenter symbols `WebhookTenant`, `Comment`, `TicketWithStep`, and `TicketDetail` are not implemented. Earlier moving-tree runs: vet exit 1 and present/webhook tests exit 1 with zero test cases, all due to a then-visible PF-14 compile error at `internal/store/tickets.go:56`; logs copied under attempt-1. `gofmt -l internal/webhook/payload.go` printed no paths.
+**Reconciliation requests**: PF-14 owner, please ensure `internal/store/tickets.go` builds; observed `undefined: time` at line 56 during the initial moving-tree vet and test attempts (those commands were rerun after the file changed; current build proceeds and fails on the missing PF-15 presenters above).

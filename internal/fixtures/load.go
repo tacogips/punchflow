@@ -127,7 +127,6 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 	for _, g := range s.Grades {
 		gradeIDs[g.Code] = g.ID
 	}
-	teamIDs := map[string]string{}
 	for _, chart := range s.OrgCharts {
 		if err = insert("organization_charts", "INSERT INTO organization_charts(id,name,current,created_at,updated_at) VALUES(?,?,?,?,?)", chart.ID, chart.Name, chart.Current, ms, ms); err != nil {
 			return counts, err
@@ -148,14 +147,14 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 					return err
 				}
 			}
+			// Team codes are unique only within a chart, so parents resolve chart-locally.
 			var parent any
 			if team.ParentCode != nil {
-				parent = teamIDs[*team.ParentCode]
+				parent = teams[*team.ParentCode].ID
 			}
 			if err := insert("teams", "INSERT INTO teams(id,organization_chart_id,code,name,notes,parent_id,approve_only,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", team.ID, chart.ID, team.Code, team.Name, team.Notes, parent, team.ApproveOnly, ms, ms); err != nil {
 				return err
 			}
-			teamIDs[code] = team.ID
 			inserted[code] = true
 			return nil
 		}
@@ -176,7 +175,7 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 				if e != nil {
 					return counts, e
 				}
-				if err = insert("team_memberships", "INSERT INTO team_memberships(id,team_id,user_id,leader,grade_ids,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", store.NewID(), teamIDs[team.Code], userIDs[m.UserCode], m.Leader, raw, ms, ms); err != nil {
+				if err = insert("team_memberships", "INSERT INTO team_memberships(id,team_id,user_id,leader,grade_ids,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", store.NewID(), team.ID, userIDs[m.UserCode], m.Leader, raw, ms, ms); err != nil {
 					return counts, err
 				}
 			}

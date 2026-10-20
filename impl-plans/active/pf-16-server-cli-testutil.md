@@ -1,6 +1,6 @@
 # PF-16 Server, CLI and Test Utilities Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Wave**: 3 | **Depends On**: PF-04, PF-05, PF-06, PF-07, PF-09, PF-10 | **Plan ID**: PF-16
 **Design Reference**: design-docs/specs/architecture.md#request-handling, #web-ui-web (serving), #testing-and-verification; design-docs/specs/command.md (all); design-docs/specs/design-api-coverage.md (middleware order); design-docs/specs/design-auth-admin.md#dev-admin-api-internaladmin
 **Created**: 2026-10-20
@@ -162,13 +162,13 @@ Persona tokens and users are pinned in PF-07: Admin `pf_pat_dev_admin` (admin), 
 ### Verification
 
 ```bash
-bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf16-s462-build.log'; echo "exit=$?"
-bash -o pipefail -c 'go vet ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s462-vet.log'; echo "exit=$?"
-bash -o pipefail -c 'go test -count=1 -v -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... 2>&1 | tee /tmp/pf16-s462-test.log'; echo "exit=$?"
-bash -o pipefail -c "go test -count=1 -v -run 'TestDefaultRoundTrip' ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s462-roundtrip.log"; echo "exit=$?"
-for f in /tmp/pf16-s462-test.log /tmp/pf16-s462-roundtrip.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
+bash -o pipefail -c 'go build ./... 2>&1 | tee /tmp/pf16-s463-build.log'; echo "exit=$?"
+bash -o pipefail -c 'go vet ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s463-vet.log'; echo "exit=$?"
+bash -o pipefail -c 'go test -count=1 -v -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... 2>&1 | tee /tmp/pf16-s463-test.log'; echo "exit=$?"
+bash -o pipefail -c "go test -count=1 -v -run 'TestDefaultRoundTrip' ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s463-roundtrip.log"; echo "exit=$?"
+for f in /tmp/pf16-s463-test.log /tmp/pf16-s463-roundtrip.log; do echo "$f PASS=$(grep -c -- '--- PASS' $f) FAIL=$(grep -c -- '--- FAIL' $f) SKIP=$(grep -c -- '--- SKIP' $f)"; done
 gofmt -l internal/server internal/webui internal/admin internal/cli internal/testutil internal/fixtures/default_roundtrip_test.go   # prints nothing
-bash -o pipefail -c 'go run ./cmd/punchflow version 2>&1 | tee /tmp/pf16-s462-version.log'; echo "exit=$?"   # "punchflow 0.1.0"
+bash -o pipefail -c 'go run ./cmd/punchflow version 2>&1 | tee /tmp/pf16-s463-version.log'; echo "exit=$?"   # "punchflow 0.1.0"
 ```
 
 Evidence: exit 0 for each command; FAIL=0 in both logs. In the main log, SKIP may be 1, and only for `TestEmbeddedBuild` (the web build is absent until PF-27; that skip is expected). Any other SKIP fails the check. `TestDefaultRoundTrip` must PASS.
@@ -199,7 +199,7 @@ Evidence: exit 0 for each command; FAIL=0 in both logs. In the main log, SKIP ma
 ### Done Criteria (session 463)
 
 - [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, the only allowed SKIP is `TestEmbeddedBuild`, `TestDefaultRoundTrip` PASS, and the version log prints `punchflow 0.1.0`
-- [ ] The progress log lists the wave-B contracts (admin Operations count 23, testutil exported names) and pre/post hashes of the shared files
+- [x] The progress log lists the wave-B contracts (admin Operations count 23, testutil exported names) and pre/post hashes of the shared files
 
 ## Execution Protocol
 
@@ -207,8 +207,10 @@ Follow "Shared Execution Protocol" in `impl-plans/README.md`. Shared paths: `int
 
 ## Progress Log
 
-### Session: (not started)
-**Intent snapshot**: -
-**Tasks Completed**: None
-**Verification**: -
-**Reconciliation requests**: -
+### Session: 2026-10-21 (session 463, PF-16)
+**Intent snapshot**: Implement PF-16 server assembly and tests, SPA handler, admin API route contract/stubs, CLI subcommands/config, testutil, and default fixture round-trip test. Preserve the shared CLI `Run` signature and fixture data. Evidence: `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-1/intent-001.txt` through `intent-014-plan-webui-evidence.txt` and `pre-node-snapshot.json`.
+**Tasks Completed**: Added `server.New`/`Handler`/`Serve`/`Close`, real accepted PF-17 OIDC wiring, all middleware and reserved mounts, health endpoint and SPA handler; added 23 admin Operations rows and PF-24 stubs; added CLI serve/fixtures/token handlers and env/flag defaults; added testutil Env/personas/receiver/assertions; added `TestDefaultRoundTrip` and scoped package tests. Wave-B seam: admin routes are 23 operations; PF-24 stub files are `tokens.go`, `service_accounts.go`, `webhooks.go`, `tenant.go`, `faults.go`, `fixtures.go`; testutil exports `Env`, `Option`, `WithLocalLogin`, `WithAdminReset`, `WithRateLimit`, `New`, `Do`, `DoRaw`, `DeliverWebhooks`, `RegisterReceiverWebhook`, `UserID`, `Persona`, `Admin`, `Manager`, `Finance`, `Employee`, `Integration`, `Response`, `Receiver`, `Received`, `AssertError`, `AssertPagination`, `AssertKeys`; `server.Config`, `Server`, `New`, `Handler`, `Serve`, `Close` are in place. These contracts are frozen for wave B.
+**Verification**: `gofmt -l internal/server internal/webui internal/admin internal/cli internal/testutil internal/fixtures/default_roundtrip_test.go` exit 0, no output. Assigned Go files are all below 1000 lines (1759 aggregate). Current-source webui race suite `go test -count=1 -v -race ./internal/webui/...` exited 0, PASS=3 FAIL=0 SKIP=0; log `/tmp/pf16-s463-webui-race.log` and counts `/tmp/pf16-s463-webui-race-counts.log`, copied to the attempt evidence directory. Moving-tree `go build ./...` exited 1, log `/tmp/pf16-s463-build.log` copied to `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-1/pf16-s463-build-moving-tree.log`; PF-15-owned unresolved types are the cause. The moving-tree `go test ./internal/webui/... ./internal/testutil/...` log `/tmp/pf16-s463-webui-testutil.log` copied to the same evidence directory: webui PASS=3 FAIL=0 SKIP=0; testutil did not compile due to the same PF-15-owned undefined types. Full server/admin/CLI/testutil race suite, build/vet and version command remain unverified; `TestDefaultRoundTrip` has a current-source failure recorded below. Pre-edit shared CLI hashes are in `pre-edit-hashes.txt`; final shared CLI and fixture hashes are in `shared-post-hashes.txt`, and full source hashes in `final-source-hashes.txt`; no fixture data was modified.
+**Reconciliation requests**: `internal/webhook/payload.go:25,41,45,51` references `present.WebhookTenant`, `present.Comment`, `present.TicketWithStep`, and `present.TicketDetail`, absent while PF-15 is in progress. Owner: PF-15 (`internal/present/{ticket.go,ticket_detail.go,comment.go,tenant.go}` and `internal/webhook/payload.go` per the s463 ownership declarations). Final `go build ./...` rerun exited 1; full log `/tmp/pf16-s463-build-final-attempt.log` copied to `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-1/pf16-s463-build-final-attempt.log`. Resume by rerunning all PF-16 s463 commands after PF-15 lands and those symbols compile; do not modify foreign files.
+**Follow-up verification**: `bash -o pipefail -c "go test -count=1 -v -run 'TestDefaultRoundTrip' ./internal/fixtures/... 2>&1 | tee /tmp/pf16-s463-roundtrip.log"` exited 1; counts PASS=0, FAIL=1, SKIP=0 from `/tmp/pf16-s463-roundtrip-counts.log`. The failure at `internal/fixtures/default_roundtrip_test.go:34` is `UNIQUE constraint failed: team_memberships.team_id, team_memberships.user_id` during `fixtures.Load`, so byte-identical export was not reached. Full log is copied to `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-1/pf16-s463-roundtrip.log`.
+**Additional reconciliation request**: The duplicate membership failure originates in accepted PF-06 `internal/fixtures/load.go` (owner per `punchflow-kickflow-dummy-s462-dispatch.json`). PF-14 independently recorded the same fixture-load failure. Route a repair to PF-06 and rerun `TestDefaultRoundTrip` after it lands. Do not modify the accepted loader from PF-16. Required full build/vet/scoped race tests and version command remain unverified while PF-15's payload symbols are missing; final acceptance criterion remains unchecked.
