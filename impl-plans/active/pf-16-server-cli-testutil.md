@@ -179,6 +179,28 @@ Evidence: exit 0 for each command; FAIL=0 in both logs. In the main log, SKIP ma
 - [ ] Uncached `-race -v` tests of the five PF-16 packages pass; `TestDefaultRoundTrip` passes (Validate nil; byte-identical export); counts recorded
 - [ ] build/vet exit 0; gofmt clean; files < 1000 lines
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: A (s463; parallel with PF-14 and PF-15). **Depends on**: PF-04..PF-10, all accepted at f82e374. PF-17 (OIDC) is also accepted, so `auth.NewOIDC`, `Login` and `Callback` are real implementations: wire them as specified and do not stub them.
+**State at f82e374**: not started. `internal/server`, `internal/webui`, `internal/admin` and `internal/testutil` do not exist. `internal/cli` holds only the PF-01 `cli.go` and `cli_test.go`.
+**Path Declarations**: unchanged. 24 writePaths, plus the shared `internal/cli/cli.go`, `internal/cli/cli_test.go` and `fixtures/default` (15 files), give 41 entries (< 300). This is the only remaining plan with a directory entry.
+
+1. Implement the whole plan above, with all session-462 corrections.
+2. Shared accepted files:
+   - `internal/cli/cli.go` and `internal/cli/cli_test.go` (PF-01, from the s460 manifest): keep the `Run` signature, `TestRunVersion` and `TestRunPlaceholdersAndUsage`.
+   - `fixtures/default/*` (PF-07): regenerate only by the atomic procedure above, and only if `TestDefaultRoundTrip` fails after semantic equality is proven. After regenerating, run the CF-01 ban grep in `design-docs/specs/notes.md`; it must print nothing.
+
+   Record pre/post hashes for each of these files.
+3. Keep the contracts that wave B builds on stable, and record them in the progress log as you create them: the 23 admin `Operations()` rows in `internal/admin/routes.go`, the admin stub files PF-24 will fill (`tokens.go`, `service_accounts.go`, `webhooks.go`, `tenant.go`, `faults.go`, `fixtures.go`), the `testutil` API (`Env`, personas, `Do`, `CallerFor`, receiver, `DeliverWebhooks`) and `server.New`/`Serve`. Do not change them after wave A.
+4. `TestEmbeddedBuild` may SKIP in your run, because `web/dist/app` is built only by PF-27. Never run `bun run build` into `web/dist/app` and never write `./punchflow` (README rule 7).
+5. Accepted code is read-only: `internal/auth/*`, `internal/httpx/*`, `internal/api/v1/*`, `internal/webhook/*`, `internal/fixtures/*` (except your new `default_roundtrip_test.go`), `internal/store/*`, `embed.go`, `cmd/punchflow/main.go`. When blocked: record a reconciliation request (README rule 12).
+6. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-16/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, the only allowed SKIP is `TestEmbeddedBuild`, `TestDefaultRoundTrip` PASS, and the version log prints `punchflow 0.1.0`
+- [ ] The progress log lists the wave-B contracts (admin Operations count 23, testutil exported names) and pre/post hashes of the shared files
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. Shared paths: `internal/cli/cli.go`, `internal/cli/cli_test.go` (from PF-01), `fixtures/default` (from PF-07; regenerate only as described).

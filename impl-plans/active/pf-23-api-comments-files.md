@@ -93,6 +93,22 @@ rg -n 'not implemented' internal/api/v1/comments.go internal/api/v1/files.go int
 - [ ] 7 operations implemented; download handler works; `comment_created`/`comment_updated` proven through the receiver (no `comment_deleted`)
 - [ ] Both test logs pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-14, PF-15 and PF-16 (all wave A).
+**State at f82e374**: not started. `comments.go` and `files.go` in `internal/api/v1` are PF-10 stubs, and `internal/files/files.go` is the PF-10 contract stub. `internal/files/download.go` and `internal/store/files.go` do not exist.
+**Path Declarations**: unchanged. 9 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points. Keep the `internal/files` contract signatures (`New`, `Save`, `SignedURL`, `DownloadHandler`, `MaxBytes`), because PF-16's server wiring calls them.
+2. Comment API tests assert that no received body has `eventType` `comment_deleted`. That literal may appear in your `*_test.go`; it must never appear in production code.
+3. Do not edit `internal/engine/*` (PF-14), `internal/present/*` (PF-08/PF-15), `internal/testutil/*` or `internal/server/*` (PF-16), or `internal/api/v1/api.go`, `routes.go` or `routes_test.go` (PF-10). Defects in those become reconciliation requests (README rule 12).
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-23/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0 in both the files and API logs, and the `not implemented` rg prints nothing
+- [ ] The progress log has the intent snapshot, pre/post hashes of the three shared files, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. Shared paths: `internal/api/v1/comments.go`, `internal/api/v1/files.go`, `internal/files/files.go` (stubs from PF-10).

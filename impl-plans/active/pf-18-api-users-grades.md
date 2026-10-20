@@ -114,6 +114,22 @@ Evidence: exit 0; FAIL=0; SKIP=0; PASS covers every case in the Tests section.
 
 - [ ] 18 operations implemented (no stub message left); listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463; parallel with PF-19..PF-25). **Depends on**: PF-08 (accepted at f82e374) and PF-16 (wave A).
+**State at f82e374**: not started. `users.go` and `grades.go` are PF-10 stubs. `internal/store/users.go` and `internal/store/grades.go` do not exist.
+**Path Declarations**: unchanged. 8 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points.
+2. Edit only the handler bodies in the two shared stub files. Never edit `internal/api/v1/api.go`, `routes.go` or `routes_test.go`: the accepted PF-10 `Operations()` table is fixed at 96 rows and already routes your operations. Never edit `internal/testutil/*` or `internal/server/*` (PF-16).
+3. Wave B shares `internal/api/v1` and `internal/store` with PF-19..PF-24. Use `pf18` prefixes and your `Test*` nouns. If a compile failure is caused by another plan's file, record a reconciliation request (README rules 11 and 12) and re-run after that plan lands.
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-18/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, and the `not implemented` rg prints nothing
+- [ ] The progress log has the intent snapshot, pre/post hashes of `users.go` and `grades.go`, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. `users.go` and `grades.go` are shared with PF-10 (stub creator); record hashes before editing.

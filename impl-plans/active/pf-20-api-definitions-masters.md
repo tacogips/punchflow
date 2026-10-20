@@ -124,6 +124,22 @@ rg -n 'not implemented' internal/api/v1/categories.go internal/api/v1/folders.go
 - [ ] 23 operations implemented; CF-02 API hop closed (create assigns IDs, update preserves them, get returns fixture IDs), proven by tests
 - [ ] Listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean; inferred rules recorded in the progress log
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-06 and PF-08 (accepted at f82e374) and PF-16 (wave A).
+**State at f82e374**: not started. The four handler files are PF-10 stubs. `internal/store/classification.go`, `masters.go` and `definitions.go` do not exist. CF-02: the load, export, read and present halves are accepted. The API hop (create assigns input IDs, update keeps them) is this plan's to close; see `design-docs/specs/notes.md` "Status at session 463".
+**Path Declarations**: unchanged. 12 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points and its CF-02 tests.
+2. Never edit `internal/store/read_masters.go`, `read_classification.go` or `read_definitions.go`, or `internal/present/master.go` (accepted PF-08). Never edit `internal/fixtures/*` (accepted PF-06), `fixtures/default/*` (PF-07, shared only by PF-16), or `internal/api/v1/api.go`, `routes.go` or `routes_test.go` (PF-10). If the presenter or reader returns a wrong input ID, record a reconciliation request against PF-08 (README rule 12) instead of working around it in the handler.
+3. Record the inferred category-deletion rule in the progress log as an INF candidate. PF-27 appends it to `notes.md`.
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-20/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, the CF-02 create/update/get tests PASS, and the `not implemented` rg prints nothing
+- [ ] The progress log has the intent snapshot, pre/post hashes of the four shared files, the INF candidates, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-10 (stub creator).

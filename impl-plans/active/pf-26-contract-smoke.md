@@ -14,7 +14,7 @@ Prove kickflow compatibility mechanically. (1) The route table equals the 96 pat
 
 ## Non-goals
 
-- Do not fix handler bugs here. Failures found here are logged as reconciliation requests naming the owning plan (by coverage-matrix handler file) and fixed in PF-27. You may fix only test code.
+- Do not fix handler bugs here. Log each failure as a reconciliation request naming the owning plan (by coverage-matrix handler file; ownership index in `impl-plans/README.md` rule 12). Integration review routes the repair to that plan (session 463; PF-27 no longer repairs other plans' files). You may fix only your own test code.
 
 ## Files
 
@@ -86,6 +86,25 @@ Evidence: exit 0; FAIL=0; SKIP=0. The contract log shows the 96-route test, 96 s
 
 - [ ] Contract tests cover 96/96 routes, 96/96 scenarios and 13/13 webhook payloads (exact event set); smoke test passes; counts recorded
 - [ ] Any non-test failure is logged as a reconciliation request with the owning plan id
+
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: C (s463; alone). **Depends on**: PF-17 (accepted at f82e374) and PF-18..PF-24 (wave B).
+**State at f82e374**: not started. `internal/contract` and `internal/cli/serve_smoke_test.go` do not exist. The contract-test dependencies `gopkg.in/yaml.v3` and `github.com/santhosh-tekuri/jsonschema/v6` are already in `go.mod`, so no `go.mod` edit is needed. If one were, it would be a PF-02 repair route (README rule 5).
+**Path Declarations**: unchanged. 10 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points.
+2. Failure handling:
+   - A schema, route or scenario failure caused by a handler, presenter or fixture becomes a reconciliation request: `file:line` or the operationId, the owning plan from README rule 12, the failing subtest and the log path.
+   - The plan is then blocked on that repair. Re-run the full verification after the owner's repair lands.
+   - Never loosen the validator, skip a scenario or special-case an operation.
+3. The smoke test owns and joins its goroutine (`cli.Run` with a cancelable ctx). It must not leave a listening server or any background process behind.
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array), plus `grep -c -- '--- PASS: TestContract.*/' /tmp/pf26-s463-contract.log`, which must be >= 109. Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-26/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, >= 109 `TestContract` subtests PASS, and `--- PASS: TestServeSmoke`
+- [ ] Every non-test failure seen during the work is listed under "Reconciliation requests" with its owner and its resolution
 
 ## Execution Protocol
 

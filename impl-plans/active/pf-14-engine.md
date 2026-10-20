@@ -136,6 +136,22 @@ Evidence: exit 0 for each command; FAIL=0; SKIP=0. Each of the 17 listed tests (
 - [ ] Engine production code uses only `internal/model` enum constants (rg check empty); conditional sections and slip codes follow the PF-02 model
 - [ ] build/vet exit 0; gofmt clean; files < 1000 lines
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: A (s463; parallel with PF-15 and PF-16). **Depends on**: PF-06, PF-07, PF-08 and PF-10, all accepted at f82e374 (see `acceptedDependencies` in `impl-plans/active/punchflow-kickflow-dummy-s463-dispatch.json`).
+**State at f82e374**: not started. `internal/engine/engine.go` (PF-10 stub) is the only engine file. `internal/store/tickets.go` and `internal/store/engine_lookup.go` do not exist.
+**Path Declarations**: unchanged. 20 declared files (fanout limit < 300).
+
+1. Implement the whole plan above. The session-462 corrections (model enum constants only, withdraw -> `rejected`, conditional sections, slip codes, `*string` GradeSymbol) still apply.
+2. Wave-A coupling: PF-15 adds `internal/store/read_tickets.go` in the same package at the same time. Every exported store function you add starts with `Eng`. Grep `internal/store` before adding one. Do not add `Ticket*` names, which belong to PF-15's read helpers.
+3. Accepted code is read-only. This covers `internal/model/*`, every existing `internal/store/*.go`, `internal/fixtures/*`, `fixtures/default/*`, `internal/kferr`, `internal/kftime`, and every exported signature in `engine.go`. If accepted code blocks you, record a reconciliation request (`file:line`, owner per `impl-plans/README.md` rule 12, command, log path) and do not edit the file. Integration review routes it; PF-27 does not repair other plans' files.
+4. Verification: run the session-462 Verification block with every `-s462-` log path changed to `-s463-`. The exact commands are this plan's `verification` array in the s463 manifest. Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-14/attempt-<n>/`. Logs named `-s462-` are not evidence.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is met and proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, and all 17 listed tests show `--- PASS`
+- [ ] The progress log has the intent snapshot, pre/post `shasum -a 256` of `internal/engine/engine.go`, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/engine/engine.go` is a shared path created by PF-10: record its hash before editing and keep all exported signatures.

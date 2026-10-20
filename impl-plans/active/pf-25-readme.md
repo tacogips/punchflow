@@ -78,6 +78,22 @@ rg -n -e 'ticket_submitted|comment_deleted|ticket_admin|audit_read' -e '\b(user|
 
 - [ ] README contains all 9 sections; grep check has no MISSING lines; no banned enum value appears in README (session 462)
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log name and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-07 (accepted at f82e374) and PF-16 (wave A; CLI flags and admin routes are fixed after wave A).
+**State at f82e374**: `README.md` does not exist.
+**Path Declarations**: unchanged. 2 declared files (< 300).
+
+1. Write `README.md` as specified, with the session-462 points.
+2. Development section: give the uncached evidence commands (`go test -count=1 -v ./...`; `cd web && bun install --frozen-lockfile && bun run build && bun test`). Describe `mise run test` as the convenience task; PF-27 makes it `go test -count=1 ./...`. Do not call it cached.
+3. Take flag names from `design-docs/specs/command.md` and the PF-16 code (`internal/cli/config.go`); do not invent them. Take persona tokens and e-mails from `fixtures/default/tokens.json`, `users.json` and `deploy/keycloak/realm-punchflow.json`.
+4. Verification: the session-462 commands with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy the log to `tmp/punchflow-kickflow-dummy-s463/PF-25/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] All 9 sections present; `grep -c MISSING /tmp/pf25-s463-grep.log` prints 0; the banned-enum rg over README.md prints nothing
+- [ ] The progress log has exit status and log path for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`.

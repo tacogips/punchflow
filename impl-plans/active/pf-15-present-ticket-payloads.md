@@ -120,6 +120,23 @@ Name the payload tests `TestPayload*` in `payload_test.go`, and the presenter te
 - [ ] HTML-escape test asserts the payload contains the escaped `\u003cb\u003e` sequence (backslash-u escapes) and does not contain raw `<b>`; JST timestamp regex test passes
 - [ ] Uncached present (scoped) and webhook (full package) tests pass with counts recorded; build/vet exit 0; gofmt clean
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: A (s463; parallel with PF-14 and PF-16). **Depends on**: PF-06, PF-07, PF-08 and PF-09, all accepted at f82e374.
+**State at f82e374**: not started. `internal/present` has no ticket, comment, viewer or tenant files. `internal/webhook/payload.go` is still the PF-09 stub.
+**Path Declarations**: unchanged. 11 declared files (< 300).
+
+1. Implement the whole plan above, with all session-462 corrections. That includes the INF-33 escaped `<b>` expectation, which replaces the old raw `<b>` bullet.
+2. `internal/webhook/payload.go` is accepted PF-09's shared stub. Replace only the `Build` body and add unexported helpers. Keep `NewPayloads()`, the `Build` signature and default HTML escaping. PF-09's tests in `internal/webhook` (`sign_test.go`, `service_test.go`, `dispatcher_test.go`) must stay green in your whole-package run.
+3. Wave-A coupling: PF-14 adds `Eng*` functions to `internal/store` at the same time. Exported functions you add in `internal/store/read_tickets.go` start with `Ticket` or `Comment` (README rule 10). Never add a name starting with `Eng`.
+4. Accepted code is read-only. This covers the PF-08 files in `internal/present` (`present.go`, `user.go`, `org.go`, `role.go`, `classification.go`, `master.go`, `workflow*.go`, `route.go`, `proxy.go`, `audit.go`, `present_test.go`, `workflow_test.go`), the `internal/store/read_*.go` files, `internal/model/*`, and the `internal/webhook` files other than `payload.go`. When blocked: record a reconciliation request (README rule 12) and do not edit.
+5. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-15/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0 in both the present and webhook logs, and the webhook log shows the PF-09 tests passing
+- [ ] The progress log has the intent snapshot, pre/post hashes of `internal/webhook/payload.go`, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. `internal/webhook/payload.go` is a shared path created by PF-09: record its hash before editing and keep its exported signatures.

@@ -104,6 +104,22 @@ rg -n 'not implemented' internal/api/v1/proxies.go internal/api/v1/orgcharts.go 
 
 - [ ] 24 operations implemented (no stub message left); listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-08 (accepted at f82e374) and PF-16 (wave A).
+**State at f82e374**: not started. `proxies.go`, `orgcharts.go` and `teams.go` are PF-10 stubs. `internal/store/proxies.go` and `internal/store/org.go` do not exist.
+**Path Declarations**: unchanged. 9 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points.
+2. Edit only the handler bodies in your three shared stub files. Never edit `internal/api/v1/api.go`, `routes.go` or `routes_test.go` (accepted PF-10; the 96 routes are fixed), `internal/testutil/*` or `internal/server/*` (PF-16), or the accepted `internal/store/read_org.go` and `read_proxies.go` (PF-08). Reuse those read helpers rather than duplicating them.
+3. Shared-package compile failures caused by another plan's file: record a reconciliation request (README rules 11 and 12) and do not edit that file.
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-19/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, and the `not implemented` rg prints nothing
+- [ ] The progress log has the intent snapshot, pre/post hashes of the three shared files, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. The three handler files are shared with PF-10 (stub creator).

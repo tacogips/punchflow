@@ -130,6 +130,22 @@ wc -l internal/api/v1/ticket*.go internal/store/ticket_queries.go | sort -n | ta
 - [ ] 15 operations implemented; the ten `ticket_*` events proven via HTTP + receiver with verified signatures; query enums validated
 - [ ] Listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean; files < 1000 lines
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-14, PF-15 and PF-16 (all wave A).
+**State at f82e374**: not started. `tickets.go`, `ticket_actions.go` and `ticket_viewers.go` are PF-10 stubs. `internal/store/ticket_queries.go` does not exist.
+**Path Declarations**: unchanged. 9 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points. Handlers call the engine (PF-14) inside one `store.WithTx` and enqueue the returned events in that same tx. Responses come from the PF-15 presenters.
+2. Webhook retry tests advance the fake clock (`testutil`) past the backoff and call `DeliverWebhooks`. Never `time.Sleep` for retry delays, and never start the dispatcher goroutine.
+3. Do not edit `internal/engine/*` (PF-14), `internal/present/*` (PF-08/PF-15), `internal/testutil/*` (PF-16), or `internal/api/v1/api.go`, `routes.go` or `routes_test.go` (PF-10). Engine or presenter defects become reconciliation requests against PF-14 or PF-15 (README rule 12).
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-22/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, the 10 ticket events asserted by `eventType`, the `not implemented` rg empty, and every file < 1000 lines
+- [ ] The progress log has the intent snapshot, pre/post hashes of the shared files, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-10 (stub creator).

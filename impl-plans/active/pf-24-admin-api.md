@@ -111,6 +111,23 @@ Evidence: exit 0; FAIL=0; SKIP=0; the fault-code table test shows 6 passing subt
 - [ ] 23 endpoints implemented; every "Fault" catalog code proven; fire covers exactly the 13 kickflow events
 - [ ] Uncached `-race -v` admin tests pass with counts recorded; build/vet exit 0; gofmt clean
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-14, PF-15 and PF-16 (all wave A).
+**State at f82e374**: not started. `internal/admin` does not exist yet; PF-16 creates it with the stub files you fill. `internal/store/admin.go` does not exist.
+**Path Declarations**: unchanged. 13 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points.
+2. `internal/admin/webhooks_test.go` must keep the negative cases `ticket_submitted -> 422` and `comment_deleted -> 422` using those literal strings. PF-27's `repo_invariants_test.go` subtest `negative_tests_present` checks that a test file under `internal/admin/` contains one of them.
+3. Never edit `internal/admin/admin.go`, `routes.go` or `routes_test.go` (PF-16; 23 rows fixed), `internal/webhook/*` (accepted PF-09/PF-15), `internal/fixtures/*` (accepted PF-06) or `internal/testutil/*` (PF-16). Defects in those become reconciliation requests (README rule 12).
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-24/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, 6 fault subtests and 13 fire subtests PASS
+- [ ] `rg -l 'ticket_submitted|comment_deleted' internal/admin` lists `internal/admin/webhooks_test.go`
+- [ ] The progress log has the intent snapshot, pre/post hashes of the six shared stub files, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-16 (stub creator).

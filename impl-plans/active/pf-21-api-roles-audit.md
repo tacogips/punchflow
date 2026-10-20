@@ -94,6 +94,23 @@ rg -n 'not implemented' internal/api/v1/roles.go internal/api/v1/audit_logs.go  
 
 - [ ] 9 operations implemented; permission enum validated against `model.Permissions`; listed tests pass uncached with `-race`; counts recorded; build/vet exit 0; gofmt clean
 
+## Continuation (session 463) - read first; overrides the session-462 phase, log names and Done Criteria
+
+**Wave**: B (s463). **Depends on**: PF-08 (accepted at f82e374) and PF-16 (wave A).
+**State at f82e374**: not started. `roles.go` and `audit_logs.go` are PF-10 stubs. `internal/store/roles.go` and `internal/store/audit_queries.go` do not exist.
+**Path Declarations**: unchanged. 7 declared files (< 300).
+
+1. Implement the whole plan above, with the session-462 points.
+2. `internal/api/v1/roles_test.go` must contain the negative case `permission: audit_read -> 400 invalid_parameter` using that literal string. PF-27's `repo_invariants_test.go` subtest `negative_tests_present` checks that this file contains `audit_read`. Never remove or obfuscate it.
+3. Never edit `internal/store/audit.go` (accepted PF-02) or `read_roles.go` (accepted PF-08), or `internal/api/v1/api.go`, `routes.go` or `routes_test.go` (PF-10). Shared-package compile failures caused by another plan's file go to a reconciliation request (README rules 11 and 12).
+4. Verification: the session-462 block with `-s462-` changed to `-s463-` (the manifest `verification` array). Copy each log to `tmp/punchflow-kickflow-dummy-s463/PF-21/attempt-<n>/`.
+
+### Done Criteria (session 463)
+
+- [ ] Every session-462 Done Criteria item is proven by `-s463-` logs: exit 0, FAIL=0, SKIP=0, PASS > 0, and the `not implemented` rg prints nothing
+- [ ] `rg -l 'audit_read' internal/api/v1/roles_test.go` lists the file
+- [ ] The progress log has the intent snapshot, pre/post hashes of the shared files, and exit status, log path and counts for every command
+
 ## Execution Protocol
 
 Follow "Shared Execution Protocol" in `impl-plans/README.md`. Handler files are shared with PF-10 (stub creator).

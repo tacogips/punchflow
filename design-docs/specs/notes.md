@@ -102,9 +102,15 @@ rg -n -e 'ticket_submitted|ticket_remanded|ticket_resubmitted|comment_deleted|ti
 Scope: production Go files under `internal/`, the `fixtures/` data, and `internal/fixtures/testdata/minimal`. Test files (`*_test.go`) and the PF-06 invalid-case testdata are excluded on purpose. Negative tests must name banned values in order to prove they are rejected (PF-02 `enum_rules_test.go`, PF-15 payload tests, PF-21 `roles_test.go`, PF-23 comment tests, PF-24 admin webhook tests). Never delete or obfuscate those literals to make this grep pass.
 
 ```bash
-# companion presence check (PF-27): the negative tests still exist
+# companion presence check (PF-27; encoded as repo_invariants_test.go/negative_tests_present in session 463): the negative tests still exist
 rg -l 'audit_read' internal/fixtures/enum_rules_test.go internal/api/v1/roles_test.go   # lists both files
 ```
+
+Status at session 463 (checkpoint `f82e374`; the session-462 integration review accepted PF-01..PF-13 and PF-17):
+
+- CF-01: the PF-02, PF-05, PF-06 and PF-07 halves are accepted. The CF-01 ban grep above was re-run on 2026-10-21 against `f82e374` and printed nothing (rg exit 1, no match). It is still open only for its final closing evidence: PF-27's `repo_invariants_test.go` subtests `cf01_ban` and `negative_tests_present`. The second subtest needs `internal/api/v1/roles_test.go` (PF-21) and the PF-24 admin webhook test, which do not exist yet.
+- CF-02: the PF-02, PF-06 and PF-08 halves are accepted. Still open: the PF-20 API hop (`createGeneralMasterItem` / `updateGeneralMasterItem` input IDs) and the PF-16 `TestDefaultRoundTrip`.
+- CF-03: closed by the accepted PF-05 at `f82e374`. PF-27 records the PF-05 PASS counts from the full gate.
 
 ### Intentional divergences from kickflow
 

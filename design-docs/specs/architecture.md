@@ -143,7 +143,7 @@ Rules: dependencies point downward only; small interfaces at consumer side (`kft
 | `build` (changed) | depends on `web:build`; `go build -o punchflow ./cmd/punchflow` |
 | `dev` (new) | depends on `web:build`; `go run ./cmd/punchflow serve --enable-local-login --enable-admin-reset` |
 | `run` (changed) | `mise run build && ./punchflow serve` |
-| `test` (changed) | `go test ./...` then `web:test` |
+| `test` (changed) | `go test -count=1 ./...` then `web:test` (uncached; session 463, PF-27 edits `mise.toml`) |
 | `lint` (changed) | `golangci-lint run ./...`, `go vet ./...`, `web:typecheck` |
 | `keycloak:up` / `keycloak:down` (new) | `docker compose -f deploy/keycloak/docker-compose.yml up -d` / `down` |
 
@@ -185,7 +185,7 @@ No router, UUID, CLI or logging libraries: the standard library covers them. Add
 | Web | `web/src/**/*.test.ts` | `bun test` |
 | Manual | README | Keycloak login; curl against a running server |
 
-Final verification commands (PF-27 only): `go build ./...`, `go vet ./...`, `go test -count=1 -v ./...`, `cd web && bun install --frozen-lockfile && bun run build && bun test`, `mise run build && mise run test && mise run lint`.
+Final verification commands (PF-27 only): `go build ./...`, `go vet ./...`, `go test -count=1 -v ./...` (includes `repo_invariants_test.go`), `cd web && bun install --frozen-lockfile && bun run build && bun test`, `mise run build && mise run test && mise run lint`, the serve smoke test (`TestServeSmoke`: temp SQLite, seeded token, `/v1` calls) and the webhook receiver tests in PF-22/PF-23/PF-26 (`internal/testutil` receiver).
 
 #### Verification-command rule (session 462)
 
@@ -196,7 +196,47 @@ This rule fixes two failures from the previous run: test evidence came from the 
 3. Counts recorded. For Go, record `--- PASS`, `--- FAIL` and `--- SKIP` line counts from the log (`grep -c -- '--- PASS' <log>`, ...). For bun, record the pass/fail summary line. A passing check needs exit 0, FAIL count 0 and PASS count > 0. A test that the plan requires to PASS must not SKIP.
 4. Scoped to the plan. A plan runs tests only for the packages it owns, plus its `-run` pattern inside shared packages (`internal/api/v1`, `internal/store`, `internal/present`, ...). `go build ./...` and `go vet <own packages>` are allowed. No plan other than PF-27 runs, or has a Done criterion that requires, `go test ./...` or "all packages pass".
 5. Foreign breakage is a blocker, not a fix. If a scoped command fails because of a file owned by another plan, the plan records the file:line and the owning plan as a reconciliation blocker and does not edit that file. Wave partitioning (below) keeps plans that share a package in dependency order, so this should be rare.
-6. Accepted plans stay green. PF-01, PF-03, PF-11, PF-12 and PF-13 are not re-implemented. PF-27 re-runs their tests (`go test -count=1 -v ./internal/kftime/... ./internal/kferr/... ./internal/build/... .`, `cd web && bun test`) as part of the full gate.
+6. Accepted plans stay green. Session 463 accepted set: PF-01..PF-13 and PF-17 at commit `f82e374`. They are not re-implemented or re-dispatched. Their packages are covered by the PF-27 full gate (`go test -count=1 -v ./...` includes `internal/kftime`, `kferr`, `build`, `model`, `store`, `httpx`, `auth`, `fixtures`, `present`, `webhook`, `api/v1` and root `.`; `cd web && bun test` covers PF-03/11/12/13). PF-27 records their PASS counts per package. A remaining plan whose scoped command fails inside an accepted package follows rule 5.
+7. Fresh log names. Session 463 logs are `/tmp/<plan-id>-s463-<step>.log`, and per-attempt evidence copies go under `tmp/punchflow-kickflow-dummy-s463/<planId>/attempt-<n>/`. A session-462 log is never evidence for session 463.
+
+#### Path-ownership and fanout rule (session 463)
+
+Session 462 stopped at dispatch. PF-27 declared whole source trees (`internal`, `cmd`, `fixtures`, `deploy`, `web/src`, `impl-plans/active`, ...) as `sharedPaths`, and those expanded to 457 of the 560 tracked files at `f82e374`. The native fanout limit is 512. Every dispatched plan follows these rules:
+
+1. Expansion measure. A plan's expansion is the number of files matched by `writePaths ∪ sharedPaths`, minus anything under `artifactRoots`. A file entry counts 1, even if it does not exist yet. A directory entry counts every file under it in the projected final tree: the files tracked at `f82e374`, plus the files that any remaining plan's `writePaths` create under that directory. The limit is < 300 per plan. 512 is the hard limit and must never be approached.
+2. Concrete paths. Remaining plans declare individual files. A directory entry is allowed only for a directory the plan itself populates, and only if its projected expansion is < 300. Example: PF-16 `fixtures/default` has 15 files. No remaining plan may declare `internal/fixtures/testdata`, which belongs to accepted PF-06 and has about 231 files.
+3. PF-27 owns only what it edits. It owns:
+   - `writePaths`: `repo_invariants_test.go`, plus one `impl-plans/completed/<file>` entry for every file it archives.
+   - `sharedPaths`: the matching `impl-plans/active/<file>` entries, `impl-plans/README.md`, `README.md`, `mise.toml`, `design-docs/specs/notes.md`, `go.mod`, `go.sum`, `go-toolchain.json` and `web/toolchain.json`.
+   - `artifactRoots`: `web/node_modules`, `web/dist/app` and `punchflow`.
+
+   It owns no directory entry. In particular, none of `internal`, `cmd`, `fixtures`, `deploy`, `web/src`, `impl-plans/active` or `impl-plans/completed` appears as an entry. It archives 27 plan files plus the s460 and s462 manifests, so it declares about 67 entries, all of them files.
+4. Repairs go to the owner, not to PF-27. When a PF-27 gate fails because of a file PF-27 does not own, PF-27 does not edit that file. It records a reconciliation request: `file:line`, the owning plan, the log path and the failing command. Integration review then routes the repair:
+   - Remaining plans (PF-14..PF-16, PF-18..PF-26): the repair goes back to the owning plan's implementer, within that plan's declared paths.
+   - Accepted plans (PF-01..PF-13, PF-17): integration review reopens the plan as a repair item. The repair is limited to the named files and uses that plan's path declarations and scoped verification from the manifest that declares it (item 5: s460 or s462). Acceptance is then re-recorded at the new commit. This is the only way accepted code changes in session 463.
+
+   After every routed repair, PF-27 re-runs its whole gate.
+5. Ownership index. Integration review uses one map from path to owning plan, built from the manifest that last dispatched each plan:
+   - `impl-plans/active/punchflow-kickflow-dummy-s460-dispatch.json` for PF-01, PF-03, PF-11, PF-12 and PF-13. Those five were accepted before session 462 and are not in the s462 `plans[]`. For example, `embed.go`, `.gitignore`, `cmd/punchflow/main.go` and `mise.toml` are PF-01 `writePaths`, and `web/package.json`, `web/bun.lock` and `web/src/**` are PF-03.
+   - `impl-plans/active/punchflow-kickflow-dummy-s462-dispatch.json` for PF-02, PF-04..PF-10 and PF-17.
+   - The s463 manifest for the remaining plans.
+
+   Tie-break: when one plan declares a path in `writePaths` and another declares it in `sharedPaths`, the `writePaths` plan owns it. For example, `web/src/pages/Dashboard.tsx` belongs to PF-03, not PF-11. A path that none of these declarations names belongs to the plan whose plan file names it.
+6. Frozen contracts after PF-27's narrowing:
+   - `internal/model/*` and `internal/fixtures/types.go` change only through a PF-02 repair route.
+   - `web/package.json` and `web/bun.lock` change only through a PF-03 repair route.
+   - `go.mod` and `go.sum` change only through PF-27's `go mod tidy`, or through a PF-02 repair route when a dependency must be added.
+7. Identifier collisions in shared packages (README rule 10). The plan whose identifier breaks the prefix rule renames it. If both identifiers follow the rule, the later-wave plan renames. PF-27 never renames identifiers.
+8. The dispatch manifest is not archived by its own run. The s463 manifest stays in `impl-plans/active/` while it drives dispatch. PF-27 lists it in `impl-plans/README.md` as the final manifest. Moving it to `impl-plans/completed/` is a post-run step for the operator.
+
+`repo_invariants_test.go` (module root, package `punchflow`, standard library only) is PF-27's single aggregate test file. It turns PF-27's former ad-hoc shell checks into counted, uncached test evidence that runs inside the full `go test -count=1 -v ./...`. One subtest per invariant:
+
+- `cf01_ban`: the CF-01 ban grep regexes from `notes.md`, applied to production `.go` files under `internal/`, the files under `fixtures/` and `internal/fixtures/testdata/minimal`. It excludes `*_test.go` and `internal/fixtures/testdata/invalid/**`.
+- `negative_tests_present`: `audit_read` appears in `internal/fixtures/enum_rules_test.go` and `internal/api/v1/roles_test.go`, and `ticket_submitted` or `comment_deleted` appears in a test file under `internal/admin/`.
+- `go_file_size`: every `.go` file outside `web/` has fewer than 1000 lines.
+- `no_foreign_lockfiles`: none of `web/package-lock.json`, `web/yarn.lock` or `web/pnpm-lock.yaml` exists.
+
+The `rg` commands in `notes.md` remain manual cross-checks.
 
 ### Delivery waves (input for implementation plans)
 
@@ -211,5 +251,16 @@ This rule fixes two failures from the previous run: test evidence came from the 
 The coverage matrix is the checklist for waves 3-5: a row is done when its handler, handler test and contract scenario exist and pass.
 
 Continuation order (session 462, from checkpoint 410d3d8). The plan-to-phase mapping in `impl-plans/README.md` is unchanged except for one point: the PF-02 corrections for CF-01 and CF-02 (enum lists, removal of invented constants, conformance test, store-test seed values) run first and alone, because every other plan compiles against `internal/model`. After that the phases are: PF-04..PF-10 -> PF-14..PF-17 -> PF-18..PF-25 -> PF-26 -> PF-27. Within a phase, PF-06 (validator switch to the Go lists, input ID load/export) and PF-07 (fixture enum values) are the first consumers of the corrected enums. PF-08 handles the input ID read/present.
+
+Continuation order (session 463, from checkpoint `f82e374`). PF-01..PF-13 and PF-17 are accepted dependencies. They are listed in the s463 manifest's `acceptedDependencies` with commit `f82e374`, which corrects the s462 list that named only PF-01/03/11/12/13. They are not dispatched. The remaining 13 plans keep their tasks, paths and `dependsOn`. Any `dependsOn` that points at an accepted plan is satisfied by `acceptedDependencies`. Waves:
+
+| Wave | Plans | Ready because |
+|---|---|---|
+| A | PF-14, PF-15, PF-16 | their dependencies (PF-04..PF-10) are accepted |
+| B | PF-18, PF-19, PF-20, PF-21, PF-22, PF-23, PF-24, PF-25 | PF-14/15/16 done; PF-08 and PF-07 accepted |
+| C | PF-26 | PF-17 accepted, PF-18..PF-24 done |
+| D | PF-27 (serial, last) | every other plan done |
+
+Wave B plans share `internal/api/v1` and `internal/store` only through files that the PF-10 or PF-02 stubs already created, or through new files that each plan creates for itself. No plan in wave B edits a router or registration file: the PF-10 `Operations()` table (`routes.go`) is accepted and fixed at 96 entries. Each plan replaces handler bodies in its own declared stub files.
 
 ---
