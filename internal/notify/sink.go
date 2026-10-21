@@ -37,3 +37,9 @@ func (s *Sink) Enqueue(ctx context.Context, q store.Querier, events []model.Webh
 
 // Notify implements EventSink.
 func (s *Sink) Notify() { s.inner.Notify() }
+
+// ApprovalRequestsForCurrentStep preserves local task notification behavior
+// for operations such as raising that have no corresponding webhook event.
+func (s *Sink) ApprovalRequestsForCurrentStep(ctx context.Context, q store.Querier, ticketID, actorID string) error {
+	return s.service.ApprovalRequestsForCurrentStep(ctx, q, ticketID, actorID)
+}

@@ -348,6 +348,12 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 			}
 			step.Status = model.StepStatusInProgress
 			step.UpdatedAt = now
+			if err = e.pf14RefreshTeamAssignments(ctx, tx, t, step, now); err != nil {
+				return err
+			}
+			if pf15StepDone(*step) {
+				continue
+			}
 			assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
 			if err != nil {
 				return err

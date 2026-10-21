@@ -28,6 +28,10 @@ type EventSink interface {
 	Notify()
 }
 
+type localApprovalRequester interface {
+	ApprovalRequestsForCurrentStep(context.Context, store.Querier, string, string) error
+}
+
 // Deps are the collaborators of the API.
 type Deps struct {
 	DB     *store.DB
@@ -60,6 +64,7 @@ var operations = [...]Operation{
 	{Name: "raiseTicket", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/raise", Handle: (*API).raise},
 	{Name: "addTicketCustomStep", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/custom-steps", Handle: (*API).addCustomStep},
 	{Name: "removeTicketCustomStep", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/custom-steps/{stepId}", Handle: (*API).removeCustomStep},
+	{Name: "assignCurrentApprover", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/assignees", Handle: (*API).assignCurrentApprover},
 }
 
 // Operations returns a copy of the route table.
@@ -179,6 +184,19 @@ func (a *API) removeCustomStep(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *API) assignCurrentApprover(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserID string `json:"userId"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	a.act(w, r, "ticket.assign_current_approver", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
+		return a.d.Engine.AssignCurrentApprover(ctx, tx, actor, id, body.UserID)
+	})
+}
+
 // act runs one engine mutation in a transaction, records the audit log,
 // queues the webhook events and answers with the caller's view of the ticket.
 func (a *API) act(w http.ResponseWriter, r *http.Request, action string, mutate func(context.Context, *store.Tx, engine.Actor, string) ([]model.WebhookEvent, error)) {
@@ -194,6 +212,13 @@ func (a *API) act(w http.ResponseWriter, r *http.Request, action string, mutate 
 		events, e := mutate(r.Context(), tx, actor, id)
 		if e != nil {
 			return e
+		}
+		if action == "ticket.raise" {
+			if requester, ok := a.d.Events.(localApprovalRequester); ok {
+				if e = requester.ApprovalRequestsForCurrentStep(r.Context(), tx, id, actor.UserID); e != nil {
+					return e
+				}
+			}
 		}
 		userID, ticketID := p.User.ID, id
 		audit := model.AuditLog{UserID: &userID, Action: action, TicketID: &ticketID, CreatedAt: a.d.Clock.Now(), RemoteIP: remoteIP(r)}

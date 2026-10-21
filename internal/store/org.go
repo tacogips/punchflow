@@ -138,6 +138,33 @@ func TeamDelete(ctx context.Context, q Querier, id, chartID string) error {
 	res, e := q.ExecContext(ctx, "DELETE FROM teams WHERE id=? AND organization_chart_id=?", id, chartID)
 	return pf19RowsAffected(res, e)
 }
+
+// TeamReparentChildren moves a deleted team's direct children to its parent.
+func TeamReparentChildren(ctx context.Context, q Querier, id string, parentID *string, at time.Time) error {
+	_, err := q.ExecContext(ctx, `UPDATE teams SET parent_id=?,updated_at=? WHERE parent_id=?`, parentID, Millis(at), id)
+	if err != nil {
+		return fmt.Errorf("store: reparent child teams: %w", err)
+	}
+	return nil
+}
+
+// TeamOpenAuthoredTicketIDs returns unfinished tickets submitted from a team.
+func TeamOpenAuthoredTicketIDs(ctx context.Context, q Querier, teamID string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id FROM tickets WHERE author_team_id=? AND status IN (?,?,?) ORDER BY id`, teamID, model.TicketStatusDraft, model.TicketStatusInProgress, model.TicketStatusRejected)
+	if err != nil {
+		return nil, fmt.Errorf("store: list team tickets for archival: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
 func TeamMembershipInsert(ctx context.Context, q Querier, x model.TeamMembership) error {
 	grades, e := json.Marshal(x.GradeIDs)
 	if e != nil {

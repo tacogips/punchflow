@@ -152,3 +152,134 @@ func TestRestrictedFieldsDoNotDriveRouteStepAssigneesOrConditions(t *testing.T) 
 		}
 	}
 }
+
+// INF-LIFE-R3-03 and INF-LIFE-R3-04: automatic team candidates must be active,
+// team assignments refresh on step entry, and existing assignments survive suspension.
+func TestTeamAssignmentsUseActiveUsersAndCurrentChartOnEntry(t *testing.T) {
+	e := pf14Setup(t)
+	first := compatUserStep("first", 1, model.ActionTypeApprove, "accountant")
+	teamStep := model.RouteStep{Code: "team-review", StepOrder: 2, Title: "Team review", StepType: model.StepTypeTeam, ActionType: model.ActionTypeApprove, RequiredApprovalsPercent: 100, Targets: []model.RouteTarget{{TeamCode: "finance"}}}
+	compatSetRoute(t, e, "expense-claim", first, teamStep)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var teamTicketStep model.TicketStep
+	for _, step := range steps {
+		if step.RouteStepCode != nil && *step.RouteStepCode == "team-review" {
+			teamTicketStep = step
+		}
+	}
+	if teamTicketStep.ID == "" {
+		t.Fatal("team step missing")
+	}
+	teamID := e.team("finance")
+	if _, err = e.db.Q().ExecContext(e.ctx, `DELETE FROM team_memberships WHERE team_id=?`, teamID); err != nil {
+		t.Fatal(err)
+	}
+	admin := e.user("admin")
+	if err = store.TeamMembershipInsert(e.ctx, e.db.Q(), model.TeamMembership{ID: store.NewID(), TeamID: teamID, UserID: admin, GradeIDs: []string{}, CreatedAt: e.clock.Now(), UpdatedAt: e.clock.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	compatApprove(t, e, "accountant", id)
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), teamTicketStep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 1 || assignees[0].UserID != admin {
+		t.Fatalf("recalculated team assignees=%v, want current member %s", assignees, admin)
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE users SET status=? WHERE id=?`, model.UserStatusSuspended, admin); err != nil {
+		t.Fatal(err)
+	}
+	assignees, err = store.EngStepAssignees(e.ctx, e.db.Q(), teamTicketStep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 1 || assignees[0].UserID != admin {
+		t.Fatalf("suspension removed existing assignment: %v", assignees)
+	}
+}
+
+func TestAutomaticTeamAssignmentExcludesSuspendedAndCopiesInstruction(t *testing.T) {
+	e := pf14Setup(t)
+	if _, err := e.db.Q().ExecContext(e.ctx, `UPDATE users SET status=? WHERE id=?`, model.UserStatusSuspended, e.user("finance-manager")); err != nil {
+		t.Fatal(err)
+	}
+	instruction := "Review this request"
+	step := model.RouteStep{Code: "team-review", StepOrder: 1, Title: "Team review", Instruction: &instruction, StepType: model.StepTypeTeam, ActionType: model.ActionTypeApprove, RequiredApprovalsPercent: 100, Targets: []model.RouteTarget{{TeamCode: "finance"}}}
+	compatSetRoute(t, e, "expense-claim", step)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 1 || steps[0].Instruction == nil || *steps[0].Instruction != instruction {
+		t.Fatalf("ticket steps=%+v, instruction lost", steps)
+	}
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), steps[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 1 || assignees[0].UserID != e.user("accountant") {
+		t.Fatalf("team assignees=%v, want active accountant only", assignees)
+	}
+}
+
+// INF-LIFE-R3-02: higher-team fallback searches successive ancestors until the
+// configured grade is found, and successful fallback is recorded on the step.
+func TestHigherTeamFallbackWalksAncestorsAndRecordsFallback(t *testing.T) {
+	e := pf14Setup(t)
+	grade := model.GradeSymbolEqual
+	fallback := model.FallbackHigherTeam
+	step := model.RouteStep{Code: "higher-team", StepOrder: 1, Title: "Higher team", StepType: model.StepTypeTeam, ActionType: model.ActionTypeApprove, RequiredApprovalsPercent: 100, FallbackType: &fallback, Targets: []model.RouteTarget{{TeamCode: "sales-east", GradeSymbol: &grade, GradeCodes: []string{"executive"}}}}
+	compatSetRoute(t, e, "expense-claim", step)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 1 || !steps[0].Fallback || steps[0].FallbackResult == nil || *steps[0].FallbackResult != fallback {
+		t.Fatalf("step fallback state=%+v", steps)
+	}
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), steps[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 1 || assignees[0].UserID != e.user("ceo") {
+		t.Fatalf("higher-team fallback assignees=%v, want ancestor CEO", assignees)
+	}
+}
+
+func TestManagerAssignmentsKeepApplicationSnapshot(t *testing.T) {
+	e := pf14Setup(t)
+	first := compatUserStep("first", 1, model.ActionTypeApprove, "accountant")
+	managerStep := model.RouteStep{Code: "manager-review", StepOrder: 2, Title: "Manager review", StepType: model.StepTypeManager, ManagerSelectionType: model.ManagerSelectionClosest, ActionType: model.ActionTypeApprove, RequiredApprovalsPercent: 100}
+	compatSetRoute(t, e, "expense-claim", first, managerStep)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var managerTicketStep model.TicketStep
+	for _, step := range steps {
+		if step.RouteStepCode != nil && *step.RouteStepCode == "manager-review" {
+			managerTicketStep = step
+		}
+	}
+	if managerTicketStep.ID == "" {
+		t.Fatal("manager step missing")
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `DELETE FROM team_memberships WHERE team_id=?`, e.team("sales")); err != nil {
+		t.Fatal(err)
+	}
+	compatApprove(t, e, "accountant", id)
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), managerTicketStep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 1 || assignees[0].UserID != e.user("sales-manager") {
+		t.Fatalf("manager assignees=%v, want application-time sales manager", assignees)
+	}
+}

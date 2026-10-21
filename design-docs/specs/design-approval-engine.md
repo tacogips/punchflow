@@ -54,7 +54,7 @@ Every method first checks the tenant `admin_working` mode (after existence and v
 | `numbering.go` | Ticket number allocation at the configured timing (INF-35) |
 | `comments.go` | Comments and mentions |
 | `substatus.go`, `labels.go`, `controls.go`, `controls_custom_steps.go` | Sub-status sync, labels, cancel approval, raise and custom steps (PF-15, PF-19) |
-| `user_cleanup.go` | User deletion cleanup and step re-evaluation (INF-79) |
+| `user_cleanup.go` | User/team deletion cleanup and archival lifecycle (INF-79, INF-LIFE-API-05, INF-LIFE-API-06) |
 | `internal/formula/` | Formula parser and evaluator used by `forms_calc.go` |
 | `internal/access/section.go` | Form-section view restrictions shared with the presenter (INF-77) |
 
@@ -65,10 +65,10 @@ Every method first checks the tenant `admin_working` mode (after existence and v
 | `tickets` | status, currentStep, workflow id/version snapshot, author, authorTeam + `authorTeamSnapshot`, proxy client, title, ticketNumber, timestamps (`openedAt`, `completedAt`, `deniedAt`, `archivedAt`, `closedAt`), `forcedPublicType`, counters |
 | `ticket_inputs` | One row per form field: value JSON plus referenced ids (master items, users, teams, tickets, file signed ids) |
 | `ticket_slip_items` | Slip rows with their inputs JSON |
-| `ticket_steps` | Built route: route step id, stepOrder (group), displayOrder, title, actionType, required number/percent, status, skip, fallback, fallbackResult, completedAt; custom steps (PF-19) have a null route step id plus `author_id` and `instruction` |
+| `ticket_steps` | Built route: route step id, stepOrder (group), displayOrder, title, instruction, actionType, required number/percent, status, skip, fallback, fallbackResult, completedAt; team assignments refresh on step entry while manager assignments retain the application snapshot (INF-LIFE-R3-04); custom steps (PF-19) have a null route step id plus `author_id` and `instruction` |
 | `labels`, `sub_statuses` | Fixture-defined definitions (`labels.json`, `sub-statuses.json`); read-only at runtime |
 | `ticket_labels`, `tickets.sub_status_id` | Labels attached to a ticket and the sub-status attached while the ticket is in progress |
-| `ticket_assignees` | Step assignees: user, completed, completedAt, actualApprover, assignedAt (`assignedToMeAt`) |
+| `ticket_assignees` | Step assignees: user, completed, completedAt, pending hold state, actualApprover, assignedAt (`assignedToMeAt`) |
 | `ticket_custom_approvers` | `approvers[]` per route step code (INF-20) |
 | `ticket_viewers`, `ticket_links`, `comments`, `comment_attachments` | Viewers, related tickets, comments |
 
@@ -186,13 +186,15 @@ Standard ticket numbers use the workflow counter unless `ticketNumberKey` is con
 
 `GET /ui/api/tickets/{id}/controls` returns the same eligibility as booleans (`cancelApproval`, `raise` + `raiseTargetStepOrders`, `addCustomStep` + `customStepInsertAfter`, `removableCustomStepIds`) so the UI shows only valid buttons. Raised steps count as finished for progression (`pf15StepDone`), and the assignment check before approving matches the next group to route steps by step code because custom steps shift ticket step orders away from route orders. Every UI API mutation writes an audit log (`ticket.label_attach`, `ticket.label_detach`, `ticket.cancel_approval`, `ticket.raise`, `ticket.add_custom_step`, `ticket.remove_custom_step`).
 
+`POST /ui/api/tickets/{id}/assignees` lets a `ticket_write` administrator repair an empty current step by adding one active user to its existing route assignment list (INF-LIFE-R3-15). Raising still has no webhook event, but local approval-request notifications are generated independently for the newly current approvers (INF-LIFE-R3-16).
+
+### Assignee holds
+
+`TicketAssignee.pending` is persisted and included in REST and webhook ticket-step presentations. The current unfinished assignee or an active proxy can set or release it with `POST /ui/api/tickets/{ticketId}/assignees/{assigneeId}/pending` and `{pending: boolean}`. A proxy changes the primary assignment's state. Holds do not block approval or send-back; the state clears when the ticket leaves `in_progress` or the active step changes. `GET /v1/tickets/tasks?pending=true` returns current unfinished held assignments. Kickflow says a hold suppresses reminders, but punchflow does not send reminder notifications (INF-LIFE-WH13).
+
 ### User deletion cleanup
 
-`Engine.CleanupDeletedUser` runs in the transaction of `DELETE /v1/users/{id}` (INF-79). It archives the user's `draft`, `in_progress` and `rejected` tickets (`ticket_archived` each), removes the user's outstanding assignments on other in-progress tickets and then re-evaluates every step that lost an assignment with the rules above:
-
-1. A step left without assignees takes the fallback assignees of its route step. If the fallback finds nobody and is `skip`, the step is skipped; `author_customizable` steps and ad-hoc custom steps (nobody can be nominated any more) are skipped; a step without a usable fallback keeps waiting.
-2. A current step whose remaining assignees already meet its approval threshold (`pf14RequiredApprovals`, shared with Approve) completes.
-3. When anything changed the ticket advances through `pf14Advance`; if it completes, the number is allocated at the `completed` timing and `ticket_completed` is returned.
+`Engine.CleanupDeletedUser` runs in the transaction of `DELETE /v1/users/{id}` (INF-79). It archives the user's `draft`, `in_progress` and `rejected` tickets (`ticket_archived` each) and removes the user's unfinished assignments on other in-progress tickets. Deletion never applies fallback, skips a step, or completes a ticket because the approval obligation remains unresolved; administrators repair an empty current step with the UI helper above (INF-LIFE-API-06). Suspension leaves assignments intact. `Engine.CleanupDeletedTeam` archives unfinished tickets authored from a deleted team through the same lifecycle state updates and event outbox, while team deletion reparents direct child teams to the deleted team's parent (INF-LIFE-API-05).
 
 ### Comments with actions
 

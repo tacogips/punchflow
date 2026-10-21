@@ -23,6 +23,48 @@ type CustomStepInput struct {
 	AfterStepOrder *int `json:"afterStepOrder"`
 }
 
+// AssignCurrentApprover lets a ticket administrator repair an empty current
+// approval step. The route step itself remains intact (INF-LIFE-R3-15).
+func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Actor, ticketID, userID string) ([]model.WebhookEvent, error) {
+	t, err := e.pf15Guard(ctx, tx, a, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	if !a.Permissions[model.PermissionTicketWrite] {
+		return nil, kferr.MissingPermission("ticket_write is required")
+	}
+	if t.Status != model.TicketStatusInProgress {
+		return nil, kferr.InvalidState("Ticket is not in progress")
+	}
+	active, err := pf14bUserActive(ctx, tx, userID)
+	if err != nil || !active {
+		return nil, kferr.ValidationFailed(map[string][]string{"userId": {"must identify an active user"}})
+	}
+	steps, err := store.EngTicketSteps(ctx, tx, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	for _, step := range steps {
+		if step.StepOrder != t.CurrentStep || step.Status != model.StepStatusInProgress {
+			continue
+		}
+		assignees, er := store.EngStepAssignees(ctx, tx, step.ID)
+		if er != nil {
+			return nil, er
+		}
+		if len(assignees) != 0 {
+			continue
+		}
+		now := e.clock.Now()
+		assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: ticketID, UserID: userID, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
+		if er = store.EngInsertAssignee(ctx, tx, assignee); er != nil {
+			return nil, er
+		}
+		return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, ticketID, a.UserID)}, nil
+	}
+	return nil, kferr.InvalidState("The current step is not unassigned")
+}
+
 // pf15InsertPositions lists the step orders a custom step may follow.
 func pf15InsertPositions(t model.Ticket, steps []pf15Step) []int {
 	seen := map[int]bool{}

@@ -55,10 +55,9 @@ func cleanupWithFallback(step model.RouteStep, fallback string) model.RouteStep 
 	return step
 }
 
-// INF-79: a current step whose only assignee is deleted and whose fallback is "skip"
-// is skipped; with nothing left to do the ticket completes like a submission
-// that needs no user action.
-func TestCleanupDeletedUserSkipFallbackCompletesTicket(t *testing.T) {
+// INF-LIFE-API-06: deleting an assignee preserves the obligation regardless
+// of route fallback; only an administrator can repair the empty step.
+func TestCleanupDeletedUserDoesNotApplySkipFallback(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetRoute(t, e, "expense-claim",
 		cleanupWithFallback(compatUserStep("only", 1, model.ActionTypeApprove, "finance-manager"), model.FallbackSkip))
@@ -67,13 +66,15 @@ func TestCleanupDeletedUserSkipFallbackCompletesTicket(t *testing.T) {
 		t.Fatalf("precondition: status=%s current=%d", got.Status, got.CurrentStep)
 	}
 	events := cleanupDeleteUser(t, e, "finance-manager")
-	compatAssertTypes(t, "cleanup", events, model.WebhookEventTicketCompleted)
-	if got := e.ticket(id); got.Status != model.TicketStatusCompleted || got.CompletedAt == nil || got.ClosedAt == nil {
-		t.Fatalf("ticket status=%s completedAt=%v, want completed", got.Status, got.CompletedAt)
+	if len(events) != 0 {
+		t.Fatalf("cleanup events=%v, want none", compatTypes(events))
+	}
+	if got := e.ticket(id); got.Status != model.TicketStatusInProgress || got.CurrentStep != 1 {
+		t.Fatalf("ticket status=%s current=%d, want waiting in progress", got.Status, got.CurrentStep)
 	}
 	step := cleanupStep(t, e, id, "only")
-	if step.Status != model.StepStatusSkipped || !step.Skip || !step.Fallback || step.FallbackResult == nil || *step.FallbackResult != model.FallbackSkip {
-		t.Fatalf("step = %+v, want skipped by fallback", step)
+	if step.Status != model.StepStatusInProgress || step.Skip || len(cleanupAssigneeIDs(t, e, step)) != 0 {
+		t.Fatalf("step = %+v, want unresolved empty obligation", step)
 	}
 }
 
@@ -96,7 +97,7 @@ func TestCleanupArchiveClosesTicketAndClearsSubStatus(t *testing.T) {
 
 // A future step that loses all its assignees is resolved immediately, so the
 // ticket does not stall when it becomes the current step.
-func TestCleanupDeletedUserSkipsFutureStepWithoutAssignees(t *testing.T) {
+func TestCleanupDeletedUserKeepsFutureStepWithoutAssignees(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetRoute(t, e, "expense-claim",
 		compatUserStep("first", 1, model.ActionTypeApprove, "accountant"),
@@ -109,18 +110,18 @@ func TestCleanupDeletedUserSkipsFutureStepWithoutAssignees(t *testing.T) {
 	if got := e.ticket(id); got.Status != model.TicketStatusInProgress || got.CurrentStep != 1 {
 		t.Fatalf("status=%s current=%d, want in_progress at group 1", got.Status, got.CurrentStep)
 	}
-	if step := cleanupStep(t, e, id, "second"); step.Status != model.StepStatusSkipped {
-		t.Fatalf("second step status = %s, want skipped", step.Status)
+	if step := cleanupStep(t, e, id, "second"); step.Status != model.StepStatusPending {
+		t.Fatalf("second step status = %s, want pending until entered", step.Status)
 	}
 	compatApprove(t, e, "accountant", id)
-	if got := e.ticket(id); got.Status != model.TicketStatusInProgress || got.CurrentStep != 3 {
-		t.Fatalf("after approval status=%s current=%d, want in_progress at group 3", got.Status, got.CurrentStep)
+	if got := e.ticket(id); got.Status != model.TicketStatusInProgress || got.CurrentStep != 2 {
+		t.Fatalf("after approval status=%s current=%d, want waiting at empty group 2", got.Status, got.CurrentStep)
 	}
 }
 
 // When the remaining assignees of the current step already satisfy its
 // approval threshold the step completes and the ticket advances.
-func TestCleanupDeletedUserCompletesStepWhenRemainingAssigneesSuffice(t *testing.T) {
+func TestCleanupDeletedUserDoesNotCompleteStepWhenRemainingAssigneesInsufficient(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetRoute(t, e, "expense-claim",
 		compatUserStep("both", 1, model.ActionTypeApprove, "accountant", "finance-manager"))
@@ -130,14 +131,16 @@ func TestCleanupDeletedUserCompletesStepWhenRemainingAssigneesSuffice(t *testing
 		t.Fatalf("precondition: status=%s", got.Status)
 	}
 	events := cleanupDeleteUser(t, e, "finance-manager")
-	compatAssertTypes(t, "cleanup", events, model.WebhookEventTicketCompleted)
-	if got := e.ticket(id); got.Status != model.TicketStatusCompleted {
-		t.Fatalf("ticket status = %s, want completed", got.Status)
+	if len(events) != 0 {
+		t.Fatalf("cleanup events=%v, want none", compatTypes(events))
+	}
+	if got := e.ticket(id); got.Status != model.TicketStatusInProgress || got.CurrentStep != 1 {
+		t.Fatalf("ticket status=%s current=%d, want same unresolved step", got.Status, got.CurrentStep)
 	}
 }
 
 // A configured fallback that finds approvers replaces the deleted assignee.
-func TestCleanupDeletedUserFallbackAssignsReplacement(t *testing.T) {
+func TestCleanupDeletedUserDoesNotApplyConfiguredFallback(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetRoute(t, e, "expense-claim",
 		cleanupWithFallback(compatUserStep("only", 1, model.ActionTypeApprove, "finance-manager"), model.FallbackHigherManager))
@@ -148,8 +151,8 @@ func TestCleanupDeletedUserFallbackAssignsReplacement(t *testing.T) {
 	}
 	step := cleanupStep(t, e, id, "only")
 	assignees := cleanupAssigneeIDs(t, e, step)
-	if len(assignees) == 0 {
-		t.Fatalf("fallback assigned nobody; step = %+v", step)
+	if len(assignees) != 0 {
+		t.Fatalf("cleanup assigned replacement %v; want administrator repair", assignees)
 	}
 	for _, uid := range assignees {
 		if uid == e.user("finance-manager") {
@@ -186,7 +189,7 @@ func TestCleanupDeletedUserWithoutFallbackKeepsStepWaiting(t *testing.T) {
 
 // The deleted user may still lead the author's team; the fallback must walk
 // past them instead of re-assigning the step to the deleted user.
-func TestCleanupDeletedUserFallbackSkipsDeletedLeader(t *testing.T) {
+func TestCleanupDeletedUserFallbackDoesNotReplaceDeletedLeader(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetRoute(t, e, "expense-claim",
 		cleanupWithFallback(compatUserStep("only", 1, model.ActionTypeApprove, "sales-manager"), model.FallbackHigherManager))

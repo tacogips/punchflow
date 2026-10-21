@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"punchflow/internal/model"
+	"punchflow/internal/store"
 	"punchflow/internal/testutil"
 )
 
@@ -47,6 +49,51 @@ func TestTeamTreeCreateUpdateAndPermissions(t *testing.T) {
 	}
 	if got := env.Do(t, testutil.Employee, http.MethodGet, "/v1/organizationCharts/"+pf19Chart+"/teams", nil); got.Status != http.StatusForbidden {
 		t.Fatalf("employee status=%d want 403", got.Status)
+	}
+}
+
+func TestDeleteTeamReparentsChildrenAndArchivesOpenTickets(t *testing.T) {
+	env := testutil.New(t)
+	env.RegisterReceiverWebhook(t, "team-delete-secret")
+	ticketID := pf23CreateExpenseTicket(t, env, "sales-rep", "sales", "")
+	deletedID, err := store.TeamIDByCode(t.Context(), env.DB.Q(), pf19Chart, "sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	companyID, err := store.TeamIDByCode(t.Context(), env.DB.Q(), pf19Chart, "company")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/organizationCharts/"+pf19Chart+"/teams/sales", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", response.Status, response.Body)
+	}
+	var parentID string
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT parent_id FROM teams WHERE code='sales-east' AND organization_chart_id=?`, pf19Chart).Scan(&parentID); err != nil {
+		t.Fatal(err)
+	}
+	if parentID != companyID {
+		t.Fatalf("child parent=%s, want company %s", parentID, companyID)
+	}
+	ticket, err := store.EngLoadTicket(t.Context(), env.DB.Q(), ticketID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ticket.Status != model.TicketStatusArchived || ticket.ArchivedAt == nil || ticket.ClosedAt == nil {
+		t.Fatalf("deleted-team ticket=%+v, want archived and closed", ticket)
+	}
+	if ticket.AuthorTeamID != nil {
+		t.Fatalf("archived ticket authorTeamID=%v, want cleared by team deletion", ticket.AuthorTeamID)
+	}
+	var archivedEvents int
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM webhook_events WHERE ticket_id=? AND event_type=?`, ticketID, model.WebhookEventTicketArchived).Scan(&archivedEvents); err != nil {
+		t.Fatal(err)
+	}
+	if archivedEvents != 1 {
+		t.Fatalf("ticket_archived events=%d, want 1", archivedEvents)
+	}
+	if _, err = store.GetTeam(t.Context(), env.DB.Q(), deletedID); err == nil {
+		t.Fatal("deleted team still exists")
 	}
 }
 func TestTeamMembershipLeaderAndPaginationRules(t *testing.T) {

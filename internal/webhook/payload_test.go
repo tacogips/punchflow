@@ -24,7 +24,9 @@ func TestPayloadsBuildSupportedEventsAndEscaping(t *testing.T) {
 		{`INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,custom_fields,created_at,updated_at) VALUES('actor','A','a@example.test','Ada','Lovelace','activated','en','normal','{}',?,?)`, []any{now, now}},
 		{`INSERT INTO folders(id,code,name,created_at,updated_at) VALUES('folder','F','Folder',?,?)`, []any{now, now}},
 		{`INSERT INTO workflows(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('workflow','W','visible','folder',?,?,?)`, []any{`{"id":"workflow","code":"W","name":"Workflow","titleInputMode":"manual","sectionList":[],"ticketViewers":[]}`, now, now}},
-		{`INSERT INTO tickets(id,workflow_id,status,current_step,title,forced_public_type,created_at,updated_at) VALUES('ticket','workflow','in_progress',0,'<b>','forced_private',?,?)`, []any{now, now}},
+		{`INSERT INTO tickets(id,workflow_id,status,current_step,title,forced_public_type,created_at,updated_at) VALUES('ticket','workflow','in_progress',1,'<b>','forced_private',?,?)`, []any{now, now}},
+		{`INSERT INTO ticket_steps(id,ticket_id,step_order,display_order,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,created_at,updated_at) VALUES('step','ticket',1,1,'approve',1,100,'in_progress',0,0,?,?)`, []any{now, now}},
+		{`INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,pending,created_at,updated_at) VALUES('assignee','step','ticket','actor',0,1,?,?)`, []any{now, now}},
 		{`INSERT INTO comments(id,ticket_id,user_id,body,mentioned_user_ids,created_at,updated_at) VALUES('comment','ticket','actor','hello','[]',?,?)`, []any{now, now}},
 	} {
 		if _, err := q.ExecContext(ctx, stmt.query, stmt.args...); err != nil {
@@ -54,8 +56,16 @@ func TestPayloadsBuildSupportedEventsAndEscaping(t *testing.T) {
 			}
 			data := payload["data"].(map[string]any)
 			if strings.HasPrefix(eventType, "ticket_") {
-				if data["ticket"].(map[string]any)["id"] != "ticket" {
+				ticket := data["ticket"].(map[string]any)
+				if ticket["id"] != "ticket" {
 					t.Fatalf("ticket data=%v", data)
+				}
+				if eventType == model.WebhookEventTicketCreated {
+					steps := ticket["steps"].([]any)
+					assignees := steps[0].(map[string]any)["assignees"].([]any)
+					if assignees[0].(map[string]any)["pending"] != true {
+						t.Fatalf("ticket webhook did not include held state: %v", ticket)
+					}
 				}
 			} else if strings.HasPrefix(eventType, "comment_") {
 				if data["comment"].(map[string]any)["id"] != "comment" || data["ticket"].(map[string]any)["steps"] == nil {

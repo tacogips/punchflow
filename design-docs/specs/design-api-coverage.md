@@ -95,7 +95,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 2 | listUsers | GET | /v1/users | user | users.go | Filters per spec; `lastUsedOn` included |
 | 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed`; `customFields` only for defined codes (`user-custom-fields.json`), else 422 (INF-81); `email` must be an address only (`Name <a@b>`, comments, quoted parts and surrounding spaces are `400 invalid_parameter`) so the response satisfies `format: email` |
 | 4 | getUser | GET | /v1/users/{userId} | user | users.go | id or code |
-| 5 | deleteUser | DELETE | /v1/users/{userId} | user | users.go | Soft delete -> `deactivated`, returns UserDetail; archives the user's open tickets (`ticket_archived`), removes pending approver assignments and re-evaluates the affected steps (INF-79) |
+| 5 | deleteUser | DELETE | /v1/users/{userId} | user | users.go | Soft delete -> `deactivated`, returns UserDetail; archives the user's open tickets (`ticket_archived`) and removes unfinished assignments without skipping or completing affected approval steps (INF-79, INF-LIFE-API-06) |
 | 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `email` is address-only as in createUser; `domain_not_allowed`; `customFields` validated against the definitions (INF-81) |
 | 7 | lookupUserByEmail | GET | /v1/users/lookupByEmail | user | users.go | Exact, case-insensitive match |
 | 8 | reinviteUser | POST | /v1/users/{userId}/reinvite | user | users.go | `deactivated`/`invited` -> `invited` with a new invitation; else INF-24 |
@@ -128,7 +128,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 35 | createTeam | POST | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | |
 | 36 | getTeam | GET | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | id or code |
 | 37 | updateTeam | PATCH | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | Parent cycle -> 422 |
-| 38 | deleteTeam | DELETE | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | Deletes memberships |
+| 38 | deleteTeam | DELETE | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | Reparents direct child teams to the deleted team's parent and archives its unfinished authored tickets with lifecycle events/timestamps; completed snapshots remain (INF-LIFE-API-05) |
 | 39 | listTeamMembers | GET | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | MemberUser without `userType` |
 | 40 | createTeamMembers | POST | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | Max 10; team without a leader afterwards -> 422 |
 | 41 | deleteTeamMembers | DELETE | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | JSON body on DELETE; max 10; leaderless remainder -> 422 |
@@ -148,7 +148,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 55 | getWorkflow | GET | /v1/workflows/{workflowId} | any | definitions.go | WorkflowDetail; integration fields null (DIV-03) |
 | 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; TicketWithStep without inputs/route; INF-02 |
 | 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21); `viewers[].userId` and `watcherUserId` (INF-NES-16) |
-| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-40; `subStatusIds[]` filters tasks as it does tickets (the list and its `Total` header are filtered); explicit statuses retain historical assignments (API-03) |
+| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-LIFE-WH13; `pending=true` filters to held assignments; `subStatusIds[]` filters tasks as it does tickets (the list and its `Total` header are filtered); explicit statuses retain historical assignments (API-03) |
 | 59 | getTicket | GET | /v1/tickets/{ticketId} | visible | tickets.go | TicketDetail incl. `actualApprover` |
 | 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, approver fields only) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); `slipItems` replace all rows (INF-75); `viewers[]` replaces the user viewers and `watcherUserId` subscribes a watcher (INF-NES-16) |
 | 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; per-section differential detail rows (INF-75); `ticket_updated` |
@@ -204,9 +204,9 @@ All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads u
 | 6 | ticket_confirmed | approveTicket on a `confirm` step | Actor | ticket | If the call covers both approve and confirm steps of one group, `ticket_approved` is emitted once (approve wins) |
 | 7 | ticket_rejected | rejectTicket | Actor | ticket | INF-12 |
 | 8 | ticket_denied | denyTicket | Actor | ticket | |
-| 9 | ticket_completed | approveTicket that completes the last group; a submission (createTicket / updateTicket) whose route needs no user action; user deletion that leaves a ticket with nothing to do | Actor (the acting administrator for user deletion) | ticket | After #5/#6 or after #4 (INF-11, INF-72, INF-79) |
+| 9 | ticket_completed | approveTicket that completes the last group; a submission (createTicket / updateTicket) whose route needs no user action | Actor | ticket | After #5/#6 or after #4 (INF-11, INF-72) |
 | 10 | ticket_withdrawn | withdrawTicket | Actor | ticket | |
-| 11 | ticket_archived | archiveTicket; deleteUser (#5) for each archived open ticket of the user | Actor | ticket | INF-79 |
+| 11 | ticket_archived | archiveTicket; deleteUser (#5) and deleteTeam (#38) for each archived unfinished ticket | Actor | ticket | INF-79, INF-LIFE-API-05 |
 | 12 | comment_created | createComment; comments attached to approve/reject/deny (INF-22) | Comment author | comment + ticket | |
 | 13 | comment_updated | updateComment, deleteComment | Actor | comment + ticket | Delete payload has `deletedAt` set (INF-30) |
 

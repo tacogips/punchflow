@@ -53,6 +53,7 @@ var operations = [...]Operation{
 	{Name: "getTicketWatch", Method: http.MethodGet, Pattern: "/ui/api/tickets/{ticketId}/watch", Handle: (*API).getWatch},
 	{Name: "watchTicket", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/watch", Handle: (*API).watchTicket},
 	{Name: "unwatchTicket", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/watch", Handle: (*API).unwatchTicket},
+	{Name: "setAssigneePending", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/assignees/{assigneeId}/pending", Handle: (*API).setAssigneePending},
 	{Name: "listNotifications", Method: http.MethodGet, Pattern: "/ui/api/notifications", Handle: (*API).listNotifications},
 	{Name: "countUnreadNotifications", Method: http.MethodGet, Pattern: "/ui/api/notifications/unread-count", Handle: (*API).unreadCount},
 	{Name: "markAllNotificationsRead", Method: http.MethodPost, Pattern: "/ui/api/notifications/read-all", Handle: (*API).markAllRead},

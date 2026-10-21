@@ -159,7 +159,7 @@ func ticketStepJSON(ctx context.Context, q store.Querier, ticketID string, detai
 					return nil, e
 				}
 			}
-			am := map[string]any{"id": a.ID, "stepOrder": step.StepOrder, "current": current, "completed": a.Completed, "completedAt": nullableTimeValue(a.CompletedAt), "pending": false, "user": user, "proxyUserIds": proxies}
+			am := map[string]any{"id": a.ID, "stepOrder": step.StepOrder, "current": current, "completed": a.Completed, "completedAt": nullableTimeValue(a.CompletedAt), "pending": a.Pending, "user": user, "proxyUserIds": proxies}
 			if detail {
 				var actual any
 				if a.ActualApproverID != nil {

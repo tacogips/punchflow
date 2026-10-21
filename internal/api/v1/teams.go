@@ -353,26 +353,35 @@ func (a *API) deleteTeam(w http.ResponseWriter, r *http.Request) {
 	if !a.guardTeam(w, r, id) {
 		return
 	}
-	has, e := store.TeamHasChild(r.Context(), a.d.DB.Q(), id)
-	if e != nil {
-		kferr.Write(w, kferr.Internal())
-		return
-	}
-	if has {
-		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"base": {"team with child teams cannot be deleted"}}))
-		return
-	}
-	p, _ := auth.FromContext(r.Context())
-	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
-		if er := store.TeamDelete(r.Context(), tx, id, chart); er != nil {
-			return er
-		}
-		return a.pf19TeamAudit(r, tx, p.User.ID, "team.delete", id)
-	})
+	team, e := store.GetTeam(r.Context(), a.d.DB.Q(), id)
 	if e != nil {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	p, _ := auth.FromContext(r.Context())
+	var events []model.WebhookEvent
+	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		var er error
+		events, er = a.d.Engine.CleanupDeletedTeam(r.Context(), tx, actorFor(p), id)
+		if er != nil {
+			return er
+		}
+		if er = store.TeamReparentChildren(r.Context(), tx, id, team.ParentID, a.d.Clock.Now()); er != nil {
+			return er
+		}
+		if er = store.TeamDelete(r.Context(), tx, id, chart); er != nil {
+			return er
+		}
+		if er = a.pf19TeamAudit(r, tx, p.User.ID, "team.delete", id); er != nil {
+			return er
+		}
+		return a.d.Events.Enqueue(r.Context(), tx, events)
+	})
+	if e != nil {
+		kferr.Write(w, e)
+		return
+	}
+	a.d.Events.Notify()
 	httpx.WriteEmpty(w)
 }
 func (a *API) listTeamMembers(w http.ResponseWriter, r *http.Request) {

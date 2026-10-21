@@ -145,7 +145,7 @@ func TicketSteps(ctx context.Context, q Querier, id string) ([]model.TicketStep,
 }
 
 func TicketAssignees(ctx context.Context, q Querier, stepID string) ([]model.TicketAssignee, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_step_id,ticket_id,user_id,completed,completed_at,actual_approver_id,assigned_at,created_at,updated_at FROM ticket_assignees WHERE ticket_step_id=? ORDER BY created_at,id`, stepID)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_step_id,ticket_id,user_id,completed,completed_at,pending,actual_approver_id,assigned_at,created_at,updated_at FROM ticket_assignees WHERE ticket_step_id=? ORDER BY created_at,id`, stepID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket assignees: %w", err)
 	}
@@ -155,12 +155,13 @@ func TicketAssignees(ctx context.Context, q Querier, stepID string) ([]model.Tic
 		var x model.TicketAssignee
 		var done, assigned sql.NullInt64
 		var actual sql.NullString
-		var completed int
+		var completed, pending int
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketStepID, &x.TicketID, &x.UserID, &completed, &done, &actual, &assigned, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketStepID, &x.TicketID, &x.UserID, &completed, &done, &pending, &actual, &assigned, &c, &u); err != nil {
 			return nil, err
 		}
 		x.Completed = completed != 0
+		x.Pending = pending != 0
 		x.CompletedAt, x.AssignedAt = pf15TimePtr(done), pf15TimePtr(assigned)
 		x.ActualApproverID = pf15StringPtr(actual)
 		x.CreatedAt, x.UpdatedAt = Time(c), Time(u)

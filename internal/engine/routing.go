@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
@@ -108,8 +109,9 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 			if er != nil {
 				return er
 			}
+			fb = true
+			result = *step.FallbackType
 			if len(userIDs) == 0 {
-				fb, result = true, *step.FallbackType
 				switch *step.FallbackType {
 				case model.FallbackSkip:
 					skip = true
@@ -125,7 +127,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 		}
 		routeStepID, routeCodeValue := step.ID, step.Code
 		title, action := step.Title, step.ActionType
-		ts := model.TicketStep{ID: store.NewID(), TicketID: ticket.ID, RouteStepID: &routeStepID, RouteStepCode: &routeCodeValue, StepOrder: step.StepOrder, DisplayOrder: display, Title: &title, ActionType: action, RequiredApprovalsNumber: step.RequiredApprovalsNumber, RequiredApprovalsPercent: step.RequiredApprovalsPercent, Status: status, Skip: skip, Fallback: fb, CreatedAt: store.Time(nowTime), UpdatedAt: store.Time(nowTime)}
+		ts := model.TicketStep{ID: store.NewID(), TicketID: ticket.ID, RouteStepID: &routeStepID, RouteStepCode: &routeCodeValue, StepOrder: step.StepOrder, DisplayOrder: display, Title: &title, Instruction: step.Instruction, ActionType: action, RequiredApprovalsNumber: step.RequiredApprovalsNumber, RequiredApprovalsPercent: step.RequiredApprovalsPercent, Status: status, Skip: skip, Fallback: fb, CreatedAt: store.Time(nowTime), UpdatedAt: store.Time(nowTime)}
 		if fb {
 			ts.FallbackResult = &result
 		}
@@ -174,6 +176,16 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 		if id != "" && !pf14Contains(ids, id) {
 			ids = append(ids, id)
 		}
+	}
+	addAutomatic := func(id string) error {
+		active, err := pf14bUserActive(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if active {
+			add(id)
+		}
+		return nil
 	}
 	switch step.StepType {
 	case model.StepTypeAuthor:
@@ -235,7 +247,9 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 						}
 					}
 					if matches {
-						add(id)
+						if err = addAutomatic(id); err != nil {
+							return nil, err
+						}
 					}
 				}
 			}
@@ -247,7 +261,9 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 				return nil, err
 			}
 			for _, id := range userIDs {
-				add(id)
+				if err = addAutomatic(id); err != nil {
+					return nil, err
+				}
 			}
 		}
 	case model.StepTypeManager:
@@ -270,7 +286,9 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 						return nil, er
 					}
 					if matches {
-						add(id)
+						if err = addAutomatic(id); err != nil {
+							return nil, err
+						}
 					}
 				}
 				if len(ids) > 0 && step.ManagerSelectionType != model.ManagerSelectionAll {
@@ -294,6 +312,69 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 		ids = filtered
 	}
 	return ids, nil
+}
+
+// pf14RefreshTeamAssignments recalculates only team-based assignments when a
+// route step becomes current. Manager steps retain their application snapshot.
+func (e *Engine) pf14RefreshTeamAssignments(ctx context.Context, tx *store.Tx, ticket *model.Ticket, ticketStep *model.TicketStep, now time.Time) error {
+	if ticket.RouteID == nil || ticketStep.RouteStepCode == nil {
+		return nil
+	}
+	route, err := store.RouteDefByID(ctx, tx, *ticket.RouteID)
+	if err != nil {
+		return err
+	}
+	var routeStep *model.RouteStep
+	for i := range route.Steps {
+		if route.Steps[i].Code == *ticketStep.RouteStepCode {
+			routeStep = &route.Steps[i]
+			break
+		}
+	}
+	if routeStep == nil || (routeStep.StepType != model.StepTypeTeam && routeStep.StepType != model.StepTypeDynamicTeam) {
+		return nil
+	}
+	def, err := store.WorkflowDefByID(ctx, tx, ticket.WorkflowID)
+	if err != nil {
+		return err
+	}
+	rows, err := store.EngTicketInputs(ctx, tx, ticket.ID)
+	if err != nil {
+		return err
+	}
+	values := pf14RouteStepValues(def, pf14InputValues(def, pf14InputsFromRows(def, rows)))
+	ids, err := e.pf14ResolveAssignees(ctx, tx, ticket, *routeStep, values, nil)
+	if err != nil {
+		return err
+	}
+	if err = store.EngDeleteStepAssignees(ctx, tx, ticketStep.ID); err != nil {
+		return err
+	}
+	if len(ids) == 0 && routeStep.FallbackType != nil {
+		ids, err = pf14bFallbackAssignees(ctx, tx, ticket, *routeStep, values)
+		if err != nil {
+			return err
+		}
+		ticketStep.Fallback = true
+		ticketStep.FallbackResult = routeStep.FallbackType
+		if len(ids) == 0 && *routeStep.FallbackType == model.FallbackSkip {
+			ticketStep.Status, ticketStep.Skip = model.StepStatusSkipped, true
+			ticketStep.UpdatedAt = now
+			return store.EngUpdateStep(ctx, tx, *ticketStep)
+		}
+	}
+	for _, uid := range ids {
+		assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: ticketStep.ID, TicketID: ticket.ID, UserID: uid, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
+		if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
+			return err
+		}
+	}
+	ticketStep.Fallback = ticketStep.Fallback || len(ids) == 0 && routeStep.FallbackType != nil
+	if ticketStep.Fallback && ticketStep.FallbackResult == nil {
+		ticketStep.FallbackResult = routeStep.FallbackType
+	}
+	ticketStep.UpdatedAt = now
+	return store.EngUpdateStep(ctx, tx, *ticketStep)
 }
 
 func pf14bTargetTeamIDs(ctx context.Context, q store.Querier, rootID string, descendants bool) ([]string, error) {
@@ -511,15 +592,19 @@ func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Tic
 				} else if !active {
 					continue
 				}
-				matches, er := pf14bUserMatchesTargets(ctx, tx, id, team.ID, step.Targets)
-				if er != nil {
-					return nil, er
+				matches := *step.FallbackType == model.FallbackDirectManager
+				if *step.FallbackType == model.FallbackHigherManager {
+					var er error
+					matches, er = pf14bUserHasHigherGradeThanTargets(ctx, tx, id, team.ID, step.Targets)
+					if er != nil {
+						return nil, er
+					}
 				}
 				if matches {
 					ids = append(ids, id)
 				}
 			}
-			if len(ids) > 0 {
+			if len(ids) > 0 && (*step.FallbackType == model.FallbackDirectManager || *step.FallbackType == model.FallbackHigherManager) {
 				return ids, nil
 			}
 		}
@@ -540,34 +625,89 @@ func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Tic
 		}
 		for _, teamID := range teamIDs {
 			team, err := store.GetTeam(ctx, tx, teamID)
-			if err != nil || team.ParentID == nil {
-				continue
-			}
-			members, err := store.EngUsersByTeam(ctx, tx, *team.ParentID, false)
 			if err != nil {
 				return nil, err
 			}
-			for _, id := range members {
-				if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
-					continue
+			for team.ParentID != nil {
+				teamID = *team.ParentID
+				team, err = store.GetTeam(ctx, tx, teamID)
+				if err != nil {
+					return nil, err
 				}
-				if active, er := pf14bUserActive(ctx, tx, id); er != nil {
-					return nil, er
-				} else if !active {
-					continue
-				}
-				matches, er := pf14bUserMatchesGrade(ctx, tx, id, *team.ParentID, target.GradeSymbol, target.GradeCodes)
+				members, er := store.EngUsersByTeam(ctx, tx, teamID, false)
 				if er != nil {
 					return nil, er
 				}
-				if matches && !seen[id] {
-					seen[id] = true
-					ids = append(ids, id)
+				matchedAtLevel := false
+				for _, id := range members {
+					if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+						continue
+					}
+					if active, er := pf14bUserActive(ctx, tx, id); er != nil {
+						return nil, er
+					} else if !active {
+						continue
+					}
+					matches, er := pf14bUserMatchesGrade(ctx, tx, id, teamID, target.GradeSymbol, target.GradeCodes)
+					if er != nil {
+						return nil, er
+					}
+					if matches && !seen[id] {
+						seen[id] = true
+						ids = append(ids, id)
+						matchedAtLevel = true
+					}
+				}
+				if matchedAtLevel {
+					break
 				}
 			}
 		}
 	}
 	return ids, nil
+}
+
+// pf14bUserHasHigherGradeThanTargets implements the distinct higher-manager
+// fallback: only leaders whose grade is strictly above a requested grade match.
+func pf14bUserHasHigherGradeThanTargets(ctx context.Context, q store.Querier, userID, teamID string, targets []model.RouteTarget) (bool, error) {
+	hasGradeTarget := false
+	for _, target := range targets {
+		if target.GradeSymbol == nil || len(target.GradeCodes) == 0 {
+			continue
+		}
+		hasGradeTarget = true
+		memberships, err := store.EngActiveMemberships(ctx, q, userID, teamID)
+		if err != nil {
+			return false, err
+		}
+		for _, membership := range memberships {
+			if membership.TeamID != teamID {
+				continue
+			}
+			for _, code := range target.GradeCodes {
+				wanted, er := store.GradeIDByCode(ctx, q, code)
+				if er != nil {
+					continue
+				}
+				wantedGrade, er := store.GetGrade(ctx, q, wanted)
+				if er != nil {
+					return false, er
+				}
+				for _, gradeID := range membership.GradeIDs {
+					grade, er := store.GetGrade(ctx, q, gradeID)
+					if er != nil {
+						return false, er
+					}
+					if grade.Level > wantedGrade.Level {
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+	// With no grade threshold configured, the route carries no rank to exceed;
+	// use the nearest active leader as the documented higher-manager fallback.
+	return !hasGradeTarget, nil
 }
 
 func pf14Contains(values []string, want string) bool {

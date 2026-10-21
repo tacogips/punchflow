@@ -46,6 +46,10 @@ func EngUpdateTicket(ctx context.Context, q Querier, x model.Ticket) error {
 	if err != nil {
 		return fmt.Errorf("store: update engine ticket: %w", err)
 	}
+	_, err = q.ExecContext(ctx, `UPDATE ticket_assignees SET pending=0,updated_at=? WHERE ticket_id=? AND pending=1 AND NOT EXISTS (SELECT 1 FROM ticket_steps ts WHERE ts.id=ticket_assignees.ticket_step_id AND ts.step_order=? AND ts.status='in_progress' AND ?='in_progress')`, Millis(x.UpdatedAt), x.ID, x.CurrentStep, x.Status)
+	if err != nil {
+		return fmt.Errorf("store: clear inactive assignee holds: %w", err)
+	}
 	return nil
 }
 func EngTicketInputs(ctx context.Context, q Querier, ticketID string) ([]model.TicketInput, error) {
@@ -160,7 +164,7 @@ func EngUpdateStep(ctx context.Context, q Querier, x model.TicketStep) error {
 	return nil
 }
 func EngStepAssignees(ctx context.Context, q Querier, stepID string) ([]model.TicketAssignee, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_step_id,ticket_id,user_id,completed,completed_at,actual_approver_id,assigned_at,created_at,updated_at FROM ticket_assignees WHERE ticket_step_id=? ORDER BY created_at,id`, stepID)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_step_id,ticket_id,user_id,completed,completed_at,pending,actual_approver_id,assigned_at,created_at,updated_at FROM ticket_assignees WHERE ticket_step_id=? ORDER BY created_at,id`, stepID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine assignees: %w", err)
 	}
@@ -168,14 +172,15 @@ func EngStepAssignees(ctx context.Context, q Querier, stepID string) ([]model.Ti
 	out := []model.TicketAssignee{}
 	for rows.Next() {
 		var x model.TicketAssignee
-		var done int
+		var done, pending int
 		var completed, actual, assigned sql.NullInt64
 		var actualID sql.NullString
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketStepID, &x.TicketID, &x.UserID, &done, &completed, &actualID, &assigned, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketStepID, &x.TicketID, &x.UserID, &done, &completed, &pending, &actualID, &assigned, &c, &u); err != nil {
 			return nil, err
 		}
 		x.Completed = done != 0
+		x.Pending = pending != 0
 		x.CompletedAt = pf14TimePtr(completed)
 		x.ActualApproverID = pf14StringPtr(actualID)
 		x.AssignedAt = pf14TimePtr(assigned)
@@ -186,15 +191,25 @@ func EngStepAssignees(ctx context.Context, q Querier, stepID string) ([]model.Ti
 	}
 	return out, rows.Err()
 }
+
+// EngDeleteStepAssignees replaces the materialized assignment set when a
+// team-based route step is entered under the current organization chart.
+func EngDeleteStepAssignees(ctx context.Context, q Querier, stepID string) error {
+	_, err := q.ExecContext(ctx, `DELETE FROM ticket_assignees WHERE ticket_step_id=?`, stepID)
+	if err != nil {
+		return fmt.Errorf("store: delete step assignees: %w", err)
+	}
+	return nil
+}
 func EngInsertAssignee(ctx context.Context, q Querier, x model.TicketAssignee) error {
-	_, err := q.ExecContext(ctx, `INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,completed_at,actual_approver_id,assigned_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, x.ID, x.TicketStepID, x.TicketID, x.UserID, x.Completed, NullMillis(x.CompletedAt), x.ActualApproverID, NullMillis(x.AssignedAt), Millis(x.CreatedAt), Millis(x.UpdatedAt))
+	_, err := q.ExecContext(ctx, `INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,completed_at,pending,actual_approver_id,assigned_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, x.ID, x.TicketStepID, x.TicketID, x.UserID, x.Completed, NullMillis(x.CompletedAt), x.Pending, x.ActualApproverID, NullMillis(x.AssignedAt), Millis(x.CreatedAt), Millis(x.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("store: insert engine assignee: %w", err)
 	}
 	return nil
 }
 func EngUpdateAssignee(ctx context.Context, q Querier, x model.TicketAssignee) error {
-	_, err := q.ExecContext(ctx, `UPDATE ticket_assignees SET completed=?,completed_at=?,actual_approver_id=?,assigned_at=?,updated_at=? WHERE id=?`, x.Completed, NullMillis(x.CompletedAt), x.ActualApproverID, NullMillis(x.AssignedAt), Millis(x.UpdatedAt), x.ID)
+	_, err := q.ExecContext(ctx, `UPDATE ticket_assignees SET user_id=?,completed=?,completed_at=?,pending=CASE WHEN user_id<>? THEN 0 ELSE ? END,actual_approver_id=?,assigned_at=?,updated_at=? WHERE id=?`, x.UserID, x.Completed, NullMillis(x.CompletedAt), x.UserID, x.Pending, x.ActualApproverID, NullMillis(x.AssignedAt), Millis(x.UpdatedAt), x.ID)
 	if err != nil {
 		return fmt.Errorf("store: update engine assignee: %w", err)
 	}

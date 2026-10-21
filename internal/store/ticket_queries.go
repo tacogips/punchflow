@@ -28,6 +28,7 @@ type TicketQueryFilter struct {
 	SortBy                                                         string
 	Desc                                                           bool
 	Tasks                                                          bool
+	Pending                                                        bool
 }
 
 // TicketQueryList returns matching ticket IDs and a total before pagination.
@@ -83,13 +84,17 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 	}
 	if filter.Tasks {
 		assigneeWhere, values := taskAssigneeWhere("ta")
+		pendingClause := ""
+		if filter.Pending {
+			pendingClause = " AND ta.pending=1"
+		}
 		// No explicit status means actionable outstanding assignments. Explicit
 		// historical statuses retain the caller's completed assignment rows.
 		if len(filter.Statuses) == 0 {
 			values = append(values, model.StepStatusInProgress)
-			add("EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.completed=0 AND ts.status=?)", values...)
+			add("EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.completed=0 AND ts.status=?"+pendingClause+")", values...)
 		} else {
-			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+")", values...)
+			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+pendingClause+")", values...)
 		}
 		if filter.AssignedToMeAtStart != nil {
 			assigneeWhere, values = taskAssigneeWhere("ta")

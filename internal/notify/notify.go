@@ -102,6 +102,19 @@ func (s *Service) Fanout(ctx context.Context, q store.Querier, events []model.We
 	return nil
 }
 
+// ApprovalRequestsForCurrentStep creates local approval-request notifications
+// without creating a webhook event. Kickflow's raise operation requests the
+// newly active approvers while intentionally sending no raising webhook.
+func (s *Service) ApprovalRequestsForCurrentStep(ctx context.Context, q store.Querier, ticketID, actorID string) error {
+	ticket, err := store.EngLoadTicket(ctx, q, ticketID)
+	if err != nil {
+		return err
+	}
+	run := &fanoutRun{service: s, q: q, eligible: map[string]map[string]bool{}}
+	_, err = run.approvalRequests(ctx, ticket, model.WebhookEvent{Type: model.WebhookEventTicketUpdated, TicketID: ticketID, ActorUserID: actorID})
+	return err
+}
+
 // fanoutRun caches per-call lookups so a batch of events does not repeat them.
 type fanoutRun struct {
 	service *Service

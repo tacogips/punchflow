@@ -236,8 +236,12 @@ func TestStepConditionAndFallback(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(fallbackManagerIDs) != 1 || fallbackManagerIDs[0] != e.user("sales-manager") || pf14Contains(fallbackManagerIDs, e.user("sales-deputy")) {
-			t.Fatalf("%s >= manager fallback IDs=%v, want exactly sales-manager, excluding sales-deputy", fallbackType, fallbackManagerIDs)
+		if fallbackType == model.FallbackDirectManager {
+			if len(fallbackManagerIDs) == 0 || pf14Contains(fallbackManagerIDs, e.user("ceo")) {
+				t.Fatalf("direct_manager fallback IDs=%v, want closest leaders", fallbackManagerIDs)
+			}
+		} else if len(fallbackManagerIDs) != 1 || fallbackManagerIDs[0] != e.user("ceo") {
+			t.Fatalf("higher_manager fallback IDs=%v, want strictly higher-grade CEO", fallbackManagerIDs)
 		}
 	}
 

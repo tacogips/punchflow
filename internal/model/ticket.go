@@ -69,6 +69,7 @@ type TicketAssignee struct {
 	UserID           string     `json:"userId"`
 	Completed        bool       `json:"completed"`
 	CompletedAt      *time.Time `json:"completedAt"`
+	Pending          bool       `json:"pending"`
 	ActualApproverID *string    `json:"actualApproverId"`
 	AssignedAt       *time.Time `json:"assignedAt"`
 	CreatedAt        time.Time  `json:"createdAt"`

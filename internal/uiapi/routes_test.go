@@ -34,7 +34,7 @@ func TestWriteEndpointsRequireCSRFForBrowserSessions(t *testing.T) {
 	// exempt. This pins the method choice rather than the middleware itself.
 	for _, op := range uiapi.Operations() {
 		switch op.Name {
-		case "watchTicket", "markNotificationRead", "markAllNotificationsRead":
+		case "watchTicket", "markNotificationRead", "markAllNotificationsRead", "setAssigneePending":
 			if op.Method != http.MethodPost {
 				t.Errorf("%s uses %s, want POST", op.Name, op.Method)
 			}

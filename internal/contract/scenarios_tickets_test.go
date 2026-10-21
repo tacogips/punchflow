@@ -98,6 +98,46 @@ func TestContractLiveTickets(t *testing.T) {
 	run("getTicket", func(t *testing.T) {
 		response := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+draftID, nil)
 		pf26aCheck(t, operations["getTicket"], response, schemas["getTicket"], spec)
+		if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_steps SET instruction='Contract reviewer instruction' WHERE ticket_id=? AND step_order=1`, approveID); err != nil {
+			t.Fatalf("set populated ticket step instruction: %v", err)
+		}
+		instructionResponse := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+approveID, nil)
+		pf26aCheck(t, operations["getTicket"], instructionResponse, schemas["getTicket"], spec)
+		var instructed struct {
+			Steps []struct {
+				Instruction *string `json:"instruction"`
+			} `json:"steps"`
+		}
+		instructionResponse.JSON(t, &instructed)
+		foundInstruction := false
+		for _, step := range instructed.Steps {
+			foundInstruction = foundInstruction || step.Instruction != nil && *step.Instruction == "Contract reviewer instruction"
+		}
+		if !foundInstruction {
+			t.Fatal("populated ticket step instruction was not returned")
+		}
+		if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_assignees SET pending=1 WHERE id=(SELECT ta.id FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id JOIN tickets tk ON tk.id=ts.ticket_id WHERE tk.id=? AND ts.status='in_progress' ORDER BY ta.created_at,ta.id LIMIT 1)`, approveID); err != nil {
+			t.Fatalf("set populated assignment hold: %v", err)
+		}
+		populated := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+approveID, nil)
+		pf26aCheck(t, operations["getTicket"], populated, schemas["getTicket"], spec)
+		var detail struct {
+			Steps []struct {
+				Assignees []struct {
+					Pending bool `json:"pending"`
+				} `json:"assignees"`
+			} `json:"steps"`
+		}
+		populated.JSON(t, &detail)
+		foundHeld := false
+		for _, step := range detail.Steps {
+			for _, assignee := range step.Assignees {
+				foundHeld = foundHeld || assignee.Pending
+			}
+		}
+		if !foundHeld {
+			t.Fatal("populated ticket detail did not expose a held assignee")
+		}
 		t.Run("error_resource_not_found", func(t *testing.T) {
 			missing := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/00000000-0000-4000-8000-000000000000", nil)
 			pf26aCheckError(t, missing, http.StatusNotFound, "resource_not_found", errorSchema)

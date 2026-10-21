@@ -190,6 +190,13 @@ func TestRaiseEndpoint(t *testing.T) {
 	if raiseWebhooks != 0 {
 		t.Fatalf("raise ticket_updated outbox rows=%d, want 0", raiseWebhooks)
 	}
+	var requestNotifications int
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM notifications WHERE ticket_id=? AND user_id=? AND kind='approval_requested'`, id, env.UserID(t, "finance-manager")).Scan(&requestNotifications); err != nil {
+		t.Fatal(err)
+	}
+	if requestNotifications != 1 {
+		t.Fatalf("next approver request notifications=%d, want 1", requestNotifications)
+	}
 }
 
 func TestCustomStepEndpoints(t *testing.T) {
@@ -239,4 +246,41 @@ func TestSubStatusListEndpoint(t *testing.T) {
 	if len(items) != 2 || items[0].Code != "finance-check" || items[0].AllowWithdrawal {
 		t.Fatalf("sub-statuses = %+v", items)
 	}
+}
+
+func TestAssignCurrentApproverRepairsEmptyCurrentStep(t *testing.T) {
+	env := testutil.New(t)
+	ticketID := createTicket(t, env)
+	steps, err := store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range steps {
+		if step.StepOrder == 1 && step.Status == "in_progress" {
+			if err = store.EngDeleteStepAssignees(t.Context(), env.DB.Q(), step.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"userId": env.UserID(t, "accountant")})
+	if response.Status != http.StatusOK {
+		t.Fatalf("assign current approver status=%d body=%s", response.Status, response.Body)
+	}
+	steps, err = store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range steps {
+		if step.StepOrder == 1 && step.Status == "in_progress" {
+			assignees, er := store.EngStepAssignees(t.Context(), env.DB.Q(), step.ID)
+			if er != nil {
+				t.Fatal(er)
+			}
+			if len(assignees) != 1 || assignees[0].UserID != env.UserID(t, "accountant") {
+				t.Fatalf("current assignees=%+v", assignees)
+			}
+			return
+		}
+	}
+	t.Fatal("current step not found")
 }

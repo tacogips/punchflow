@@ -17,7 +17,7 @@ export interface WorkflowDetail extends Workflow { sectionList: SectionListItem[
 export interface RouteStep { id: string; title: string; stepOrder?: number; [key: string]: unknown }
 export interface Route { id: string; name: string; [key: string]: unknown }
 export interface RouteDetail extends Route { steps: RouteStep[] }
-export interface TicketAssignee { user?: User | null; [key: string]: unknown }
+export interface TicketAssignee { id?: string; pending?: boolean; completed?: boolean; user?: User | null; proxyUserIds?: string[]; [key: string]: unknown }
 export interface TicketStep { id: string; title: string; assignees?: TicketAssignee[]; [key: string]: unknown }
 export interface TicketInput { formFieldCode?: string; formFieldId?: string; value?: unknown; [key: string]: unknown }
 export interface TicketInputBody {

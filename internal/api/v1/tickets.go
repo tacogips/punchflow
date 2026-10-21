@@ -71,9 +71,7 @@ func (a *API) pf22ListTickets(w http.ResponseWriter, r *http.Request, tasks bool
 			return
 		}
 		if pending == "true" {
-			httpx.SetPagination(w, r, a.d.BaseURL, page, 0)
-			httpx.WriteJSON(w, http.StatusOK, []any{})
-			return
+			filter.Pending = true
 		}
 	} else {
 		filter.AssigneeUserID = q.Get("assigneeUserId")
