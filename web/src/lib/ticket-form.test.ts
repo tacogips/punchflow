@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SectionListItem, TicketDetail, WorkflowDetail } from "../api/types";
 import { toTicketInputs } from "./form-model";
+import { fieldInputAllowed } from "./form-ui";
 import {
   buildFormPayload, compareCondition, conditionValues, formStateFromTicket, goSprint, sectionConditionMet,
   defaultFieldValue, sectionViewable, slipRowInSection, slipRowsFromTicket,
@@ -129,6 +130,22 @@ describe("restoring a stored ticket", () => {
     const noApprover: WorkflowDetail = { ...workflow, sectionList: [workflow.sectionList[0], workflow.sectionList[2]] };
     const payload = buildFormPayload(noApprover, formStateFromTicket(noApprover, ticket), slipRowsFromTicket(noApprover, ticket), { viewable: always, approver: true });
     expect(payload).toEqual({});
+  });
+});
+
+describe("browser form permission payloads", () => {
+  test("omits hidden, read-only, and other-actor fields", () => {
+    const restricted: WorkflowDetail = { ...workflow, sectionList: [{ id: "permissions", sectionType: "form", title: "Permissions", formFields: [
+      { id: "hidden", code: "hidden", name: "Hidden", fieldType: "text", author: true, hidden: true },
+      { id: "locked", code: "locked", name: "Locked", fieldType: "text", author: true, readonlyOnUi: true },
+      { id: "approver", code: "approver", name: "Approver", fieldType: "text", author: false, approver: true },
+      { id: "author", code: "author", name: "Author", fieldType: "text", author: true, approver: false },
+    ] }] };
+    const form = Object.fromEntries(restricted.sectionList[0].formFields!.map((field) => [field.code, { code: field.code, fieldType: field.fieldType, value: "value" }]));
+    const applicant = buildFormPayload(restricted, form, {}, { viewable: always, approver: false, editable: (field) => field.fieldType === "calculation" || fieldInputAllowed(field, "applicant") });
+    expect(applicant.inputs).toEqual([{ formFieldCode: "author", value: "value" }]);
+    const approver = buildFormPayload(restricted, form, {}, { viewable: always, approver: true, editable: (field) => field.fieldType === "calculation" || fieldInputAllowed(field, "approver") });
+    expect(approver.inputs).toEqual([{ formFieldCode: "approver", value: "value" }]);
   });
 });
 

@@ -138,72 +138,106 @@ type SectionViewer struct {
 	Descendants bool   `json:"descendants,omitempty"`
 }
 type FormField struct {
-	ID                            string                 `json:"id"`
-	Code                          string                 `json:"code"`
-	Title                         string                 `json:"title"`
-	Description                   *string                `json:"description"`
-	FieldType                     string                 `json:"fieldType"`
-	Required                      bool                   `json:"required"`
-	Approver                      bool                   `json:"approver"`
-	Author                        bool                   `json:"author"`
-	Options                       []string               `json:"options"`
-	Size                          string                 `json:"size"`
-	RegexpFormat                  *string                `json:"regexpFormat"`
-	Formula                       *string                `json:"formula"`
-	DefaultValue                  *string                `json:"defaultValue"`
-	MinValue                      *float64               `json:"minValue"`
-	MaxValue                      *float64               `json:"maxValue"`
-	MinLength                     *int                   `json:"minLength"`
-	MaxLength                     *int                   `json:"maxLength"`
-	DecimalDigit                  *int                   `json:"decimalDigit"`
-	Delimited                     *bool                  `json:"delimited"`
-	Prefix                        *string                `json:"prefix"`
-	Suffix                        *string                `json:"suffix"`
-	Hidden                        *bool                  `json:"hidden"`
-	ReadonlyOnUI                  *bool                  `json:"readonlyOnUi"`
-	Multiple                      bool                   `json:"multiple"`
-	Orientation                   string                 `json:"orientation"`
-	AllowedExtensions             []string               `json:"allowedExtensions"`
-	AutoLink                      bool                   `json:"autoLink"`
-	UseTodayForDefaultValue       bool                   `json:"useTodayForDefaultValue"`
-	AllowedTicketStatus           []string               `json:"allowedTicketStatus"`
-	SelectableTicketWorkflowCodes []string               `json:"selectableTicketWorkflowCodes,omitempty"`
-	GeneralMasterCode             string                 `json:"generalMasterCode,omitempty"`
-	DefaultGeneralMasterItemCode  string                 `json:"defaultGeneralMasterItemCode,omitempty"`
-	CustomValidations             []FormCustomValidation `json:"customValidations,omitempty"`
+	ID                            string                      `json:"id"`
+	Code                          string                      `json:"code"`
+	Title                         string                      `json:"title"`
+	Description                   *string                     `json:"description"`
+	FieldType                     string                      `json:"fieldType"`
+	Required                      bool                        `json:"required"`
+	Approver                      bool                        `json:"approver"`
+	Author                        bool                        `json:"author"`
+	Options                       []string                    `json:"options"`
+	Size                          string                      `json:"size"`
+	RegexpFormat                  *string                     `json:"regexpFormat"`
+	Formula                       *string                     `json:"formula"`
+	DefaultValue                  *string                     `json:"defaultValue"`
+	MinValue                      *float64                    `json:"minValue"`
+	MaxValue                      *float64                    `json:"maxValue"`
+	MinLength                     *int                        `json:"minLength"`
+	MaxLength                     *int                        `json:"maxLength"`
+	DecimalDigit                  *int                        `json:"decimalDigit"`
+	Delimited                     *bool                       `json:"delimited"`
+	Prefix                        *string                     `json:"prefix"`
+	Suffix                        *string                     `json:"suffix"`
+	Hidden                        *bool                       `json:"hidden"`
+	ReadonlyOnUI                  *bool                       `json:"readonlyOnUi"`
+	Multiple                      bool                        `json:"multiple"`
+	Orientation                   string                      `json:"orientation"`
+	AllowedExtensions             []string                    `json:"allowedExtensions"`
+	AutoLink                      bool                        `json:"autoLink"`
+	UseTodayForDefaultValue       bool                        `json:"useTodayForDefaultValue"`
+	AllowedTicketStatus           []string                    `json:"allowedTicketStatus"`
+	SelectableTicketWorkflowCodes []string                    `json:"selectableTicketWorkflowCodes,omitempty"`
+	GeneralMasterCode             string                      `json:"generalMasterCode,omitempty"`
+	DefaultGeneralMasterItemCode  string                      `json:"defaultGeneralMasterItemCode,omitempty"`
+	GeneralMasterSearchFilters    []GeneralMasterSearchFilter `json:"generalMasterSearchFilters,omitempty"`
+	TicketCopySetting             *TicketCopySetting          `json:"ticketCopySetting,omitempty"`
+	CustomValidations             []FormCustomValidation      `json:"customValidations,omitempty"`
 }
 type SlipField struct {
-	ID                            string                 `json:"id"`
-	Code                          string                 `json:"code"`
-	Title                         string                 `json:"title"`
-	FieldType                     string                 `json:"fieldType"`
-	Required                      bool                   `json:"required"`
-	ShowTotal                     bool                   `json:"showTotal"`
-	Options                       []string               `json:"options"`
-	RegexpFormat                  *string                `json:"regexpFormat"`
-	Formula                       *string                `json:"formula"`
-	MaxValue                      *float64               `json:"maxValue"`
-	MinValue                      *float64               `json:"minValue"`
-	DefaultValue                  *string                `json:"defaultValue"`
-	DecimalDigit                  *int                   `json:"decimalDigit"`
-	Delimited                     *bool                  `json:"delimited"`
-	AllowedExtensions             []string               `json:"allowedExtensions"`
-	Prefix                        *string                `json:"prefix"`
-	Suffix                        *string                `json:"suffix"`
-	Approver                      bool                   `json:"approver"`
-	Author                        bool                   `json:"author"`
-	Hidden                        *bool                  `json:"hidden"`
-	ReadonlyOnUI                  *bool                  `json:"readonlyOnUi"`
-	MinLength                     *int                   `json:"minLength"`
-	MaxLength                     *int                   `json:"maxLength"`
-	Multiple                      bool                   `json:"multiple"`
-	AutoLink                      bool                   `json:"autoLink"`
-	UseTodayForDefaultValue       bool                   `json:"useTodayForDefaultValue"`
-	AllowedTicketStatus           []string               `json:"allowedTicketStatus"`
-	SelectableTicketWorkflowCodes []string               `json:"selectableTicketWorkflowCodes,omitempty"`
-	GeneralMasterCode             string                 `json:"generalMasterCode,omitempty"`
-	DefaultGeneralMasterItemCode  string                 `json:"defaultGeneralMasterItemCode,omitempty"`
-	CustomValidations             []SlipCustomValidation `json:"customValidations,omitempty"`
+	ID                            string                          `json:"id"`
+	Code                          string                          `json:"code"`
+	Title                         string                          `json:"title"`
+	FieldType                     string                          `json:"fieldType"`
+	Required                      bool                            `json:"required"`
+	ShowTotal                     bool                            `json:"showTotal"`
+	Options                       []string                        `json:"options"`
+	RegexpFormat                  *string                         `json:"regexpFormat"`
+	Formula                       *string                         `json:"formula"`
+	MaxValue                      *float64                        `json:"maxValue"`
+	MinValue                      *float64                        `json:"minValue"`
+	DefaultValue                  *string                         `json:"defaultValue"`
+	DecimalDigit                  *int                            `json:"decimalDigit"`
+	Delimited                     *bool                           `json:"delimited"`
+	AllowedExtensions             []string                        `json:"allowedExtensions"`
+	Prefix                        *string                         `json:"prefix"`
+	Suffix                        *string                         `json:"suffix"`
+	Approver                      bool                            `json:"approver"`
+	Author                        bool                            `json:"author"`
+	Hidden                        *bool                           `json:"hidden"`
+	ReadonlyOnUI                  *bool                           `json:"readonlyOnUi"`
+	MinLength                     *int                            `json:"minLength"`
+	MaxLength                     *int                            `json:"maxLength"`
+	Multiple                      bool                            `json:"multiple"`
+	AutoLink                      bool                            `json:"autoLink"`
+	UseTodayForDefaultValue       bool                            `json:"useTodayForDefaultValue"`
+	AllowedTicketStatus           []string                        `json:"allowedTicketStatus"`
+	SelectableTicketWorkflowCodes []string                        `json:"selectableTicketWorkflowCodes,omitempty"`
+	GeneralMasterCode             string                          `json:"generalMasterCode,omitempty"`
+	DefaultGeneralMasterItemCode  string                          `json:"defaultGeneralMasterItemCode,omitempty"`
+	GeneralMasterSearchFilters    []SlipGeneralMasterSearchFilter `json:"generalMasterSearchFilters,omitempty"`
+	CustomValidations             []SlipCustomValidation          `json:"customValidations,omitempty"`
+}
+
+// GeneralMasterSearchFilter maps a form value to a general-master item field
+// for automatic filtering in the workflow form.
+type GeneralMasterSearchFilter struct {
+	ID                   string  `json:"id"`
+	FilterFormFieldID    string  `json:"filterFormFieldId"`
+	FieldType            string  `json:"fieldType"`
+	GeneralMasterFieldID *string `json:"generalMasterFieldId"`
+}
+
+// SlipGeneralMasterSearchFilter maps a detail cell to a general-master item
+// field for automatic filtering in a detail row.
+type SlipGeneralMasterSearchFilter struct {
+	ID                   string  `json:"id"`
+	FilterSlipFieldID    string  `json:"filterSlipFieldId"`
+	FieldType            string  `json:"fieldType"`
+	GeneralMasterFieldID *string `json:"generalMasterFieldId"`
+}
+
+// TicketCopySetting describes form values copied from a selected ticket.
+type TicketCopySetting struct {
+	WorkflowCode string              `json:"workflowCode,omitempty"`
+	Mappings     []TicketCopyMapping `json:"mappings"`
+}
+
+// TicketCopyMapping maps one selected-ticket value to a destination form field.
+type TicketCopyMapping struct {
+	FieldType       string  `json:"fieldType"`
+	FieldCode       *string `json:"fieldCode"`
+	TargetFieldCode *string `json:"targetFieldCode"`
 }
 
 // FormCustomValidation describes a validation attached to a form field.

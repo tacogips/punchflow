@@ -3,12 +3,14 @@ import { A, useParams, useSearchParams } from "@solidjs/router";
 import type { FormField, SectionListItem, TicketDetail, Team, Workflow, WorkflowDetail } from "../../api/types";
 import { apiFetch, apiList } from "../../api/client";
 import { toTicketInputs, type FieldState } from "../../lib/form-model";
-import { approverEditable, buildFormPayload, conditionValues, formStateFromTicket, sectionConditionMet, sectionViewable, slipKey, slipRowsFromTicket } from "../../lib/ticket-form";
+import { buildFormPayload, conditionValues, formStateFromTicket, sectionConditionMet, sectionViewable, slipKey, slipRowsFromTicket } from "../../lib/ticket-form";
 import { buildApprovers } from "../../lib/ticket-view";
 import type { SlipRows } from "../../components/tickets/SlipTable";
 import FormFields from "../../components/tickets/FormFields";
 import SlipTable from "../../components/tickets/SlipTable";
 import { session } from "../../session";
+import { fieldInputAllowed, ticketCopyValue, type FormActor } from "../../lib/form-ui";
+import { createApplicationTeamsResource } from "../../lib/application-teams";
 
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === "object" ? v as Record<string, unknown> : {};
 const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
@@ -21,20 +23,10 @@ export default function TicketEdit() {
   const workflowId = () => chosenWorkflow() || str(obj(obj(ticket()).workflow).id);
   const [workflow] = createResource(workflowId, (id) => id ? apiFetch<WorkflowDetail>("GET", `/v1/workflows/${id}`) : Promise.resolve(undefined));
   const me = () => session()?.user;
-  const [teams] = createResource(() => {
-    const clientID = proxyClientUserId();
-    return [me()?.id ?? "", clientID, workflowId()].join("|");
-  }, async (key) => {
-    const [userID, clientID, selectedWorkflowID] = key.split("|");
-    if (!userID) return [];
-    const query = new URLSearchParams();
-    if (clientID) query.set("proxyClientUserId", clientID);
-    if (clientID) query.set("workflowId", selectedWorkflowID);
-    return apiFetch<Team[]>("GET", `/ui/api/application-teams${query.size ? `?${query}` : ""}`);
-  });
   const [form, setForm] = createSignal<Record<string, FieldState>>({}); const [slips, setSlips] = createSignal<SlipRows>({});
   const [title, setTitle] = createSignal(""); const [teamId, setTeamId] = createSignal(""); const [proxyClientUserId, setProxyClientUserId] = createSignal("");
   const [approvers, setApprovers] = createSignal<Record<string, string>>({}); const [submissionComment, setSubmissionComment] = createSignal(""); const [errors, setErrors] = createSignal<Record<string, string[]>>({}); const [error, setError] = createSignal(""); const [busy, setBusy] = createSignal(false); const [initialized, setInitialized] = createSignal("");
+  const [teams] = createApplicationTeamsResource({ userID: () => me()?.id ?? "", proxyClientID: proxyClientUserId, workflowID: workflowId });
   createEffect(() => {
     const definition = workflow(); const existing = ticket(); const key = `${workflowId()}:${existing?.id ?? "new"}`;
     if (!definition || initialized() === key) return;
@@ -50,11 +42,39 @@ export default function TicketEdit() {
   const memberTeams = (): Team[] => teams.state === "ready" ? teams() ?? [] : [];
   const canView = (section: SectionListItem) => sectionViewable(section, ticket(), { userId: me()?.id, permissions: session()?.permissions, teamIds: memberTeams().map((team) => team.id) });
   const conditionInputs = () => { const definition = workflow(); return definition ? conditionValues(toTicketInputs(definition, form())) : {}; };
-  const editableField = (field: FormField) => !approverEdit() || approverEditable(workflow() as WorkflowDetail, field);
+  const formActor = (): FormActor => approverEdit() ? "approver" : "applicant";
+  const overwritable = () => obj(workflow()).overwritable === true;
+  const editableField = (field: FormField) => (field as unknown as Record<string, unknown>).hidden !== true && (field.fieldType === "calculation" || fieldInputAllowed(field, formActor(), overwritable()));
+  const copySelectedTicket = async (field: FormField, ticketID: string) => {
+    const setting = obj((field as unknown as Record<string, unknown>).ticketCopySetting);
+    const mappings = arr(setting.mappings).map(obj);
+    if (!mappings.length || !ticketID) return;
+    try {
+      const source = await apiFetch<TicketDetail>("GET", `/v1/tickets/${encodeURIComponent(ticketID)}`);
+      const sourceWorkflowID = str(obj(obj(source).workflow).id);
+      const configuredWorkflowID = str(obj(setting.workflow).id);
+      const targets = sections(workflow()!).flatMap((section) => section.formFields ?? []);
+      setForm((current) => {
+        const next = { ...current };
+        for (const mapping of mappings) {
+          if (str(mapping.fieldType) === "form_field" && (!configuredWorkflowID || configuredWorkflowID !== sourceWorkflowID)) continue;
+          const targetCode = str(mapping.targetFieldCode);
+          const target = targets.find((candidate) => candidate.code === targetCode);
+          if (!target) continue;
+          const value = ticketCopyValue({ fieldType: str(mapping.fieldType), fieldCode: mapping.fieldCode == null ? null : str(mapping.fieldCode), targetFieldCode: targetCode }, source as unknown as Record<string, unknown>, target, formActor(), overwritable());
+          if (value === undefined) continue;
+          next[target.code] = { code: target.code, fieldType: target.fieldType, multiple: target.multiple === true, value };
+        }
+        return next;
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to copy ticket fields");
+    }
+  };
   const save = async (status: "draft" | "in_progress") => {
     setBusy(true); setError(""); setErrors({});
     const definition = workflow(); if (!definition) { setError("Choose a workflow first."); setBusy(false); return; }
-    const formPayload: Record<string, unknown> = { ...buildFormPayload(definition, form(), slips(), { viewable: canView, approver: approverEdit() }) };
+    const formPayload: Record<string, unknown> = { ...buildFormPayload(definition, form(), slips(), { viewable: canView, approver: approverEdit(), editable: editableField }) };
     const approversPayload = buildApprovers(approvers());
     const payload: Record<string, unknown> = params.id && approverEdit() ? formPayload : {
       ...(status === "draft" ? { status: ticket()?.status === "rejected" ? "rejected" : "draft" } : params.id ? {} : { status: "draft" }),
@@ -88,8 +108,8 @@ export default function TicketEdit() {
             <Show when={obj(definition()).titleInputMode === "input" || obj(definition()).allowTitle === true}><label>Title<input value={title()} onInput={(event) => setTitle(event.currentTarget.value)} /></label></Show>
           </Show>
           <For each={sections(definition())}>{(section) => <Show when={canView(section) && sectionConditionMet(section, conditionInputs())}><section><h2>{section.title || (section.sectionType === "slip" ? "Items" : "Form")}</h2>
-            <Show when={section.sectionType === "form"} fallback={<SlipTable workflowId={workflowId()} code={slipKey(section)} title={section.title ?? "Items"} fields={(section.slipFields ?? []).filter(editableField)} rows={slips} setRows={setSlips} errors={errors()} />}>
-              <FormFields workflowId={workflowId()} fields={(section.formFields ?? []).filter(editableField)} state={form} setState={setForm} errors={errors()} />
+            <Show when={section.sectionType === "form"} fallback={<SlipTable workflowId={workflowId()} code={slipKey(section)} title={section.title ?? "Items"} fields={(section.slipFields ?? []).filter((field) => (field as unknown as Record<string, unknown>).hidden !== true)} rows={slips} setRows={setSlips} errors={errors()} actor={formActor()} overwritable={overwritable()} />}>
+              <FormFields workflowId={workflowId()} fields={(section.formFields ?? []).filter((field) => (field as unknown as Record<string, unknown>).hidden !== true)} state={form} setState={setForm} errors={errors()} actor={formActor()} overwritable={overwritable()} onTicketSelect={copySelectedTicket} />
             </Show>
           </section></Show>}</For>
           <For each={routeSteps().filter((step) => obj(step).stepType === "author_customizable")}>{(step) => { const code = str(obj(step).code); return <label>Approvers for {str(obj(step).title) || code}<input value={approvers()[code] ?? ""} onInput={(event) => setApprovers((current) => ({ ...current, [code]: event.currentTarget.value }))} placeholder="User IDs separated by commas" /></label>; }}</For>

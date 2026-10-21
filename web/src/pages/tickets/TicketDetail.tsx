@@ -1,7 +1,7 @@
 import { For, Show, createResource, createSignal } from "solid-js";
 import { A, useParams } from "@solidjs/router";
 import type { CustomStepBody, Label, SubStatus, TicketControls, TicketDetail as TicketDetailType, TicketWithStep } from "../../api/types";
-import { apiFetch } from "../../api/client";
+import { apiFetch, apiList } from "../../api/client";
 import { session } from "../../session";
 import { formatJst } from "../../lib/format";
 import { attachmentsOf, inputLabel, inputValueText, userLabel } from "../../lib/ticket-view";
@@ -20,6 +20,7 @@ const str = (v: unknown): string => typeof v === "string" ? v : "";
 function TicketContent(props: {
   ticket: TicketDetailType;
   links: TicketWithStep[];
+  availableLinks: TicketWithStep[];
   busy: boolean;
   error: string;
   controls: TicketControls;
@@ -31,6 +32,8 @@ function TicketContent(props: {
   onSetHold: (assigneeId: string, pending: boolean) => void;
   onAction: (name: "approve" | "reject" | "deny" | "withdraw" | "archive" | "edit", data?: { comment?: string; to?: number }) => void;
   onChanged: () => void;
+  onLinkTicket: (ticketID: string) => void;
+  onUnlinkTicket: (ticketID: string) => void;
 }) {
   const t = props.ticket; const workflow = obj(t.workflow); const subStatus = () => (t.subStatus ?? null) as SubStatus | null; const labels = () => (Array.isArray(t.labels) ? t.labels : []) as Label[]; const author = obj(t.author); const currentSession = session(); const [replacementUserId, setReplacementUserId] = createSignal(""); const [replacementStepId, setReplacementStepId] = createSignal("");
   const activeCurrentSteps = () => arr(t.steps).map(obj).filter((step) => Number(step.stepOrder) === Number(t.currentStep) && step.status === "in_progress");
@@ -58,7 +61,12 @@ function TicketContent(props: {
       if (Number(row.stepOrder) !== Number(t.currentStep) || row.status !== "in_progress") return [];
       return arr(row.assignees).map(obj).filter((assignee) => assignee.completed !== true && (obj(assignee.user).id === currentSession!.user.id || arr(assignee.proxyUserIds).includes(currentSession!.user.id)));
     })}>{(assignee) => <button type="button" disabled={props.busy} aria-pressed={assignee.pending === true} onClick={() => props.onSetHold(str(assignee.id), assignee.pending !== true)}>{assignee.pending === true ? "Release approval hold" : "Hold approval reminders"}</button>}</For></section></Show>
-    <Show when={props.links.length}><section><h2>Related tickets</h2><ul><For each={props.links}>{(link) => <li><A href={`/tickets/${link.id}`}>{link.ticketNumber || link.title || link.id}</A></li>}</For></ul></section></Show>
+    <section><h2>Related tickets</h2><Show when={props.links.length} fallback={<p>No related tickets.</p>}><ul><For each={props.links}>{(link) => <li><A href={`/tickets/${link.id}`}>{link.ticketNumber || link.title || link.id}</A> <button type="button" disabled={props.busy} onClick={() => props.onUnlinkTicket(link.id)}>Unlink</button></li>}</For></ul></Show>
+      <form class="action-bar" onSubmit={(event) => { event.preventDefault(); const selected = (event.currentTarget.elements.namedItem("relatedTicket") as HTMLSelectElement).value; if (selected) props.onLinkTicket(selected); }}>
+        <label>Add existing ticket <select name="relatedTicket" value=""><option value="">Choose ticket…</option><For each={props.availableLinks}>{(link) => <option value={link.id}>{link.ticketNumber || link.title || link.id}</option>}</For></select></label>
+        <button type="submit" disabled={props.busy || props.availableLinks.length === 0}>Link ticket</button>
+      </form>
+    </section>
     <Comments ticketId={t.id} enabled={workflow.commentingEnabled !== false} onChanged={props.onChanged} />
     <Viewers ticketId={t.id} onChanged={props.onChanged} />
   </>;
@@ -66,10 +74,15 @@ function TicketContent(props: {
 
 export default function TicketDetail() {
   const params = useParams(); const [ticket, { refetch }] = createResource(() => params.id, (id) => apiFetch<TicketDetailType>("GET", `/v1/tickets/${id}`));
-  const [links] = createResource(() => params.id, (id) => apiFetch<TicketWithStep[]>("GET", `/v1/tickets/${id}/links`));
+  const [links, { refetch: refetchLinks }] = createResource(() => params.id, (id) => apiFetch<TicketWithStep[]>("GET", `/v1/tickets/${id}/links`));
+  const [visibleTickets] = createResource(() => params.id, async () => (await apiList<TicketWithStep>("/v1/tickets", { perPage: "100" })).items);
   const [controls, { refetch: refetchControls }] = createResource(() => params.id, (id) => apiFetch<Partial<TicketControls>>("GET", uiTicketPath(id, "/controls")).then(normalizeControls).catch(() => NO_CONTROLS));
   const [busy, setBusy] = createSignal(false); const [error, setError] = createSignal("");
-  const refresh = async () => { await Promise.all([refetch(), refetchControls()]); };
+  const refresh = async () => { await Promise.all([refetch(), refetchControls(), refetchLinks()]); };
+  const availableLinks = () => {
+    const linked = new Set((links() ?? []).map((item) => item.id));
+    return (visibleTickets() ?? []).filter((item) => item.id !== params.id && !linked.has(item.id));
+  };
   const control = async (request: () => Promise<unknown>, failure: string) => {
     setBusy(true); setError("");
     try { await request(); await refresh(); }
@@ -82,6 +95,8 @@ export default function TicketDetail() {
   const removeStep = (stepId: string) => void control(() => apiFetch("DELETE", uiTicketPath(params.id, `/custom-steps/${encodeURIComponent(stepId)}`)), "Unable to remove the step");
   const assignCurrentApprover = (ticketStepId: string, userId: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/assignees"), { ticketStepId, userId }), "Unable to add the approver");
   const setHold = (assigneeId: string, pending: boolean) => void control(() => apiFetch("POST", uiTicketPath(params.id, `/assignees/${encodeURIComponent(assigneeId)}/pending`), { pending }), "Unable to update the approval hold");
+  const linkTicket = (ticketID: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/links"), { linkedTicketId: ticketID }), "Unable to link ticket");
+  const unlinkTicket = (ticketID: string) => void control(() => apiFetch("DELETE", uiTicketPath(params.id, `/links/${encodeURIComponent(ticketID)}`)), "Unable to unlink ticket");
   const action = async (name: "approve" | "reject" | "deny" | "withdraw" | "archive" | "edit", data?: { comment?: string; to?: number }) => {
     if (name === "edit") return;
     const body: Record<string, unknown> = {};
@@ -95,7 +110,7 @@ export default function TicketDetail() {
   const detail = () => ticket();
   return <main class="page"><A href="/tickets">Back to tickets</A>
     <Show when={!ticket.loading} fallback={<p>Loading ticket…</p>}><Show when={!ticket.error && detail()} fallback={<p role="alert">Unable to load ticket.</p>}>
-      <TicketContent ticket={detail()!} links={links() ?? []} busy={busy()} error={error()} controls={controls() ?? NO_CONTROLS} onCancelApproval={cancelApproval} onRaise={raise} onAddStep={addStep} onRemoveStep={removeStep} onAssignCurrentApprover={assignCurrentApprover} onSetHold={setHold} onAction={action} onChanged={refresh} />
+      <TicketContent ticket={detail()!} links={links() ?? []} availableLinks={availableLinks()} busy={busy()} error={error()} controls={controls() ?? NO_CONTROLS} onCancelApproval={cancelApproval} onRaise={raise} onAddStep={addStep} onRemoveStep={removeStep} onAssignCurrentApprover={assignCurrentApprover} onSetHold={setHold} onAction={action} onChanged={refresh} onLinkTicket={linkTicket} onUnlinkTicket={unlinkTicket} />
     </Show></Show>
   </main>;
 }

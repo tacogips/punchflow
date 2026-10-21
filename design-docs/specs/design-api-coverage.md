@@ -168,7 +168,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 64 | denyTicket | POST | /v1/tickets/{ticketId}/deny | current assignee or proxy | ticket_actions.go | Engine `Deny`; `ticket_denied` |
 | 65 | withdrawTicket | POST | /v1/tickets/{ticketId}/withdraw | author / proxy client | ticket_actions.go | Engine `Withdraw`; `ticket_withdrawn`; INF-25 |
 | 66 | archiveTicket | POST | /v1/tickets/{ticketId}/archive | author (draft/rejected) or ticket_write | ticket_actions.go | Engine `Archive`; `ticket_archived`; INF-24 |
-| 67 | listTicketLinks | GET | /v1/tickets/{ticketId}/links | visible | ticket_viewers.go | Links come from `ticket` fields with `autoLink`, maintained as reciprocal links on every edit (INF-78) |
+| 67 | listTicketLinks | GET | /v1/tickets/{ticketId}/links | visible | ticket_viewers.go | Links come from `ticket` fields with `autoLink`, maintained as reciprocal links on every edit (INF-78); manual reciprocal mutations are exposed to the browser under `/ui/api` (INF-U7-01) |
 | 68 | listViewers | GET | /v1/tickets/{ticketId}/viewers | visible | ticket_viewers.go | Default order is team viewers by team name followed by user viewers by email (INF-M6-02) |
 | 69 | createViewer | POST | /v1/tickets/{ticketId}/viewers | visible; workflow `allowEditingOfViewers` or ticket_write | ticket_viewers.go | Exactly one of userId/teamId -> else 400 |
 | 70 | deleteViewer | DELETE | /v1/tickets/{ticketId}/viewers/{viewerId} | same as #69 | ticket_viewers.go | |

@@ -99,6 +99,7 @@ func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipFi
 func pf08SlipFieldInContext(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
 	out := pf08SlipFieldWithCustomValidations(f, fields)
 	out["selectableTicketWorkflows"] = pf08SelectableTicketWorkflows(ctx, q, f.SelectableTicketWorkflowCodes)
+	out["generalMasterSearchFilters"] = pf08SlipMasterFilters(f.GeneralMasterSearchFilters)
 	if f.GeneralMasterCode == "" {
 		return out
 	}
@@ -169,13 +170,52 @@ func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[
 	out["externalApiSetting"] = nil
 	out["kintoneAppSetting"] = nil
 	out["climberCloudSetting"] = nil
-	out["generalMasterSearchFilters"] = []any{}
+	out["generalMasterSearchFilters"] = pf08FormMasterFilters(f.GeneralMasterSearchFilters)
 	out["approverEditRestriction"] = nil
 	out["approverEditSetting"] = map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}
 	out["customValidations"] = []any{}
-	out["ticketCopySetting"] = nil
+	out["ticketCopySetting"] = pf08TicketCopySetting(ctx, q, f.TicketCopySetting)
 	out["selectableTicketWorkflows"] = pf08SelectableTicketWorkflows(ctx, q, f.SelectableTicketWorkflowCodes)
 	return out
+}
+
+func pf08FormMasterFilters(filters []model.GeneralMasterSearchFilter) []any {
+	out := make([]any, 0, len(filters))
+	for _, filter := range filters {
+		out = append(out, map[string]any{"id": filter.ID, "filterFormFieldId": filter.FilterFormFieldID, "fieldType": filter.FieldType, "generalMasterFieldId": filter.GeneralMasterFieldID})
+	}
+	return out
+}
+
+func pf08SlipMasterFilters(filters []model.SlipGeneralMasterSearchFilter) []any {
+	out := make([]any, 0, len(filters))
+	for _, filter := range filters {
+		out = append(out, map[string]any{"id": filter.ID, "filterSlipFieldId": filter.FilterSlipFieldID, "fieldType": filter.FieldType, "generalMasterFieldId": filter.GeneralMasterFieldID})
+	}
+	return out
+}
+
+func pf08TicketCopySetting(ctx context.Context, q store.Querier, setting *model.TicketCopySetting) any {
+	if setting == nil {
+		return nil
+	}
+	var workflow any
+	if setting.WorkflowCode != "" {
+		if id, err := store.ResolveID(ctx, q, "workflows", setting.WorkflowCode); err == nil {
+			if presented, err := Workflow(ctx, q, id); err == nil {
+				delete(presented, "author")
+				delete(presented, "versionAuthor")
+				delete(presented, "folder")
+				delete(presented, "categories")
+				workflow = presented
+			}
+		}
+	}
+	mappings := make([]any, 0, len(setting.Mappings))
+	for _, mapping := range setting.Mappings {
+		mappings = append(mappings, map[string]any{"fieldType": mapping.FieldType, "fieldCode": mapping.FieldCode, "targetFieldCode": mapping.TargetFieldCode})
+	}
+	return map[string]any{"workflow": workflow, "mappings": mappings}
 }
 
 func pf08DefaultGeneralMasterItem(ctx context.Context, q store.Querier, masterCode, itemCode string) any {

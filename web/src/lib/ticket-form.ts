@@ -266,10 +266,10 @@ export interface FormPayload { inputs?: TicketInputBody[]; slipItems?: SlipItemB
  * are sent; rows keep their position so omitted cells are carried over, and
  * `slipItems` is omitted altogether when no detail field is editable.
  */
-export function buildFormPayload(workflow: WorkflowDetail, form: Record<string, FieldState>, slips: SlipRows, options: { viewable: (section: SectionListItem) => boolean; approver: boolean }): FormPayload {
+export function buildFormPayload(workflow: WorkflowDetail, form: Record<string, FieldState>, slips: SlipRows, options: { viewable: (section: SectionListItem) => boolean; approver: boolean; editable?: (field: FormField) => boolean }): FormPayload {
   const sectionList = (workflow.sectionList ?? []).filter(options.viewable);
   const visible: WorkflowDetail = { ...workflow, sectionList };
-  const fieldFilter = (field: FormField) => !options.approver || approverEditable(workflow, field);
+  const fieldFilter = (field: FormField) => (field as unknown as Loose).hidden !== true && (options.editable?.(field) ?? (!options.approver || approverEditable(workflow, field)));
   const inputs = toTicketInputs(visible, form).filter((input) => {
     const field = sectionList.flatMap((section) => section.formFields ?? []).find((item) => item.code === input.formFieldCode);
     return field !== undefined && fieldFilter(field);

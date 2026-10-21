@@ -60,6 +60,8 @@ var operations = [...]Operation{
 	{Name: "listApplicationTeams", Method: http.MethodGet, Pattern: "/ui/api/application-teams", Handle: (*API).listApplicationTeams},
 	{Name: "listWorkflowMasterItems", Method: http.MethodGet, Pattern: "/ui/api/workflows/{workflowId}/form-fields/{fieldCode}/master-items", Handle: (*API).listWorkflowMasterItems},
 	{Name: "getTicketControls", Method: http.MethodGet, Pattern: "/ui/api/tickets/{ticketId}/controls", Handle: (*API).getControls},
+	{Name: "linkTicket", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/links", Handle: (*API).linkTicket},
+	{Name: "unlinkTicket", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/links/{linkedTicketId}", Handle: (*API).unlinkTicket},
 	{Name: "attachTicketLabel", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/labels", Handle: (*API).attachLabel},
 	{Name: "detachTicketLabel", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/labels/{labelId}", Handle: (*API).detachLabel},
 	{Name: "cancelTicketApproval", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/cancel-approval", Handle: (*API).cancelApproval},
