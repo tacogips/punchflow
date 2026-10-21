@@ -195,6 +195,14 @@ func TestContractLiveMasters(t *testing.T) {
 			},
 		})
 		pf26eCheck(t, "createGeneralMaster", response, spec, cache)
+		t.Run("error_missing_required_field_boolean", func(t *testing.T) {
+			missing := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "PF26e missing required", "fields": []any{map[string]any{"code": "note", "title": "Note", "fieldType": "text"}}})
+			pf26eCheckError(t, missing, http.StatusBadRequest, "invalid_parameter", cache)
+		})
+		t.Run("error_null_required_field_boolean", func(t *testing.T) {
+			null := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "PF26e null required", "fields": []any{map[string]any{"code": "note", "title": "Note", "required": nil, "fieldType": "text"}}})
+			pf26eCheckError(t, null, http.StatusBadRequest, "invalid_parameter", cache)
+		})
 		t.Run("error_missing_permission", func(t *testing.T) {
 			denied := env.Do(t, testutil.Employee, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Denied master"})
 			pf26eCheckError(t, denied, http.StatusForbidden, "missing_permission", cache)

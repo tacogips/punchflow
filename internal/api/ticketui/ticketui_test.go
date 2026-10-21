@@ -1,6 +1,7 @@
 package ticketui_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -322,6 +323,10 @@ func TestSubStatusListEndpoint(t *testing.T) {
 func TestAssignCurrentApproverAddsDistinctUsersToAssignedCurrentStep(t *testing.T) {
 	env := testutil.New(t)
 	ticketID := createTicket(t, env)
+	env.RegisterReceiverWebhook(t, "r6-assignee-updatedAt")
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE tickets SET updated_at=1000 WHERE id=?`, ticketID); err != nil {
+		t.Fatal(err)
+	}
 	steps, err := store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
 	if err != nil {
 		t.Fatal(err)
@@ -350,6 +355,39 @@ func TestAssignCurrentApproverAddsDistinctUsersToAssignedCurrentStep(t *testing.
 		if response.Status != http.StatusOK {
 			t.Fatalf("assign current approver %s status=%d body=%s", userCode, response.Status, response.Body)
 		}
+	}
+	var persistedUpdatedAt int64
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT updated_at FROM tickets WHERE id=?`, ticketID).Scan(&persistedUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if persistedUpdatedAt <= 1000 {
+		t.Fatalf("admin-added approver persisted updated_at=%d, want newer than 1000", persistedUpdatedAt)
+	}
+	var payload []byte
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT body FROM webhook_events WHERE ticket_id=? AND event_type='ticket_updated' ORDER BY rowid DESC LIMIT 1`, ticketID).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err = json.Unmarshal(payload, &event); err != nil {
+		t.Fatalf("decode ticket_updated payload: %v", err)
+	}
+	ticket := event["data"].(map[string]any)["ticket"].(map[string]any)
+	if ticket["updatedAt"] == nil || ticket["updatedAt"] == "1970-01-01T09:00:01.000+09:00" {
+		t.Fatalf("ticket_updated payload did not carry updated timestamp: %v", ticket["updatedAt"])
+	}
+	addedUserID := env.UserID(t, "ceo")
+	foundAddedUser := false
+	for _, rawStep := range ticket["steps"].([]any) {
+		step := rawStep.(map[string]any)
+		for _, rawAssignee := range step["assignees"].([]any) {
+			assignee := rawAssignee.(map[string]any)
+			if user, ok := assignee["user"].(map[string]any); ok && user["id"] == addedUserID {
+				foundAddedUser = true
+			}
+		}
+	}
+	if !foundAddedUser {
+		t.Fatalf("ticket_updated payload omitted added approver %s; steps=%#v", addedUserID, ticket["steps"])
 	}
 	steps, err = store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
 	if err != nil {

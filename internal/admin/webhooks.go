@@ -378,7 +378,7 @@ func (a *API) createWebhookEvent(w http.ResponseWriter, r *http.Request) {
 		if in.WebhookIDs != nil {
 			ids, x = a.d.Webhooks.EnqueueTo(r.Context(), tx, ev, in.WebhookIDs)
 		} else {
-			x = a.d.Webhooks.Enqueue(r.Context(), tx, []model.WebhookEvent{ev})
+			ids, x = a.d.Webhooks.EnqueueWithIDs(r.Context(), tx, []model.WebhookEvent{ev})
 		}
 		if x != nil {
 			return x

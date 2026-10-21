@@ -107,7 +107,7 @@ func TestExplicitHistoricalTaskStatusKeepsCompletedAssignments(t *testing.T) {
 func TestGeneralMasterFieldRemovalCleansItemInputs(t *testing.T) {
 	env := testutil.New(t)
 	master := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{
-		"code": "pf-api13", "name": "API13 master", "fields": []any{map[string]any{"code": "note", "title": "Note", "fieldType": "text"}},
+		"code": "pf-api13", "name": "API13 master", "fields": []any{map[string]any{"code": "note", "title": "Note", "required": false, "fieldType": "text"}},
 	})
 	if master.Status != http.StatusOK {
 		t.Fatalf("create master: %d %s", master.Status, master.Body)
@@ -144,15 +144,15 @@ func TestAdminResourceMutationLengthsMatchOpenAPILimits(t *testing.T) {
 			t.Errorf("%s status=%d body=%s, want validation_failed", label, response.Status, response.Body)
 		}
 	}
-	master := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"code": "pf-api12", "name": "API12", "fields": []any{map[string]any{"code": "field", "title": "Field", "fieldType": "text"}}})
+	master := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"code": "pf-api12", "name": "API12", "fields": []any{map[string]any{"code": "field", "title": "Field", "required": false, "fieldType": "text"}}})
 	if master.Status != http.StatusOK {
 		t.Fatalf("create master: %d %s", master.Status, master.Body)
 	}
 	assertValidation("create master name", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": long(301)}))
 	assertValidation("create master description", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "description": long(10001)}))
-	assertValidation("create master field title", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "fields": []any{map[string]any{"code": "f", "title": long(301), "fieldType": "text"}}}))
-	assertValidation("create master field code", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "fields": []any{map[string]any{"code": long(101), "title": "F", "fieldType": "text"}}}))
-	assertValidation("create master field description", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "fields": []any{map[string]any{"code": "f", "title": "F", "description": long(10001), "fieldType": "text"}}}))
+	assertValidation("create master field title", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "fields": []any{map[string]any{"code": "f", "title": long(301), "required": false, "fieldType": "text"}}}))
+	assertValidation("create master field code", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "fields": []any{map[string]any{"code": long(101), "title": "F", "required": false, "fieldType": "text"}}}))
+	assertValidation("create master field description", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{"name": "Master", "fields": []any{map[string]any{"code": "f", "title": "F", "description": long(10001), "required": false, "fieldType": "text"}}}))
 	assertValidation("update master name", env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/pf-api12", map[string]any{"name": long(301)}))
 	assertValidation("update master description", env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/pf-api12", map[string]any{"description": long(10001)}))
 	assertValidation("update master code", env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/pf-api12", map[string]any{"code": long(101)}))

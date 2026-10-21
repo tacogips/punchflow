@@ -23,7 +23,7 @@ type pf20MasterFieldBody struct {
 	Title          string   `json:"title"`
 	Description    *string  `json:"description"`
 	FieldType      string   `json:"fieldType"`
-	Required       bool     `json:"required"`
+	Required       *bool    `json:"required"`
 	Visible        *bool    `json:"visible"`
 	InitialDisplay bool     `json:"initialDisplay"`
 	Options        []string `json:"options"`
@@ -544,6 +544,9 @@ func pf20MasterFields(in *[]pf20MasterFieldBody, master string, now time.Time) (
 	}
 	seen := map[string]bool{}
 	for i, f := range *in {
+		if f.Required == nil {
+			return nil, kferr.InvalidParameter("fields.required is required")
+		}
 		f.Code = strings.TrimSpace(f.Code)
 		f.Title = strings.TrimSpace(f.Title)
 		if f.Code == "" || f.Title == "" || seen[f.Code] || !pf20Contains(model.MasterFieldTypes, f.FieldType) {
@@ -568,7 +571,7 @@ func pf20MasterFields(in *[]pf20MasterFieldBody, master string, now time.Time) (
 		if f.Visible != nil {
 			visible = *f.Visible
 		}
-		out = append(out, model.GeneralMasterField{ID: store.NewID(), GeneralMasterID: master, Code: f.Code, Title: f.Title, Description: f.Description, FieldType: f.FieldType, Required: f.Required, FieldOrder: i, Visible: visible, InitialDisplay: f.InitialDisplay, Options: f.Options, CreatedAt: now, UpdatedAt: now})
+		out = append(out, model.GeneralMasterField{ID: store.NewID(), GeneralMasterID: master, Code: f.Code, Title: f.Title, Description: f.Description, FieldType: f.FieldType, Required: *f.Required, FieldOrder: i, Visible: visible, InitialDisplay: f.InitialDisplay, Options: f.Options, CreatedAt: now, UpdatedAt: now})
 	}
 	return out, nil
 }

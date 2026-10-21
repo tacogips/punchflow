@@ -73,11 +73,15 @@ func (a *API) createComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Body  string   `json:"body"`
+		Body  *string  `json:"body"`
 		Files []string `json:"files"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		kferr.Write(w, err)
+		return
+	}
+	if body.Body == nil {
+		kferr.Write(w, kferr.InvalidParameter("body is required"))
 		return
 	}
 	ticketID := r.PathValue("ticketId")
@@ -85,7 +89,7 @@ func (a *API) createComment(w http.ResponseWriter, r *http.Request) {
 	var events []model.WebhookEvent
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		var callErr error
-		commentID, events, callErr = a.d.Engine.AddComment(r.Context(), tx, actorFor(p), ticketID, body.Body, body.Files)
+		commentID, events, callErr = a.d.Engine.AddComment(r.Context(), tx, actorFor(p), ticketID, *body.Body, body.Files)
 		if callErr != nil {
 			return callErr
 		}

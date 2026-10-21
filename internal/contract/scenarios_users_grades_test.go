@@ -43,7 +43,7 @@ func TestContractLiveUsersGrades(t *testing.T) {
 	var userID string
 	run("createUser", func(t *testing.T) {
 		response := env.Do(t, testutil.Admin, http.MethodPost, "/v1/users", map[string]any{
-			"email": "pf26c-new@punchflow.test", "code": "pf26c-new", "firstName": "PF26c", "lastName": "New",
+			"email": "pf26c-new@punchflow.test", "code": "pf26c-new", "firstName": strings.Repeat("A", 127), "lastName": strings.Repeat("B", 127),
 		})
 		pf26cCheck(t, "createUser", response, ops, spec, compiler, schemas)
 		var user map[string]any
@@ -52,6 +52,9 @@ func TestContractLiveUsersGrades(t *testing.T) {
 		}
 		if user["status"] != "invited" {
 			t.Errorf("created user status=%v, want invited", user["status"])
+		}
+		if len([]rune(user["fullName"].(string))) != 255 {
+			t.Errorf("created populated fullName length=%d, want schema maxLength 255", len([]rune(user["fullName"].(string))))
 		}
 		userID, _ = user["id"].(string)
 		if userID == "" {

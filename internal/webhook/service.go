@@ -69,6 +69,13 @@ func New(db *store.DB, b PayloadBuilder, clock kftime.Clock, client *http.Client
 
 // Enqueue fans out non-ping events to enabled registrations matching event and workflow filters.
 func (s *Service) Enqueue(ctx context.Context, q store.Querier, evs []model.WebhookEvent) error {
+	_, err := s.EnqueueWithIDs(ctx, q, evs)
+	return err
+}
+
+// EnqueueWithIDs fans out events like Enqueue and returns each created delivery ID.
+func (s *Service) EnqueueWithIDs(ctx context.Context, q store.Querier, evs []model.WebhookEvent) ([]string, error) {
+	ids := []string{}
 	for _, ev := range evs {
 		if ev.Type == model.WebhookEventPing {
 			continue
@@ -76,28 +83,30 @@ func (s *Service) Enqueue(ctx context.Context, q store.Querier, evs []model.Webh
 		workflowID := ""
 		if ev.TicketID != "" {
 			if err := q.QueryRowContext(ctx, "SELECT workflow_id FROM tickets WHERE id=?", ev.TicketID).Scan(&workflowID); err != nil {
-				return fmt.Errorf("webhook: find ticket workflow: %w", err)
+				return nil, fmt.Errorf("webhook: find ticket workflow: %w", err)
 			}
 		}
 		hooks, err := store.EnabledWebhooks(ctx, q)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		body, err := s.builder.Build(ctx, q, ev)
 		if err != nil {
-			return fmt.Errorf("webhook: build %s payload: %w", ev.Type, err)
+			return nil, fmt.Errorf("webhook: build %s payload: %w", ev.Type, err)
 		}
 		now := s.clock.Now()
 		for _, hook := range hooks {
 			if !pf09Matches(ev.Type, workflowID, hook.EventTypes, hook.WorkflowIDs) {
 				continue
 			}
-			if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: store.NewID(), WebhookID: hook.ID, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: model.WebhookStatusPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
-				return err
+			deliveryID := store.NewID()
+			if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: deliveryID, WebhookID: hook.ID, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: model.WebhookStatusPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
+				return nil, err
 			}
+			ids = append(ids, deliveryID)
 		}
 	}
-	return nil
+	return ids, nil
 }
 
 // EnqueueTo targets explicit webhook IDs and deliberately ignores filters.

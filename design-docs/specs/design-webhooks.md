@@ -83,10 +83,12 @@ Ticket payloads use the shared presenter with an explicit webhook policy. Values
 |---|---|
 | Send test (`POST /admin/api/webhooks/{id}/ping`) | Enqueues a `ping` for that webhook and returns the event row |
 | Resend (`POST /admin/api/webhook-events/{eventId}/resend`) | Sets the row back to `pending`, `next_attempt_at = now`; the next attempt is flagged `manual`, reuses the delivery id and body, recomputes the signature with the current secret (INF-09). Allowed in any status, also for disabled webhooks (the attempt is still made) |
-| Fire event (`POST /admin/api/webhook-events`) | Body `{eventType, ticketId?, commentId?, webhookIds?}`. Builds the payload from the current state of the referenced ticket/comment (ticket required for ticket_* and comment_*, comment required for comment_*), actor = the admin. With `webhookIds` it targets those webhooks ignoring their filters; without it, normal fan-out rules apply. Returns the created event rows |
+| Fire event (`POST /admin/api/webhook-events`) | Body `{eventType, ticketId?, commentId?, webhookIds?}`. Builds the payload from the current state of the referenced ticket/comment (ticket required for ticket_* and comment_*, comment required for comment_*), actor = the admin. With `webhookIds` it targets those webhooks ignoring their filters; without it, normal fan-out rules apply. Returns every created delivery row, including normal fan-out; returns `[]` when no registrations match (INF-M6-09) |
 | List / inspect | `GET /admin/api/webhooks/{id}/events` (paginated like /v1), `GET /admin/api/webhook-events/{eventId}` with its attempts |
 
 Webhook create, and update that changes `url` or `secret`, enqueue a `ping` (Confirmed). Re-enabling a disabled webhook is done with `PATCH {enabled: true}`, which clears `disabled_at` and `first_failure_at`. `first_failure_at` is cleared only by a successful delivery or by this disabled-to-enabled transition; ordinary edits (name, filters, url, secret, or `enabled: true` on an already enabled webhook) preserve it, so edits cannot postpone automatic disabling.
+
+Ticket mutations update the persisted ticket `updatedAt` before queueing `ticket_updated`, including when an administrator adds an approver to an active step (INF-M6-07). Receivers can use the timestamp to ignore older out-of-order payloads.
 
 Each dispatcher snapshot carries `state_generation`. A disabled-to-enabled transition increments the generation; an in-flight result may update failure state only if its snapshot still matches the stored generation. The attempt and event history is still recorded for a stale request, while its failure clock or auto-disable decision cannot overwrite the re-enabled state (WH-11; regression-tested with a blocked receiver).
 

@@ -194,7 +194,10 @@ func TestTasksPendingAndAssignedToCurrentUser(t *testing.T) {
 			t.Fatalf("set assignment time: %v", err)
 		}
 	}
-	sorted := env.Do(t, testutil.Manager, http.MethodGet, "/v1/tickets/tasks?status=in_progress&assignedToMeAtStart=1970-01-01T00:00:00.000Z&assignedToMeAtEnd=1970-01-01T00:00:03.000Z&sortBy=assignedToMeAt-asc", nil)
+	if _, err := env.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,pending,assigned_at,created_at,updated_at) SELECT ?,ticket_step_id,ticket_id,user_id,1,0,500,created_at,updated_at FROM ticket_assignees WHERE ticket_id=? AND user_id=? LIMIT 1`, store.NewID(), firstCreated, managerID); err != nil {
+		t.Fatalf("insert earlier completed assignment: %v", err)
+	}
+	sorted := env.Do(t, testutil.Manager, http.MethodGet, "/v1/tickets/tasks?assignedToMeAtStart=1970-01-01T00:00:00.000Z&assignedToMeAtEnd=1970-01-01T00:00:03.000Z&sortBy=assignedToMeAt-asc", nil)
 	if sorted.Status != http.StatusOK {
 		t.Fatalf("sort tasks by assignment time: %d %s", sorted.Status, sorted.Body)
 	}

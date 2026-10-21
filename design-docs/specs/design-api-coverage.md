@@ -99,10 +99,10 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 |---|---|---|---|---|---|---|
 | 1 | getCurrentUser | GET | /v1/user | any | users.go | Returns the effective user (SAT: caller) |
 | 2 | listUsers | GET | /v1/users | user | users.go | Filters per spec; `lastUsedOn` included |
-| 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed`; `customFields` only for defined codes (`user-custom-fields.json`), else 422 (INF-81); `email` must be an address only (`Name <a@b>`, comments, quoted parts and surrounding spaces are `400 invalid_parameter`) so the response satisfies `format: email` |
+| 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed`; `customFields` only for defined codes (`user-custom-fields.json`), else 422 (INF-81); `email` must be an address only (`Name <a@b>`, comments, quoted parts and surrounding spaces are `400 invalid_parameter`) so the response satisfies `format: email`; combined `fullName` is limited to 255 characters (INF-M6-05) |
 | 4 | getUser | GET | /v1/users/{userId} | user | users.go | id or code |
 | 5 | deleteUser | DELETE | /v1/users/{userId} | user | users.go | Soft delete -> `deactivated`, returns UserDetail; archives the user's open tickets (`ticket_archived`) and removes unfinished assignments without skipping or completing affected approval steps (INF-79, INF-LIFE-API-06) |
-| 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `email` is address-only as in createUser; `domain_not_allowed`; `customFields` validated against the definitions (INF-81) |
+| 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `email` is address-only as in createUser; `domain_not_allowed`; `customFields` validated against the definitions (INF-81); resulting combined `fullName` is limited to 255 characters (INF-M6-05) |
 | 7 | lookupUserByEmail | GET | /v1/users/lookupByEmail | user | users.go | Exact, case-insensitive match |
 | 8 | reinviteUser | POST | /v1/users/{userId}/reinvite | user | users.go | `deactivated`/`invited` -> `invited` with a new invitation; else INF-24 |
 | 9 | suspendUser | POST | /v1/users/{userId}/suspend | user | users.go | `activated` -> `suspended`; else INF-24 |
@@ -124,19 +124,19 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 25 | updateProxyApprover | PATCH | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | De-duplicates `workflowIds`; `null` clears `startsOn`/`endsOn` (INF-82) |
 | 26 | deleteProxyApprover | DELETE | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | |
 | 27 | listOrganizationCharts | GET | /v1/organizationCharts | team | orgcharts.go | Without teams |
-| 28 | createOrganizationChart | POST | /v1/organizationCharts | team | orgcharts.go | Inactive on create |
+| 28 | createOrganizationChart | POST | /v1/organizationCharts | team | orgcharts.go | Inactive on create; missing required `name` -> `400 invalid_parameter` (INF-M6-04) |
 | 29 | deleteOrganizationChart | DELETE | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | Active chart -> 422 `validation_failed`; synchronous (INF-23) |
 | 30 | getOrganizationChart | GET | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | |
-| 31 | updateOrganizationChart | PATCH | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | |
+| 31 | updateOrganizationChart | PATCH | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | Missing required `name` -> `400 invalid_parameter` (INF-M6-04) |
 | 32 | getCurrentOrganizationChart | GET | /v1/organizationChart | team | orgcharts.go | |
 | 33 | activateOrganizationChart | POST | /v1/organizationCharts/{organizationChartId}/activate | team | orgcharts.go | Optional `dueOn` (JST date) schedules the activation and sets `activationPlan`; due plans are applied lazily on the next authenticated request (INF-80); otherwise synchronous (INF-23); ticket-level team viewers remap by team code (INF-SHR-04) |
 | 34 | listTeams | GET | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | `parentId` filter, roots when absent |
-| 35 | createTeam | POST | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | |
+| 35 | createTeam | POST | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | Missing required `name` -> `400 invalid_parameter` (INF-M6-04) |
 | 36 | getTeam | GET | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | id or code |
-| 37 | updateTeam | PATCH | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | Parent cycle -> 422 |
+| 37 | updateTeam | PATCH | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | Partial update; parent cycle -> 422 |
 | 38 | deleteTeam | DELETE | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | Reparents direct child teams to the deleted team's parent and archives its unfinished authored tickets with lifecycle events/timestamps; completed snapshots remain (INF-LIFE-API-05) |
 | 39 | listTeamMembers | GET | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | MemberUser without `userType` |
-| 40 | createTeamMembers | POST | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | Max 10; team without a leader afterwards -> 422 |
+| 40 | createTeamMembers | POST | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | Invited users may be added; Max 10; team without a leader afterwards -> 422 (INF-M6-01) |
 | 41 | deleteTeamMembers | DELETE | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships | team | teams.go | JSON body on DELETE; max 10; leaderless remainder -> 422 |
 | 42 | updateTeamMember | PATCH | /v1/organizationCharts/{organizationChartId}/teams/{teamId}/memberships/{userId} | team | teams.go | Leaderless result -> 422 |
 | 43 | listCategories | GET | /v1/categories | any | categories.go | |
@@ -154,7 +154,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 55 | getWorkflow | GET | /v1/workflows/{workflowId} | any | definitions.go | WorkflowDetail; integration fields null (DIV-03) |
 | 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; TicketWithStep without inputs/route; INF-02 |
 | 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21); `viewers[].userId` and `watcherUserId` (INF-NES-16) |
-| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-LIFE-WH13, INF-NUM-02; absent `pending` leaves results unchanged, `pending=true` filters held assignments, and `pending=false` filters non-held assignments; filtering precedes pagination and `Total`; `subStatusIds[]` filters tasks as it does tickets; explicit statuses retain historical assignments (API-03) |
+| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-LIFE-WH13, INF-NUM-02; absent `pending` leaves results unchanged, `pending=true` filters held assignments, and `pending=false` filters non-held assignments; filtering precedes pagination and `Total`; `subStatusIds[]` filters tasks as it does tickets; explicit statuses retain historical assignments (API-03); `assignedToMeAt` sorting uses the current matching assignment only (INF-M6-06) |
 | 59 | getTicket | GET | /v1/tickets/{ticketId} | visible | tickets.go | TicketDetail incl. `actualApprover` |
 | 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, authorized form/detail fields) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); for in-progress approvers, only `inputs` and `slipItems` are applied and other parameters are ignored (INF-F6-07); `slipItems` replace all rows for applicants and preserve omitted sections for approvers (INF-75, INF-F5-01); `viewers[]` replaces the user viewers and `watcherUserId` subscribes a watcher for applicant updates (INF-NES-16) |
 | 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; per-section differential detail rows (INF-75, INF-F5-01); each submitted row requires every editable cell for applicants and approvers, while omitted inaccessible cells are preserved and explicit null clears (INF-F6-02); unchanged historical references survive unrelated patches (INF-F5-06); `ticket_updated` |
@@ -164,13 +164,13 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 65 | withdrawTicket | POST | /v1/tickets/{ticketId}/withdraw | author / proxy client | ticket_actions.go | Engine `Withdraw`; `ticket_withdrawn`; INF-25 |
 | 66 | archiveTicket | POST | /v1/tickets/{ticketId}/archive | author (draft/rejected) or ticket_write | ticket_actions.go | Engine `Archive`; `ticket_archived`; INF-24 |
 | 67 | listTicketLinks | GET | /v1/tickets/{ticketId}/links | visible | ticket_viewers.go | Links come from `ticket` fields with `autoLink`, maintained as reciprocal links on every edit (INF-78) |
-| 68 | listViewers | GET | /v1/tickets/{ticketId}/viewers | visible | ticket_viewers.go | Default order team name, user email |
+| 68 | listViewers | GET | /v1/tickets/{ticketId}/viewers | visible | ticket_viewers.go | Default order is team viewers by team name followed by user viewers by email (INF-M6-02) |
 | 69 | createViewer | POST | /v1/tickets/{ticketId}/viewers | visible; workflow `allowEditingOfViewers` or ticket_write | ticket_viewers.go | Exactly one of userId/teamId -> else 400 |
 | 70 | deleteViewer | DELETE | /v1/tickets/{ticketId}/viewers/{viewerId} | same as #69 | ticket_viewers.go | |
 | 71 | uploadFile | POST | /v1/files | any | files.go | multipart field `file`; INF-26, INF-27, INF-39 |
 | 72 | getFile | GET | /v1/files/{signedId} | visible ticket of the attachment | files.go | INF-26 |
 | 73 | listGeneralMasters | GET | /v1/generalMasters | master_read or master | general_masters.go | |
-| 74 | createGeneralMaster | POST | /v1/generalMasters | master | general_masters.go | Fields (custom fields) included |
+| 74 | createGeneralMaster | POST | /v1/generalMasters | master | general_masters.go | Fields (custom fields) included; each field must supply `required` (INF-M6-03) |
 | 75 | getGeneralMaster | GET | /v1/generalMasters/{generalMasterId} | master_read or master | general_masters.go | id or code |
 | 76 | updateGeneralMaster | PATCH | /v1/generalMasters/{generalMasterId} | master | general_masters.go | `fields` merge by `code` (INF-82) |
 | 77 | deleteGeneralMaster | DELETE | /v1/generalMasters/{generalMasterId} | master | general_masters.go | Deletes items |
@@ -188,7 +188,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 89 | listRoleMembers | GET | /v1/roles/{roleId}/memberships | role | roles.go | User without `customFields` |
 | 90 | deleteRoleMember | DELETE | /v1/roles/{roleId}/memberships/{userId} | role | roles.go | Removing the last super admin -> 422; removing self (non super admin) -> 403 (INF-43) |
 | 91 | listComments | GET | /v1/tickets/{ticketId}/comments | visible | comments.go | INF-30 |
-| 92 | createComment | POST | /v1/tickets/{ticketId}/comments | visible | comments.go | `commentingEnabled: false` -> `422 validation_failed` with `errors.base` (engine `AddComment` returns it directly); mentions `<@uuid>`; up to 10 `files`; `comment_created` |
+| 92 | createComment | POST | /v1/tickets/{ticketId}/comments | visible | comments.go | Required non-null `body` even when files are supplied; explicit empty string is a string value (INF-M6-08); `commentingEnabled: false` -> `422 validation_failed` with `errors.base`; mentions `<@uuid>`; up to 10 `files`; `comment_created` |
 | 93 | getComment | GET | /v1/tickets/{ticketId}/comments/{commentId} | visible | comments.go | |
 | 94 | updateComment | PATCH | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Attachments unchanged; `comment_updated` |
 | 95 | deleteComment | DELETE | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Soft delete; `comment_updated` |

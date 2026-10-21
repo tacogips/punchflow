@@ -125,7 +125,11 @@ func (a *API) createTeam(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
-	if b.Name == nil || *b.Name == "" {
+	if b.Name == nil {
+		kferr.Write(w, kferr.InvalidParameter("name is required"))
+		return
+	}
+	if *b.Name == "" {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"is required"}}))
 		return
 	}
@@ -538,9 +542,9 @@ func (a *API) createTeamMembers(w http.ResponseWriter, r *http.Request) {
 			if len(grades) == 0 {
 				return kferr.ValidationFailed(map[string][]string{"gradeIds": {"must contain at least one grade"}})
 			}
-			active, er := store.TeamActiveUsers(r.Context(), tx, []string{uid})
-			if er != nil || !active {
-				return kferr.ValidationFailed(map[string][]string{"users": {"must be active users"}})
+			user, er := store.GetUser(r.Context(), tx, uid)
+			if er != nil || (user.Status != model.UserStatusInvited && user.Status != model.UserStatusActive) {
+				return kferr.ValidationFailed(map[string][]string{"users": {"must be invited or active users"}})
 			}
 			if er = store.TeamMembershipInsert(r.Context(), tx, model.TeamMembership{ID: store.NewID(), TeamID: id, UserID: uid, Leader: *u.Leader, GradeIDs: grades, CreatedAt: now, UpdatedAt: now}); er != nil {
 				return er

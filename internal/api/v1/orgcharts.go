@@ -15,7 +15,7 @@ import (
 )
 
 type pf19ChartBody struct {
-	Name string `json:"name"`
+	Name *string `json:"name"`
 }
 
 func (a *API) listOrganizationCharts(w http.ResponseWriter, r *http.Request) {
@@ -60,13 +60,17 @@ func (a *API) createOrganizationChart(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	if b.Name == "" || len(b.Name) > 300 {
+	if b.Name == nil {
+		kferr.Write(w, kferr.InvalidParameter("name is required"))
+		return
+	}
+	if *b.Name == "" || len(*b.Name) > 300 {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"is required and must be at most 300 characters"}}))
 		return
 	}
 	p, _ := auth.FromContext(r.Context())
 	now := time.Now()
-	x := model.OrganizationChart{ID: store.NewID(), Name: b.Name, CreatedAt: now, UpdatedAt: now}
+	x := model.OrganizationChart{ID: store.NewID(), Name: *b.Name, CreatedAt: now, UpdatedAt: now}
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		if e := store.OrgChartInsert(r.Context(), tx, x); e != nil {
 			return e
@@ -137,13 +141,17 @@ func (a *API) updateOrganizationChart(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	if b.Name == "" || len(b.Name) > 300 {
+	if b.Name == nil {
+		kferr.Write(w, kferr.InvalidParameter("name is required"))
+		return
+	}
+	if *b.Name == "" || len(*b.Name) > 300 {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"is required and must be at most 300 characters"}}))
 		return
 	}
 	p, _ := auth.FromContext(r.Context())
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
-		if e := store.OrgChartUpdate(r.Context(), tx, id, b.Name, time.Now()); e != nil {
+		if e := store.OrgChartUpdate(r.Context(), tx, id, *b.Name, time.Now()); e != nil {
 			return e
 		}
 		return a.pf19ChartAudit(r, tx, p.User.ID, "organizationChart.update", id)

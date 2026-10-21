@@ -190,11 +190,32 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 			order = column + direction + ", t.id" + direction
 		} else if filter.SortBy == "assignedToMeAt" {
 			assigneeWhere, values := taskAssigneeWhere("ta")
+			join := ""
+			if len(filter.Statuses) == 0 {
+				join = " JOIN ticket_steps ts ON ts.id=ta.ticket_step_id"
+				assigneeWhere += " AND ta.completed=0 AND ts.status=?"
+				values = append(values, model.StepStatusInProgress)
+			}
+			if filter.Pending != nil {
+				if *filter.Pending {
+					assigneeWhere += " AND ta.pending=1"
+				} else {
+					assigneeWhere += " AND ta.pending=0"
+				}
+			}
+			if filter.AssignedToMeAtStart != nil {
+				assigneeWhere += " AND ta.assigned_at>=?"
+				values = append(values, Millis(*filter.AssignedToMeAtStart))
+			}
+			if filter.AssignedToMeAtEnd != nil {
+				assigneeWhere += " AND ta.assigned_at<=?"
+				values = append(values, Millis(*filter.AssignedToMeAtEnd))
+			}
 			direction := " ASC"
 			if filter.Desc {
 				direction = " DESC"
 			}
-			order = "(SELECT min(ta.assigned_at) FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND " + assigneeWhere + ")" + direction + ", t.id" + direction
+			order = "(SELECT min(ta.assigned_at) FROM ticket_assignees ta" + join + " WHERE ta.ticket_id=t.id AND " + assigneeWhere + ")" + direction + ", t.id" + direction
 			orderArgs = append(orderArgs, values...)
 		}
 	}
@@ -279,7 +300,7 @@ func TicketQueryViewers(ctx context.Context, q Querier, ticketID string, offset,
 	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM ticket_viewers WHERE ticket_id=?`, ticketID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("store: count ticket viewers: %w", err)
 	}
-	order := `coalesce(tm.name, u.email), tv.id`
+	order := `CASE WHEN tv.team_id IS NOT NULL THEN 0 ELSE 1 END, tm.name, u.email, tv.id`
 	if byCreatedAt {
 		order = `tv.rowid ASC`
 		if desc {

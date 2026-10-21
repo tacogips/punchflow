@@ -71,6 +71,10 @@ func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Acto
 	if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
 		return nil, err
 	}
+	t.UpdatedAt = now
+	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
+		return nil, err
+	}
 	return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, ticketID, a.UserID)}, nil
 }
 

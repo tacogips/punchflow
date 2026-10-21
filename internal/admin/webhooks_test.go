@@ -116,12 +116,10 @@ func TestWebhookFireEventTypesAndNegativeEvents(t *testing.T) {
 			if got.Status != http.StatusOK {
 				t.Fatalf("fire %s: %d %s", event, got.Status, got.Body)
 			}
-			if event == model.WebhookEventPing {
-				var fired []map[string]any
-				got.JSON(t, &fired)
-				if len(fired) != 1 || fired[0]["eventType"] != event {
-					t.Fatalf("ping fire response: %s", got.Body)
-				}
+			var fired []map[string]any
+			got.JSON(t, &fired)
+			if len(fired) != 1 || fired[0]["eventType"] != event || fired[0]["id"] == nil {
+				t.Fatalf("fire response must return created delivery ID for %s: %s", event, got.Body)
 			}
 			after := env.Do(t, testutil.Integration, http.MethodGet, "/admin/api/webhooks/"+webhookID+"/events?perPage=100", nil)
 			if after.Status != http.StatusOK {
@@ -147,6 +145,9 @@ func TestWebhookFireEventTypesAndNegativeEvents(t *testing.T) {
 			}
 			if matching == nil || matching["eventType"] != event {
 				t.Fatalf("fire %s created wrong or no event row: %s", event, after.Body)
+			}
+			if fired[0]["id"] != matching["id"] {
+				t.Fatalf("fire %s response ID=%v, persisted ID=%v", event, fired[0]["id"], matching["id"])
 			}
 			if event != model.WebhookEventPing && matching["ticketId"] != ticketID {
 				t.Fatalf("fire %s ticketId=%v, want %s", event, matching["ticketId"], ticketID)

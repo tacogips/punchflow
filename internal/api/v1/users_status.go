@@ -90,6 +90,10 @@ func (a *API) createUser(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("Missing required user fields"))
 		return
 	}
+	if len([]rune(body.FirstName))+1+len([]rune(body.LastName)) > 255 {
+		kferr.Write(w, kferr.InvalidParameter("fullName must be at most 255 characters"))
+		return
+	}
 	if !pf08AddressOnlyEmail(body.Email) {
 		kferr.Write(w, kferr.InvalidParameter("Invalid email"))
 		return
@@ -361,6 +365,22 @@ func (a *API) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if patch.Code != nil && len([]rune(*patch.Code)) > 100 || patch.FirstName != nil && len([]rune(*patch.FirstName)) > 255 || patch.LastName != nil && len([]rune(*patch.LastName)) > 255 || patch.EmployeeID != nil && *patch.EmployeeID != nil && len([]rune(**patch.EmployeeID)) > 30 {
 		kferr.Write(w, kferr.InvalidParameter("Invalid user fields"))
+		return
+	}
+	currentUser, err := store.GetUser(r.Context(), a.d.DB.Q(), id)
+	if err != nil {
+		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	firstName, lastName := currentUser.FirstName, currentUser.LastName
+	if patch.FirstName != nil {
+		firstName = *patch.FirstName
+	}
+	if patch.LastName != nil {
+		lastName = *patch.LastName
+	}
+	if len([]rune(firstName))+1+len([]rune(lastName)) > 255 {
+		kferr.Write(w, kferr.InvalidParameter("fullName must be at most 255 characters"))
 		return
 	}
 	p, _ := auth.FromContext(r.Context())
