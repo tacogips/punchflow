@@ -89,6 +89,11 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		t.ProxyClientUserID = proxy
 		hasUpdate = true
 	}
+	if !approver && t.ProxyClientUserID != nil {
+		if err = pf14cValidateProxyClient(ctx, tx, a.UserID, *t.ProxyClientUserID, t.WorkflowID, kftime.FormatDate(now)); err != nil {
+			return nil, err
+		}
+	}
 	if in.Inputs != nil || in.SlipItems != nil {
 		if err = e.pf14cApplyFormEdit(ctx, tx, a, &t, def, in, partial, approver, now); err != nil {
 			return nil, err

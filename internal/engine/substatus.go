@@ -26,6 +26,16 @@ const (
 // the workflow numbers tickets at sub_status_attached. The caller persists the
 // ticket row afterwards, which also stores a newly allocated number.
 func (e *Engine) pf15SyncSubStatus(ctx context.Context, tx *store.Tx, t *model.Ticket, now time.Time) error {
+	switch t.Status {
+	case model.TicketStatusArchived:
+		t.ClosedAt = &now
+	case model.TicketStatusCompleted:
+		if t.ClosedAt == nil {
+			t.ClosedAt = &now
+		}
+	default:
+		t.ClosedAt = nil
+	}
 	current, err := store.TicketSubStatusID(ctx, tx, t.ID)
 	if err != nil {
 		return err
@@ -40,6 +50,9 @@ func (e *Engine) pf15SyncSubStatus(ctx context.Context, tx *store.Tx, t *model.T
 	case want == nil && current == nil:
 		return nil
 	case want == nil:
+		if t.Status == model.TicketStatusInProgress {
+			return nil
+		}
 		return store.SetTicketSubStatus(ctx, tx, t.ID, nil)
 	case current != nil && *current == want.ID:
 		return nil

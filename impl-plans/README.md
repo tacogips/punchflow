@@ -79,6 +79,7 @@ All plans are completed and archived in session 467. `active/` holds only `punch
 | [pf-26e-contract-masters](./completed/pf-26e-contract-masters.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
 | [pf-26f-contract-proxies-roles](./completed/pf-26f-contract-proxies-roles.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
 | [pf-27-finalize](./completed/pf-27-finalize.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
+| [engine-lifecycle-review-fixes](./completed/engine-lifecycle-review-fixes.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-webhooks.md` |
 
 ## Phase Dependencies (for impl-exec-auto)
 

@@ -112,8 +112,9 @@ func (e *Engine) Controls(ctx context.Context, q store.Querier, a Actor, id stri
 }
 
 // pf15CancelTarget finds the step order whose approval the actor may cancel.
-// Rule (INF-62): the workflow enables approvalCancellable, the ticket is in
-// progress, the actor approved a step, and no step after it has been acted on.
+// Rule (INF-62): the actor is assigned to a completed step (directly or through
+// an active proxy relationship), and the ticket is in that group or one group
+// later; approvals in the immediately following group prohibit cancellation.
 func (e *Engine) pf15CancelTarget(ctx context.Context, q store.Querier, a Actor, t model.Ticket, def model.WorkflowDef, steps []pf15Step) (int, error) {
 	if t.Status != model.TicketStatusInProgress {
 		return 0, kferr.InvalidState("Ticket is not in progress")
@@ -124,7 +125,14 @@ func (e *Engine) pf15CancelTarget(ctx context.Context, q store.Querier, a Actor,
 	target := -1
 	for _, step := range steps {
 		for _, as := range step.Assignees {
-			if as.Completed && as.ActualApproverID != nil && *as.ActualApproverID == a.UserID && step.StepOrder > target {
+			if !as.Completed {
+				continue
+			}
+			acts, err := e.pf15ActsFor(ctx, q, a, t.WorkflowID, as.UserID)
+			if err != nil {
+				return 0, err
+			}
+			if acts && step.StepOrder <= t.CurrentStep && t.CurrentStep-step.StepOrder <= 1 && step.StepOrder > target {
 				target = step.StepOrder
 			}
 		}
@@ -133,7 +141,7 @@ func (e *Engine) pf15CancelTarget(ctx context.Context, q store.Querier, a Actor,
 		return 0, kferr.InvalidState("The caller has no approval to cancel")
 	}
 	for _, step := range steps {
-		if step.StepOrder <= target {
+		if step.StepOrder != target+1 {
 			continue
 		}
 		for _, as := range step.Assignees {
@@ -170,7 +178,14 @@ func (e *Engine) CancelApproval(ctx context.Context, tx *store.Tx, a Actor, id s
 		case step.StepOrder == target:
 			reopened := false
 			for _, as := range step.Assignees {
-				if as.Completed && as.ActualApproverID != nil && *as.ActualApproverID == a.UserID {
+				if as.Completed {
+					acts, actErr := e.pf15ActsFor(ctx, tx, a, t.WorkflowID, as.UserID)
+					if actErr != nil {
+						return nil, actErr
+					}
+					if !acts {
+						continue
+					}
 					as.Completed, as.CompletedAt, as.ActualApproverID, as.UpdatedAt = false, nil, nil, now
 					if err = store.EngUpdateAssignee(ctx, tx, as); err != nil {
 						return nil, err
@@ -209,9 +224,8 @@ func (e *Engine) CancelApproval(ctx context.Context, tx *store.Tx, a Actor, id s
 	return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, id, a.UserID)}, nil
 }
 
-// pf15RaiseTargets lists, in ascending order, the later step orders the actor
-// may raise the ticket to: pending steps that allow raising, are assigned to
-// the actor (or a user the actor is proxy for) and require an action.
+// pf15RaiseTargets lists later groups that authorize raising: the actor is an
+// assignee (or active proxy) and at least one route step permits raising.
 func (e *Engine) pf15RaiseTargets(ctx context.Context, q store.Querier, a Actor, t model.Ticket, steps []pf15Step) ([]int, error) {
 	if t.Status != model.TicketStatusInProgress || t.RouteID == nil {
 		return []int{}, nil
@@ -230,7 +244,7 @@ func (e *Engine) pf15RaiseTargets(ctx context.Context, q store.Querier, a Actor,
 	seen := map[int]bool{}
 	targets := []int{}
 	for _, step := range steps {
-		if step.StepOrder <= t.CurrentStep || step.Status != model.StepStatusPending || step.ActionType == model.ActionTypeNone || step.RouteStepCode == nil || !allow[*step.RouteStepCode] || seen[step.StepOrder] {
+		if step.StepOrder <= t.CurrentStep || step.Status != model.StepStatusPending || step.RouteStepCode == nil || !allow[*step.RouteStepCode] || seen[step.StepOrder] {
 			continue
 		}
 		for _, as := range step.Assignees {
@@ -274,9 +288,8 @@ func (e *Engine) Raise(ctx context.Context, tx *store.Tx, a Actor, id string, to
 	if len(targets) == 0 {
 		return nil, kferr.InvalidState("The caller cannot raise this ticket")
 	}
-	target := targets[0]
 	if to != nil {
-		target = *to
+		target := *to
 		found := false
 		for _, candidate := range targets {
 			found = found || candidate == target
@@ -287,7 +300,7 @@ func (e *Engine) Raise(ctx context.Context, tx *store.Tx, a Actor, id string, to
 	}
 	now := e.clock.Now()
 	for _, step := range steps {
-		if step.StepOrder < t.CurrentStep || step.StepOrder >= target || pf15StepDone(step.TicketStep) {
+		if step.StepOrder != t.CurrentStep || pf15StepDone(step.TicketStep) {
 			continue
 		}
 		step.Status, step.UpdatedAt = model.StepStatusRaised, now
@@ -295,10 +308,10 @@ func (e *Engine) Raise(ctx context.Context, tx *store.Tx, a Actor, id string, to
 			return nil, err
 		}
 	}
-	// The shared advancement routine moves to the nearest unfinished group,
-	// which is now the target, and applies its sub-status.
+	// The authorization target may be later, but one operation only raises the
+	// current group and activates the next unfinished group.
 	if err = e.pf14Advance(ctx, tx, &t, now); err != nil {
 		return nil, err
 	}
-	return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, id, a.UserID)}, nil
+	return []model.WebhookEvent{}, nil
 }

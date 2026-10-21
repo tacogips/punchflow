@@ -262,11 +262,32 @@ func (n *normalizer) checkRequiredCells(rows []model.TicketSlipItem) {
 		}
 		for _, f := range section.SlipFields {
 			hidden := f.Hidden != nil && *f.Hidden
-			if !f.Required || f.Approver || hidden || f.FieldType == "calculation" {
+			if hidden || f.FieldType == "calculation" {
 				continue
 			}
-			if v, _ := slipCell(row, f); pf14Empty(v) {
+			v, exists := slipCell(row, f)
+			if f.FieldType == "radio_button" && pf14Empty(v) {
+				n.fail(f.Code, "must be selected")
+				continue
+			}
+			if f.Required && !f.Approver && pf14Empty(v) {
 				n.fail(f.Code, "is required")
+				continue
+			}
+			if exists {
+				field := model.FormField{
+					Code: f.Code, FieldType: f.FieldType, Options: f.Options,
+					RegexpFormat: f.RegexpFormat, MinValue: f.MinValue, MaxValue: f.MaxValue,
+					MinLength: f.MinLength, MaxLength: f.MaxLength, DecimalDigit: f.DecimalDigit,
+					AllowedExtensions: f.AllowedExtensions, AllowedTicketStatus: f.AllowedTicketStatus,
+				}
+				if err := pf14ValidateValue(field, v); err != nil {
+					n.fail(f.Code, err.Error())
+					continue
+				}
+				if err := pf14cValidateFormValue(n.ctx, n.q, field, v); err != nil {
+					n.fail(f.Code, err.Error())
+				}
 			}
 		}
 	}

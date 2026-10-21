@@ -2,6 +2,7 @@ package engine
 
 import (
 	"testing"
+	"time"
 
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
@@ -73,6 +74,9 @@ func TestArchive(t *testing.T) {
 	if got := e.ticket(draftID).Status; got != model.TicketStatusArchived {
 		t.Fatalf("draft archive status=%s, want %s", got, model.TicketStatusArchived)
 	}
+	if ticket := e.ticket(draftID); ticket.ClosedAt == nil || ticket.ArchivedAt == nil || !ticket.ClosedAt.Equal(*ticket.ArchivedAt) {
+		t.Fatalf("archive timestamps archivedAt=%v closedAt=%v, want same time", ticket.ArchivedAt, ticket.ClosedAt)
+	}
 	if len(events) != 1 || events[0].Type != model.WebhookEventTicketArchived {
 		t.Fatalf("draft archive events=%+v", events)
 	}
@@ -92,12 +96,16 @@ func TestArchive(t *testing.T) {
 		})
 	}
 	writer := Actor{UserID: e.user("hr-manager"), Permissions: map[string]bool{model.PermissionTicketRead: true, model.PermissionTicketWrite: true}}
+	e.clock.Set(e.ticket(completedID).CompletedAt.Add(time.Hour))
 	e.apply(func(tx *store.Tx) error {
 		_, err := e.engine.Archive(e.ctx, tx, writer, completedID)
 		return err
 	})
 	if got := e.ticket(completedID).Status; got != model.TicketStatusArchived {
 		t.Fatalf("completed archive status=%s, want %s", got, model.TicketStatusArchived)
+	}
+	if ticket := e.ticket(completedID); ticket.ClosedAt == nil || ticket.ArchivedAt == nil || !ticket.ClosedAt.Equal(*ticket.ArchivedAt) || ticket.ClosedAt.Equal(*ticket.CompletedAt) {
+		t.Fatalf("completed archive timestamps completedAt=%v archivedAt=%v closedAt=%v, want closedAt at archive", ticket.CompletedAt, ticket.ArchivedAt, ticket.ClosedAt)
 	}
 	err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
 		_, err := e.engine.Archive(e.ctx, tx, writer, completedID)

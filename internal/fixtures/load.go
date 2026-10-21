@@ -104,7 +104,10 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 	if updatedAt.IsZero() {
 		updatedAt = now
 	}
-	if err = insert("tenant", "INSERT INTO tenant(id,public_id,name,plan,mode,ip_allowlist,allowed_email_domains,self_service_proxy,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", t.ID, t.PublicID, t.Name, t.Plan, t.Mode, allow, domains, t.SelfServiceProxy, store.Millis(createdAt), store.Millis(updatedAt)); err != nil {
+	if t.FiscalYearStartMonth == 0 {
+		t.FiscalYearStartMonth = 4
+	}
+	if err = insert("tenant", "INSERT INTO tenant(id,public_id,name,plan,mode,ip_allowlist,allowed_email_domains,self_service_proxy,fiscal_year_start_month,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", t.ID, t.PublicID, t.Name, t.Plan, t.Mode, allow, domains, t.SelfServiceProxy, t.FiscalYearStartMonth, store.Millis(createdAt), store.Millis(updatedAt)); err != nil {
 		return counts, err
 	}
 	for _, g := range s.Grades {

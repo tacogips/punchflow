@@ -25,8 +25,8 @@ func TestSubStatusFollowsRoute(t *testing.T) {
 		t.Fatalf("sub-status at finance step=%q, want finance-check", got)
 	}
 	compatApprove(t, e, "finance-manager", id)
-	if got := pf15SubStatusCode(t, e, id); got != "" {
-		t.Fatalf("sub-status at a step without one=%q, want none", got)
+	if got := pf15SubStatusCode(t, e, id); got != "finance-check" {
+		t.Fatalf("sub-status at a step without one=%q, want retained finance-check", got)
 	}
 	compatApprove(t, e, "ceo", id)
 	if got := e.ticket(id).Status; got != model.TicketStatusCompleted {

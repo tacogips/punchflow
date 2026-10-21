@@ -240,6 +240,43 @@ func TestProxyApplicantCreate(t *testing.T) {
 			t.Fatalf("proxy client=%v want %s", got, client)
 		}
 	})
+	for _, status := range []string{"suspended", "deactivated"} {
+		status := status
+		t.Run("saved "+status+" client is revalidated and explicit null clears it", func(t *testing.T) {
+			e := pf14Setup(t)
+			client := e.user("ceo")
+			id, err := pf14cCreate(t, e, "expense-claim", "assistant", map[string]any{"amount": "250", "purpose": "travel"}, &client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.apply(func(tx *store.Tx) error {
+				_, err := tx.ExecContext(e.ctx, `UPDATE users SET status=? WHERE id=?`, status, client)
+				return err
+			})
+			err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
+				_, err := e.engine.Update(e.ctx, tx, e.actor("assistant"), id, UpdateInput{Title: compatStr("draft save")})
+				return err
+			})
+			assertPF14FieldError(t, err, "validation_failed", "proxyClientUserId")
+			submit := model.TicketStatusInProgress
+			err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
+				_, err := e.engine.Update(e.ctx, tx, e.actor("assistant"), id, UpdateInput{Status: &submit})
+				return err
+			})
+			assertPF14FieldError(t, err, "validation_failed", "proxyClientUserId")
+			clear := json.RawMessage("null")
+			err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
+				_, err := e.engine.Update(e.ctx, tx, e.actor("assistant"), id, UpdateInput{ProxyClientUserID: clear})
+				return err
+			})
+			if err != nil {
+				t.Fatalf("explicit null should clear proxy client: %v", err)
+			}
+			if got := e.ticket(id).ProxyClientUserID; got != nil {
+				t.Fatalf("proxy client after explicit null=%v, want nil", got)
+			}
+		})
+	}
 }
 
 func TestUpdateFormMerge(t *testing.T) {

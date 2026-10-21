@@ -149,7 +149,12 @@ func TestCancelApprovalEndpoint(t *testing.T) {
 
 func TestRaiseEndpoint(t *testing.T) {
 	env := testutil.New(t)
+	env.RegisterReceiverWebhook(t, "secret")
 	id := createTicket(t, env)
+	var outboxBefore int
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM webhook_events WHERE ticket_id=?`, id).Scan(&outboxBefore); err != nil {
+		t.Fatal(err)
+	}
 	testutil.AssertError(t, env.Do(t, testutil.Manager, http.MethodPost, "/ui/api/tickets/"+id+"/raise", nil), http.StatusUnprocessableEntity, "invalid_state")
 	response := env.Do(t, testutil.Finance, http.MethodPost, "/ui/api/tickets/"+id+"/raise", nil)
 	if response.Status != http.StatusOK {
@@ -170,6 +175,20 @@ func TestRaiseEndpoint(t *testing.T) {
 	testutil.AssertError(t, env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+id+"/approve", nil), http.StatusForbidden, "user_not_assigned")
 	if n := auditCount(t, env, "ticket.raise", id); n != 1 {
 		t.Fatalf("raise audit logs = %d, want 1", n)
+	}
+	var outboxAfter int
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM webhook_events WHERE ticket_id=?`, id).Scan(&outboxAfter); err != nil {
+		t.Fatal(err)
+	}
+	if outboxAfter != outboxBefore {
+		t.Fatalf("raise webhook outbox events changed from %d to %d, want none added", outboxBefore, outboxAfter)
+	}
+	var raiseWebhooks int
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM webhook_events WHERE ticket_id=? AND event_type='ticket_updated'`, id).Scan(&raiseWebhooks); err != nil {
+		t.Fatal(err)
+	}
+	if raiseWebhooks != 0 {
+		t.Fatalf("raise ticket_updated outbox rows=%d, want 0", raiseWebhooks)
 	}
 }
 

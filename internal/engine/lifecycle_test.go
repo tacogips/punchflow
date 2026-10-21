@@ -19,6 +19,9 @@ func TestSubmitMultiStepApproveCompletes(t *testing.T) {
 	if ticket.Status != model.TicketStatusCompleted {
 		t.Fatalf("status=%s", ticket.Status)
 	}
+	if ticket.CompletedAt == nil || ticket.ClosedAt == nil || !ticket.CompletedAt.Equal(*ticket.ClosedAt) {
+		t.Fatalf("completion timestamps completedAt=%v closedAt=%v, want same completion time", ticket.CompletedAt, ticket.ClosedAt)
+	}
 	if ticket.TicketNumber == nil || *ticket.TicketNumber != "EXP-2025-1" {
 		t.Fatalf("ticket number=%v", ticket.TicketNumber)
 	}
@@ -32,6 +35,9 @@ func TestDenyIsTerminal(t *testing.T) {
 	})
 	if got := e.ticket(id).Status; got != model.TicketStatusDenied {
 		t.Fatalf("status=%s", got)
+	}
+	if ticket := e.ticket(id); ticket.ClosedAt != nil || ticket.DeniedAt == nil {
+		t.Fatalf("denial timestamps deniedAt=%v closedAt=%v, want closedAt null", ticket.DeniedAt, ticket.ClosedAt)
 	}
 	err := e.db.WithTx(e.ctx, func(tx *store.Tx) error {
 		_, err := e.engine.Approve(e.ctx, tx, e.actor("sales-manager"), id, nil)
@@ -54,6 +60,9 @@ func TestSendBackToApplicantAndResubmit(t *testing.T) {
 	})
 	if got := e.ticket(id).Status; got != model.TicketStatusRejected {
 		t.Fatalf("status=%s", got)
+	}
+	if ticket := e.ticket(id); ticket.ClosedAt != nil {
+		t.Fatalf("withdrawn ticket closedAt=%v, want null", ticket.ClosedAt)
 	}
 	status := model.TicketStatusInProgress
 	err := e.db.WithTx(e.ctx, func(tx *store.Tx) error {

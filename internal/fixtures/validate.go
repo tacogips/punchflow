@@ -54,6 +54,9 @@ func Validate(s *Set) error {
 	if !pf06OneOf(s.Tenant.Tenant.Mode, model.TenantModeNormal, model.TenantModeAdminWorking, model.TenantModeMaintenance, model.TenantModeSuspended) {
 		add(FileTenant, "tenant.mode", "invalid mode")
 	}
+	if month := s.Tenant.Tenant.FiscalYearStartMonth; month != 0 && (month < 1 || month > 12) {
+		add(FileTenant, "tenant.fiscalYearStartMonth", "must be between 1 and 12")
+	}
 
 	userIDs, userCodes, gradeCodes, teamCodes := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	categoryCodes, folderCodes, masterCodes, routeCodes, workflowCodes := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}

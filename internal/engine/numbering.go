@@ -43,6 +43,10 @@ func pf14Number(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def mod
 	if def.TicketNumberFormat == nil || *def.TicketNumberFormat == "" {
 		return nil
 	}
+	tenant, err := store.Tenant(ctx, tx)
+	if err != nil {
+		return err
+	}
 	var counter int64
 	if err := tx.QueryRowContext(ctx, `SELECT ticket_number_counter FROM workflows WHERE id=?`, ticket.WorkflowID).Scan(&counter); err != nil {
 		return fmt.Errorf("engine: read ticket number counter: %w", err)
@@ -51,7 +55,7 @@ func pf14Number(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def mod
 	if _, err := tx.ExecContext(ctx, `UPDATE workflows SET ticket_number_counter=?,updated_at=? WHERE id=?`, counter, store.Millis(now), ticket.WorkflowID); err != nil {
 		return fmt.Errorf("engine: increment ticket number counter: %w", err)
 	}
-	number := pf14FormatTicketNumber(*def.TicketNumberFormat, now, counter)
+	number := pf14FormatTicketNumber(*def.TicketNumberFormat, now, counter, tenant.FiscalYearStartMonth)
 	ticket.TicketNumber = &number
 	return nil
 }
@@ -60,10 +64,13 @@ func pf14Number(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def mod
 // [year], [month] and [day] (zero padded to 4, 2 and 2 digits), [fyear] (the
 // fiscal year, which starts in April and is named after its starting calendar
 // year) and [number] (the per-workflow counter, not padded).
-func pf14FormatTicketNumber(format string, now time.Time, counter int64) string {
+func pf14FormatTicketNumber(format string, now time.Time, counter int64, fiscalYearStartMonth int) string {
 	local := now.In(kftime.JST)
+	if fiscalYearStartMonth < 1 || fiscalYearStartMonth > 12 {
+		fiscalYearStartMonth = 4
+	}
 	fiscalYear := local.Year()
-	if local.Month() < time.April {
+	if int(local.Month()) < fiscalYearStartMonth {
 		fiscalYear--
 	}
 	return strings.NewReplacer(

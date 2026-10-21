@@ -115,6 +115,33 @@ func TestCancelApprovalRefusals(t *testing.T) {
 	})
 }
 
+func TestCancelApprovalUsesActiveProxyAndRejectsTwoGroupsLater(t *testing.T) {
+	t.Run("active proxy can cancel assigned approver action", func(t *testing.T) {
+		e := pf14Setup(t)
+		pf15ThreeStepRoute(t, e)
+		id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+		compatApprove(t, e, "sales-manager", id)
+		if _, err := pf15Cancel(e, "sales-deputy", id); err != nil {
+			t.Fatalf("active proxy could not cancel assigned manager approval: %v", err)
+		}
+		if got := e.ticket(id).CurrentStep; got != 1 {
+			t.Fatalf("currentStep=%d, want reopened group 1", got)
+		}
+	})
+	t.Run("two groups later cannot cancel", func(t *testing.T) {
+		e := pf14Setup(t)
+		pf15ThreeStepRoute(t, e)
+		id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+		compatApprove(t, e, "sales-manager", id)
+		compatApprove(t, e, "finance-manager", id)
+		if got := e.ticket(id).CurrentStep; got != 3 {
+			t.Fatalf("currentStep=%d, want 3", got)
+		}
+		_, err := pf15Cancel(e, "sales-manager", id)
+		pf15WantCode(t, "cancel two groups later", err, "invalid_state")
+	})
+}
+
 // PF-19: an approver of a later step that allows raising pulls the ticket up.
 func TestRaiseSkipsAheadToTheCallersStep(t *testing.T) {
 	e := pf14Setup(t)
@@ -134,9 +161,11 @@ func TestRaiseSkipsAheadToTheCallersStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	compatAssertTypes(t, "raise", events, model.WebhookEventTicketUpdated)
+	if len(events) != 0 {
+		t.Fatalf("raise events=%+v, want no webhook events", events)
+	}
 	if got := e.ticket(id).CurrentStep; got != 2 {
-		t.Fatalf("current step=%d, want 2", got)
+		t.Fatalf("current step=%d, want exactly the next group (2)", got)
 	}
 	if got := pf15StepByTitle(t, e, id, "review").Status; got != model.StepStatusRaised {
 		t.Fatalf("review step=%s, want raised", got)
@@ -177,14 +206,16 @@ func TestRaiseRefusalsAndExplicitTarget(t *testing.T) {
 	if _, err = pf15Raise(e, "finance-manager", id, &last); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.ticket(id).CurrentStep; got != 3 {
-		t.Fatalf("current step=%d, want 3", got)
+	if got := e.ticket(id).CurrentStep; got != 2 {
+		t.Fatalf("current step=%d, want exactly the next group (2)", got)
 	}
-	for _, title := range []string{"review", "mid"} {
-		if got := pf15StepByTitle(t, e, id, title).Status; got != model.StepStatusRaised {
-			t.Fatalf("%s step=%s, want raised", title, got)
-		}
+	if got := pf15StepByTitle(t, e, id, "review").Status; got != model.StepStatusRaised {
+		t.Fatalf("review step=%s, want raised", got)
 	}
+	if got := pf15StepByTitle(t, e, id, "mid").Status; got != model.StepStatusInProgress {
+		t.Fatalf("mid step=%s, want in_progress", got)
+	}
+	compatApprove(t, e, "finance-manager", id)
 	compatApprove(t, e, "finance-manager", id)
 	if got := e.ticket(id).Status; got != model.TicketStatusCompleted {
 		t.Fatalf("status=%s, want completed after approving the raised-to step", got)

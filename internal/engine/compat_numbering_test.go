@@ -6,6 +6,7 @@ import (
 
 	"punchflow/internal/kftime"
 	"punchflow/internal/model"
+	"punchflow/internal/store"
 )
 
 func compatNumber(t *testing.T, e *pf14TestEnv, id string) string {
@@ -102,5 +103,22 @@ func TestTicketNumberFormatTokens(t *testing.T) {
 		if got := compatNumber(t, e, id); got != tc.want {
 			t.Errorf("at %s: ticket number=%q, want %q", tc.at.Format(time.RFC3339), got, tc.want)
 		}
+	}
+}
+
+func TestTicketNumberFiscalYearUsesTenantStartMonth(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetWorkflow(t, e, "expense-claim", "$.ticketNumberFormat", "FY-[fyear]-[number]")
+	e.apply(func(tx *store.Tx) error {
+		_, err := tx.ExecContext(e.ctx, `UPDATE tenant SET fiscal_year_start_month=7`)
+		return err
+	})
+	e.clock.Set(time.Date(2026, 2, 3, 10, 0, 0, 0, kftime.JST))
+	id, events := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	if len(events) == 0 {
+		t.Fatal("ticket creation returned no lifecycle events")
+	}
+	if got := compatNumber(t, e, id); got != "FY-2025-1" {
+		t.Fatalf("number with July fiscal start=%q, want FY-2025-1", got)
 	}
 }

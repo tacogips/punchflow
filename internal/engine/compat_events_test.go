@@ -40,6 +40,9 @@ func TestApprovalEventFollowsActedStepNotQuorum(t *testing.T) {
 			if got := e.ticket(id).Status; got != model.TicketStatusCompleted {
 				t.Fatalf("status after final action=%s", got)
 			}
+			if ticket := e.ticket(id); ticket.CompletedAt == nil || ticket.ClosedAt == nil || !ticket.CompletedAt.Equal(*ticket.ClosedAt) {
+				t.Fatalf("final %s completion timestamps completedAt=%v closedAt=%v, want equal non-nil values", tc.action, ticket.CompletedAt, ticket.ClosedAt)
+			}
 		})
 	}
 }
@@ -54,8 +57,8 @@ func TestSubmissionCompletesRouteWithoutUserAction(t *testing.T) {
 	assertCompleted := func(t *testing.T, e *pf14TestEnv, id string) {
 		t.Helper()
 		ticket := e.ticket(id)
-		if ticket.Status != model.TicketStatusCompleted || ticket.CompletedAt == nil || ticket.OpenedAt == nil {
-			t.Fatalf("ticket status=%s completedAt=%v openedAt=%v, want completed", ticket.Status, ticket.CompletedAt, ticket.OpenedAt)
+		if ticket.Status != model.TicketStatusCompleted || ticket.CompletedAt == nil || ticket.ClosedAt == nil || ticket.OpenedAt == nil || !ticket.CompletedAt.Equal(*ticket.ClosedAt) {
+			t.Fatalf("ticket status=%s completedAt=%v closedAt=%v openedAt=%v, want completion time", ticket.Status, ticket.CompletedAt, ticket.ClosedAt, ticket.OpenedAt)
 		}
 		steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
 		if err != nil {

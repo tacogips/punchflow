@@ -237,4 +237,22 @@ func TestRadioButtonMustBeSelectedOnSubmitAndApproverUpdate(t *testing.T) {
 	}
 }
 
+func TestStoredDetailRadioButtonMustBeSelectedAtSubmission(t *testing.T) {
+	e := pf14Setup(t)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		section := pf16Section(def, "lines")
+		choice := pf16SlipField("slip-choice", "radio_button")
+		choice.Options = []string{"a", "b"}
+		section.SlipFields = append(section.SlipFields, choice)
+	})
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, pf16Base), []SlipItemInput{
+		pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10, "slip-choice": ""}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = pf16Update(e, e.actor("sales-rep"), id, UpdateInput{Status: ptr(model.TicketStatusInProgress)})
+	assertPF14FieldError(t, err, "validation_failed", "slip-choice")
+}
+
 func ptr[T any](v T) *T { return &v }

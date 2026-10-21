@@ -111,7 +111,8 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 				case model.FallbackSkip:
 					skip = true
 				case model.FallbackNoFallback:
-					return kferr.ValidationFailed(map[string][]string{"base": {"step has no assignees"}})
+					// Keep this step in progress without assignees. An administrator
+					// can assign it later; the empty group must keep waiting.
 				}
 			}
 		}

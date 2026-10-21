@@ -68,12 +68,29 @@ func TestCleanupDeletedUserSkipFallbackCompletesTicket(t *testing.T) {
 	}
 	events := cleanupDeleteUser(t, e, "finance-manager")
 	compatAssertTypes(t, "cleanup", events, model.WebhookEventTicketCompleted)
-	if got := e.ticket(id); got.Status != model.TicketStatusCompleted || got.CompletedAt == nil {
+	if got := e.ticket(id); got.Status != model.TicketStatusCompleted || got.CompletedAt == nil || got.ClosedAt == nil {
 		t.Fatalf("ticket status=%s completedAt=%v, want completed", got.Status, got.CompletedAt)
 	}
 	step := cleanupStep(t, e, id, "only")
 	if step.Status != model.StepStatusSkipped || !step.Skip || !step.Fallback || step.FallbackResult == nil || *step.FallbackResult != model.FallbackSkip {
 		t.Fatalf("step = %+v, want skipped by fallback", step)
+	}
+}
+
+func TestCleanupArchiveClosesTicketAndClearsSubStatus(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetRoute(t, e, "expense-claim", pf15RouteStep("review", 1, model.ActionTypeApprove, "under-review", false, "sales-manager"))
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	if got := pf15SubStatusCode(t, e, id); got != "under-review" {
+		t.Fatalf("sub-status before cleanup=%q", got)
+	}
+	cleanupDeleteUser(t, e, "sales-rep")
+	ticket := e.ticket(id)
+	if ticket.Status != model.TicketStatusArchived || ticket.ClosedAt == nil || ticket.ArchivedAt == nil || !ticket.ClosedAt.Equal(*ticket.ArchivedAt) {
+		t.Fatalf("cleanup archive ticket=%+v, want matching archive/closed times", ticket)
+	}
+	if got := pf15SubStatusCode(t, e, id); got != "" {
+		t.Fatalf("archived ticket retained sub-status %q", got)
 	}
 }
 

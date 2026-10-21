@@ -99,7 +99,7 @@ The `status` value `permanently_deleted` is never produced (DIV-04). Step status
 
 Counters: `commentsCount` = comments not soft-deleted; `linkedTicketsCount` = rows in `ticket_links`; `logsCount` = audit log rows that reference the ticket (INF-29).
 
-Timestamps: `openedAt` set on every transition to `in_progress` from draft/rejected; `completedAt` and `closedAt` on completion; `deniedAt` on deny; `archivedAt` and `closedAt` on archive. `updatedAt` changes on every engine action.
+Timestamps: `openedAt` set on every transition to `in_progress` from draft/rejected; `completedAt` and `closedAt` on completion; `deniedAt` on deny; `archivedAt` and `closedAt` on archive. `closedAt` is null for every other status, including denied, rejected, and withdrawn (WH-08). `updatedAt` changes on every engine action.
 
 ### Form validation
 
@@ -143,7 +143,7 @@ Condition operators (`equal`, `not_equal`, `greater_than(_or_equal)`, `less_than
 | `dynamic_user` | Users selected in the form field whose code is the target `variable` |
 | `dynamic_team` | Members of the teams selected in the form field `variable`, filtered by grade targets |
 
-A resolved non-skipped step with zero assignees takes its `fallbackType` assignees (`direct_manager`, `higher_manager`, `higher_team`); when that yields nobody, fallback `skip` skips the step and anything else (including no fallback and `no_fallback`) fails submit with `422 validation_failed` (`errors.base`). Exceptions: `assignee_customizable` steps are filled before they become current, and an `author_customizable` step with no nominations is skipped when its minimum is 0 (otherwise `422`, "custom approver is required"). `dynamic_user`/`dynamic_team` targets read the form field named by `variable` (`$code`, `${code}` and `code` are equivalent, INF-73) and accept user or team codes or IDs.
+A resolved non-skipped step with zero assignees takes its `fallbackType` assignees (`direct_manager`, `higher_manager`, `higher_team`); when that yields nobody, fallback `skip` skips the step, while `no_fallback` and no usable fallback materialize an empty waiting step. That step remains `in_progress`, leaves the ticket unassigned, and is never auto-completed, including in a parallel group (INF-19). Exceptions: `assignee_customizable` steps are filled before they become current, and an `author_customizable` step with no nominations is skipped when its minimum is 0 (otherwise `422`, "custom approver is required"). `dynamic_user`/`dynamic_team` targets read the form field named by `variable` (`$code`, `${code}` and `code` are equivalent, INF-73) and accept user or team codes or IDs.
 
 ### Step progression
 
@@ -160,7 +160,7 @@ A resolved non-skipped step with zero assignees takes its `fallbackType` assigne
 
 Definitions come from the fixtures `labels.json` (`id`, `name`, `description`, `color` as six lowercase hex digits) and `sub-statuses.json` (`id`, `code`, `name`, `notes`, `allowWithdrawal`, `allowRejection`, `allowDenial`). A route step references a sub-status by `subStatus: "<code>"`; a workflow with `ticketNumberingTiming: "sub_status_attached"` may name the numbering sub-status in `ticketNumberingSubStatus`. The loader rejects duplicate names/codes, malformed colors and unknown codes, and `fixtures export` round-trips both files. Kickflow has no label or sub-status CRUD in the public API, so neither has one here.
 
-- Attachment (INF-60): after every engine action the sub-status is recomputed from the ticket state by `pf15SyncSubStatus`. While the ticket is `in_progress` it is the sub-status of the first step (by display order) of the group that is currently waiting; a group whose steps configure none clears it. Any other ticket status carries no sub-status (`Ticket.subStatus` is "set only while in processing"). Send back to step N re-applies the sub-status of step N; resubmission applies the first group's.
+- Attachment (INF-60): when the ticket reaches a step group with a configured sub-status it attaches that value; a group without one preserves the current value. Any terminal transition (completed, denied, withdrawn/rejected, archived, including user-deletion archive) clears it. Mid-route send back restores the target group's configured sub-status, retaining the current value if the target has none; resubmission applies the first group's value when configured. `Ticket.subStatus` is otherwise null.
 - Restrictions (INF-61): withdraw, send back (`reject`, any `to`) and deny are refused with `422 invalid_state` ("... is not allowed while the ticket has the sub-status <name>") when the current sub-status sets the matching `allow*` flag to false. The check sits after the actor checks and before comment validation, and applies to UI and API callers alike. Archive and approve are never restricted.
 - Numbering (INF-68): `sub_status_attached` allocates the number the first time a sub-status is attached (the configured `ticketNumberingSubStatus` when set, any sub-status otherwise). A ticket that never receives such a sub-status is never numbered.
 - Presentation: `Ticket.subStatus` is a `SubStatus` object or null and `Ticket.labels` the attached `Label` objects ordered by name, in `getTicket`, `listTickets`, `TicketWithStep`, `TicketDetail` and webhook payloads. `RouteStep.subStatus` and `TicketNumberingTiming.subStatus` are objects, too. `listTickets` filters by `subStatusIds[]`; kickflow documents no label filter, so none exists.
@@ -172,8 +172,8 @@ Definitions come from the fixtures `labels.json` (`id`, `name`, `description`, `
 
 | Operation | UI API | Eligibility | Effect | Event |
 |---|---|---|---|---|
-| `CancelApproval` | `POST /ui/api/tickets/{id}/cancel-approval` | Ticket `in_progress`, workflow `approvalCancellable`, the caller is the actual approver of a step, and no step after it has a completed assignee (INF-62) | The caller's assignee rows of their latest approved group are reopened and that group becomes current; later in-progress or auto-completed steps return to `pending` | `ticket_updated` |
-| `Raise` | `POST /ui/api/tickets/{id}/raise` `{to?}` | Ticket `in_progress`; the caller (or a user they are proxy for) is an incomplete assignee of a later `pending` step that has `allowRaising` and needs action (INF-65) | Unfinished steps from the current group up to the target are marked `raised`; the target group becomes current through the shared advancement routine | `ticket_updated` |
+| `CancelApproval` | `POST /ui/api/tickets/{id}/cancel-approval` | Ticket `in_progress`, workflow `approvalCancellable`; caller is the assignee or an active proxy for a completed assignment in the current group or immediately previous group, and nobody in the following group has approved (INF-62) | The authorized assignment is reopened; the canceled group becomes current and later in-progress or auto-completed steps return to `pending` | `ticket_updated` |
+| `Raise` | `POST /ui/api/tickets/{id}/raise` `{to?}` | Ticket `in_progress`; the caller is assigned (directly or as active proxy) to a later pending group with `allowRaising`, regardless of action type (INF-65) | Later assignment authorizes the operation; exactly the current group is marked `raised` and the next unfinished group becomes current. Repeated calls are required to raise more groups. | No webhook event (INF-66); audit log is retained |
 | `AddCustomStep` | `POST /ui/api/tickets/{id}/custom-steps` `{title, actionType, userIds, instruction?, afterStepOrder?}` | Ticket `in_progress`, workflow `allowCustomSteps`, caller is the applicant or an incomplete assignee of the current group (INF-63) | A new group is inserted after `afterStepOrder` (default: the current group); later groups shift by one; `displayOrder` is renumbered; the step has a null `routeStepId`, `author` = caller, all assignees must act | `ticket_updated` |
 | `RemoveCustomStep` | `DELETE /ui/api/tickets/{id}/custom-steps/{stepId}` | The author of a still `pending` custom step | The step is deleted and the order gap closed | `ticket_updated` |
 
@@ -193,7 +193,7 @@ Definitions come from the fixtures `labels.json` (`id`, `name`, `description`, `
 
 ### Proxy application
 
-`proxyClientUserId` on Create/Update requires an active `ProxyApplicant` registration with `user = proxy client` and `proxyUser = actor`, valid today (JST) and for the workflow; otherwise `422 validation_failed`. A suspended/deactivated proxy client -> `422 validation_failed` (Confirmed). `author` is the actor and `proxyClientUser` the client.
+`proxyClientUserId` on Create/Update requires an active `ProxyApplicant` registration with `user = proxy client` and `proxyUser = actor`, valid today (JST) and for the workflow; otherwise `422 validation_failed`. The effective client is revalidated on every applicant draft/rejected save and submission, even when the request omits the field; suspended/deactivated clients produce `422 validation_failed`. Explicit `null` removes the client. `author` is the actor and `proxyClientUser` the client.
 
 ### Required engine tests (`internal/engine/*_test.go`)
 

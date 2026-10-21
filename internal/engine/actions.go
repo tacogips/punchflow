@@ -250,7 +250,7 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 				completed++
 			}
 		}
-		if completed >= pf14RequiredApprovals(step, len(assignees)) {
+		if len(assignees) > 0 && completed >= pf14RequiredApprovals(step, len(assignees)) {
 			step.Status = model.StepStatusCompleted
 			step.CompletedAt = &now
 			step.UpdatedAt = now
@@ -361,7 +361,7 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 					}
 				}
 			}
-			if step.ActionType == model.ActionTypeNone {
+			if step.ActionType == model.ActionTypeNone && len(assignees) > 0 {
 				step.Status = model.StepStatusCompleted
 				step.CompletedAt = &now
 			} else {
@@ -509,7 +509,6 @@ func (e *Engine) pf14Deny(ctx context.Context, tx *store.Tx, a Actor, id string,
 	now := e.clock.Now()
 	t.Status = model.TicketStatusDenied
 	t.DeniedAt = &now
-	t.ClosedAt = &now
 	t.UpdatedAt = now
 	if err = e.pf15SyncSubStatus(ctx, tx, &t, now); err != nil {
 		return nil, err

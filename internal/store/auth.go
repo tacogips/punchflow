@@ -227,7 +227,7 @@ func Tenant(ctx context.Context, q Querier) (model.Tenant, error) {
 	var allow, domains string
 	var proxy int
 	var created, updated int64
-	err := q.QueryRowContext(ctx, "SELECT id,public_id,name,plan,mode,ip_allowlist,allowed_email_domains,self_service_proxy,created_at,updated_at FROM tenant LIMIT 1").Scan(&t.ID, &t.PublicID, &t.Name, &t.Plan, &t.Mode, &allow, &domains, &proxy, &created, &updated)
+	err := q.QueryRowContext(ctx, "SELECT id,public_id,name,plan,mode,ip_allowlist,allowed_email_domains,self_service_proxy,fiscal_year_start_month,created_at,updated_at FROM tenant LIMIT 1").Scan(&t.ID, &t.PublicID, &t.Name, &t.Plan, &t.Mode, &allow, &domains, &proxy, &t.FiscalYearStartMonth, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Tenant{}, ErrNotFound
 	}

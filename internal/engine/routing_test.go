@@ -589,24 +589,54 @@ func TestStepConditionAndFallback(t *testing.T) {
 				id, _, err = e.engine.Create(e.ctx, tx, e.actor("sales-rep"), CreateInput{Status: status, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"), Inputs: &inputs})
 				return err
 			})
-			if fallbackType == model.FallbackNoFallback {
-				if api, ok := kferr.As(err); !ok || api.Code != "validation_failed" {
-					t.Fatalf("no_fallback error=%v, want validation_failed", err)
-				}
-				after := 0
-				if scanErr := e.db.Q().QueryRowContext(e.ctx, `SELECT count(*) FROM tickets`).Scan(&after); scanErr != nil || after != before {
-					t.Fatalf("failed submit persisted ticket: before=%d after=%d err=%v", before, after, scanErr)
-				}
-				return
-			}
 			if err != nil {
 				t.Fatal(err)
+			}
+			if fallbackType == model.FallbackNoFallback {
+				if e.ticket(id).Status != model.TicketStatusInProgress || e.ticket(id).CurrentStep != 1 {
+					t.Fatalf("ticket=%+v, want in-progress and waiting on empty step", e.ticket(id))
+				}
+				steps, loadErr := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+				if loadErr != nil || len(steps) != 1 || steps[0].Status != model.StepStatusInProgress {
+					t.Fatalf("no_fallback steps=%+v err=%v, want active empty step", steps, loadErr)
+				}
+				assignees, loadErr := store.EngStepAssignees(e.ctx, e.db.Q(), steps[0].ID)
+				if loadErr != nil || len(assignees) != 0 {
+					t.Fatalf("no_fallback assignees=%+v err=%v, want none", assignees, loadErr)
+				}
+				return
 			}
 			steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
 			if err != nil || len(steps) != 1 || steps[0].Status != model.StepStatusSkipped || !steps[0].Fallback || steps[0].FallbackResult == nil || *steps[0].FallbackResult != model.FallbackSkip {
 				t.Fatalf("fallback skip steps=%+v err=%v", steps, err)
 			}
 		})
+	}
+}
+
+func TestEmptyNoFallbackParallelStepKeepsTicketWaiting(t *testing.T) {
+	e := pf14Setup(t)
+	gradeSymbol := model.GradeSymbolEqual
+	fallback := model.FallbackNoFallback
+	empty := model.RouteStep{Code: "empty-team", StepOrder: 1, StepType: model.StepTypeManager, ActionType: model.ActionTypeNone, ManagerSelectionType: model.ManagerSelectionClosest, FallbackType: &fallback, Targets: []model.RouteTarget{{GradeSymbol: &gradeSymbol, GradeCodes: []string{"missing-grade"}}}}
+	assigned := compatUserStep("assigned", 1, model.ActionTypeApprove, "sales-manager")
+	compatSetRoute(t, e, "expense-claim", empty, assigned)
+	id, events := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	if len(events) == 0 {
+		t.Fatal("ticket creation returned no lifecycle events")
+	}
+	compatApprove(t, e, "sales-manager", id)
+	if ticket := e.ticket(id); ticket.Status != model.TicketStatusInProgress || ticket.CurrentStep != 1 {
+		t.Fatalf("ticket after parallel approval=%+v, want still waiting on empty step", ticket)
+	}
+	steps, loadErr := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	for _, step := range steps {
+		if step.RouteStepCode != nil && *step.RouteStepCode == "empty-team" && step.Status != model.StepStatusInProgress {
+			t.Fatalf("empty step status=%s, want in_progress", step.Status)
+		}
 	}
 }
 

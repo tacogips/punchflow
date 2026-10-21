@@ -49,7 +49,7 @@ Events are produced by the engine (and the UI API) in this order within one acti
 | Withdraw | `ticket_withdrawn` | |
 | Archive | `ticket_archived` | |
 | User deletion | one `ticket_archived` per archived ticket, attributed to the acting administrator; `ticket_completed` for a ticket that completes because a step lost its assignees | INF-79 |
-| UI control operations: cancel approval, raise, add/remove custom step, attach/detach label | `ticket_updated` (one per real change) | No new event type is invented (INF-66) |
+| UI control operations: cancel approval, add/remove custom step, attach/detach label | `ticket_updated` (one per real change) | Raise is audited but emits no webhook event (INF-66) |
 | Comment create / update / delete, or a comment sent with approve/reject/deny | `comment_created` / `comment_updated` | After the action event (INF-22) |
 
 ### Payload and headers

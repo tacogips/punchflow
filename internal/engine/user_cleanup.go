@@ -27,7 +27,11 @@ func (e *Engine) CleanupDeletedUser(ctx context.Context, tx *store.Tx, actor Act
 		}
 		ticket.Status = model.TicketStatusArchived
 		ticket.ArchivedAt = &now
+		ticket.ClosedAt = &now
 		ticket.UpdatedAt = now
+		if err = e.pf15SyncSubStatus(ctx, tx, &ticket, now); err != nil {
+			return nil, err
+		}
 		if err = store.EngUpdateTicket(ctx, tx, ticket); err != nil {
 			return nil, err
 		}
