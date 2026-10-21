@@ -47,13 +47,13 @@ curl -H 'Authorization: Bearer pf_sat_dev_integration' \
   http://localhost:8080/v1/user
 ```
 
-Create an `expense-claim` ticket with form field codes, then approve it by its returned ticket ID. `status` is required (`draft` or `in_progress`), and `authorTeamId` is the ID of a team the applicant belongs to; the seeded `sales-rep` belongs to `sales`. Set `TICKET_ID` to the `id` field in the create response before running the approve request:
+Create an `expense-claim` ticket with form field codes, then approve it by its returned ticket ID. `status` is required (`draft` or `in_progress`), and `authorTeamId` is the ID of a team the applicant belongs to; the seeded `sales-rep` belongs to `sales`. As in kickflow, `inputs` must list every form field of the workflow; send `null` for optional fields you leave empty. Set `TICKET_ID` to the `id` field in the create response before running the approve request:
 
 ```sh
 curl -X POST http://localhost:8080/v1/tickets \
   -H 'Authorization: Bearer pf_pat_dev_employee' \
   -H 'Content-Type: application/json' \
-  -d '{"status":"in_progress","workflowId":"1f46223b-a6ef-4ee8-884e-d3f1e6b9f13b","authorTeamId":"00000000-0000-4000-8000-000000000021","title":"Client meal","inputs":[{"formFieldCode":"amount","value":"5000"},{"formFieldCode":"purpose","value":"Client meal"}]}'
+  -d '{"status":"in_progress","workflowId":"1f46223b-a6ef-4ee8-884e-d3f1e6b9f13b","authorTeamId":"00000000-0000-4000-8000-000000000021","title":"Client meal","inputs":[{"formFieldCode":"amount","value":"5000"},{"formFieldCode":"purpose","value":"Client meal"},{"formFieldCode":"expense-date","value":null},{"formFieldCode":"cost-center","value":null},{"formFieldCode":"receipt","value":null},{"formFieldCode":"approver-note","value":null}]}'
 
 curl -X POST "http://localhost:8080/v1/tickets/$TICKET_ID/approve" \
   -H 'Authorization: Bearer pf_pat_dev_manager' \
@@ -64,7 +64,16 @@ List endpoints accept `page` and `perPage` and return `Link`, `Page`, `Per-Page`
 
 ## Webhooks
 
-Register an endpoint in the UI under **Admin > Webhooks**, or use `POST /admin/api/webhooks` with a webhook name, URL and optional secret. This punchflow dev admin API is separate from the kickflow-compatible `/v1` API and requires a bearer token with the `integration` permission.
+Register an endpoint in the UI under **Admin > Webhooks**, or use `POST /admin/api/webhooks` with a webhook name, URL, optional secret and `"enabled": true` (a webhook created without `enabled` stays disabled and receives nothing):
+
+```sh
+curl -X POST http://localhost:8080/admin/api/webhooks \
+  -H 'Authorization: Bearer pf_pat_dev_admin' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local","url":"http://localhost:9000/hook","secret":"change-me","enabled":true}'
+```
+
+This punchflow dev admin API is separate from the kickflow-compatible `/v1` API and requires a bearer token with the `integration` permission.
 
 The 13 event types are `ping`, `ticket_created`, `ticket_updated`, `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected`, `ticket_denied`, `ticket_completed`, `ticket_withdrawn`, `ticket_archived`, `comment_created` and `comment_updated`. Delivery status is `pending`, `succeeded` or `failed`.
 
