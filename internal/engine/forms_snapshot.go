@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 
 	"punchflow/internal/kftime"
@@ -38,7 +39,11 @@ func (n *normalizer) referenceSnapshot(fieldType string, ids []string) (any, err
 			if err != nil {
 				return nil, fmt.Errorf("snapshot user reference: %w", err)
 			}
-			value = map[string]any{"id": user.ID, "code": user.Code, "email": user.Email, "firstName": user.FirstName, "lastName": user.LastName, "fullName": user.LastName + " " + user.FirstName, "employeeId": user.EmployeeID, "image": map[string]any{"100x100": nil, "64x64": nil, "32x32": nil}, "status": user.Status, "locale": user.Locale, "createdAt": kftime.Format(user.CreatedAt), "updatedAt": kftime.Format(user.UpdatedAt)}
+			customFields, err := pf14PublicUserCustomFields(n.ctx, n.q, user.CustomFields)
+			if err != nil {
+				return nil, fmt.Errorf("snapshot public user custom fields: %w", err)
+			}
+			value = map[string]any{"id": user.ID, "code": user.Code, "email": user.Email, "firstName": user.FirstName, "lastName": user.LastName, "fullName": user.LastName + " " + user.FirstName, "employeeId": user.EmployeeID, "image": map[string]any{"100x100": nil, "64x64": nil, "32x32": nil}, "status": user.Status, "locale": user.Locale, "customFields": customFields, "createdAt": kftime.Format(user.CreatedAt), "updatedAt": kftime.Format(user.UpdatedAt)}
 		case "team":
 			team, err := store.GetTeam(n.ctx, n.q, id)
 			if err != nil {
@@ -65,6 +70,25 @@ func (n *normalizer) referenceSnapshot(fieldType string, ids []string) (any, err
 		values = append(values, value)
 	}
 	return values, nil
+}
+
+// pf14PublicUserCustomFields returns only custom values that kickflow exposes
+// to every active user, regardless of the actor evaluating a formula.
+func pf14PublicUserCustomFields(ctx context.Context, q store.Querier, values map[string]any) (map[string]any, error) {
+	fields, err := store.UserCustomFieldList(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	public := make(map[string]any)
+	for _, field := range fields {
+		if !field.VisibleToEveryone {
+			continue
+		}
+		if value, ok := values[field.Code]; ok {
+			public[field.Code] = value
+		}
+	}
+	return public, nil
 }
 
 func sameStrings(a, b []string) bool {

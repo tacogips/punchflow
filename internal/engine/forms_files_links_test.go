@@ -139,7 +139,7 @@ func TestFileInputsRoundTripAsAttachments(t *testing.T) {
 	// Removing the files drops the presented attachments and associations.
 	err = pf16UpdateForm(e, e.actor("sales-rep"), id, FormPatch{
 		Inputs:    []FieldInput{pf16FileInput(t, e, "receipt")},
-		SlipItems: []SlipItemInput{pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 1})},
+		SlipItems: []SlipItemInput{pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 1, "photo": []string{}})},
 	})
 	if err != nil {
 		t.Fatal(err)

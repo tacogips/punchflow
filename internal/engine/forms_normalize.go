@@ -163,6 +163,22 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 			return nil, kferr.InvalidParameter("Form field must be unique")
 		}
 		seen[field.ID] = true
+		if pf14ReferenceField(field.FieldType) && n.opts.Supplied != nil && !n.opts.Supplied[field.ID] {
+			var unchanged *model.TicketInput
+			for _, old := range n.opts.ExistingInputs {
+				if old.FormFieldID == field.ID {
+					copy := old
+					unchanged = &copy
+					break
+				}
+			}
+			if unchanged != nil {
+				// Omitted references are historical ticket data. A dead or
+				// newly ineligible target must not block an unrelated patch.
+				normalized = append(normalized, *unchanged)
+				continue
+			}
+		}
 		value, refs, err := pf14FieldValue(in)
 		if err != nil {
 			n.fail(field.Code, "is invalid")
@@ -227,6 +243,15 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 		}
 	}
 	return normalized, nil
+}
+
+func pf14ReferenceField(fieldType string) bool {
+	switch fieldType {
+	case "master", "user", "team", "ticket", "file":
+		return true
+	default:
+		return false
+	}
 }
 
 // INF-FRM-05 applies section visibility before conditional completeness and

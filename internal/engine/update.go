@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"punchflow/internal/kferr"
@@ -312,6 +313,19 @@ func (e *Engine) pf14cSubmit(ctx context.Context, tx *store.Tx, a Actor, t *mode
 		if err := pf14CheckApplicable(ctx, tx, a.UserID, def, *t.AuthorTeamID); err != nil {
 			return err
 		}
+		team, err := store.GetTeam(ctx, tx, *t.AuthorTeamID)
+		if err != nil {
+			return err
+		}
+		fullName, err := store.TeamFullName(ctx, tx, team.ID)
+		if err != nil {
+			return err
+		}
+		snapshot, err := json.Marshal(map[string]string{"id": team.ID, "name": team.Name, "fullName": fullName, "code": team.Code})
+		if err != nil {
+			return fmt.Errorf("encode applicant team snapshot: %w", err)
+		}
+		t.AuthorTeamSnapshot = snapshot
 	}
 	inputValues, err := e.pf14cRevalidateForSubmit(ctx, tx, a, t, def, now)
 	if err != nil {

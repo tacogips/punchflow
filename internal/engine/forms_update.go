@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"punchflow/internal/model"
@@ -68,7 +69,9 @@ func (e *Engine) pf14cApplyFormEdit(ctx context.Context, tx *store.Tx, a Actor, 
 	if in.SlipItems != nil {
 		slipValues = *in.SlipItems
 		opts.SlipMode = slipReplaceAll
-		if partial {
+		if partial || approver {
+			// Approver updates may address only the detail sections they can
+			// edit; preserve other populated sections even through PATCH /ticket.
 			opts.SlipMode = slipReplaceSections
 		}
 	}
@@ -92,7 +95,11 @@ func (e *Engine) pf14cRevalidateForSubmit(ctx context.Context, tx *store.Tx, a A
 	}
 	opts := formOpts{Full: true, Blocked: blocked, ExistingInputs: existingInputs, ExistingSlips: existingSlips, AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot}
 	stored := pf14cInputsFromRows(def, existingInputs)
-	res, err := pf14NormalizeForm(ctx, tx, t.ID, def, stored, nil, opts, store.Millis(now))
+	slips := pf14cSlipInputsFromRows(def, existingSlips)
+	if len(slips) > 0 {
+		opts.SlipMode = slipReplaceAll
+	}
+	res, err := pf14NormalizeForm(ctx, tx, t.ID, def, stored, slips, opts, store.Millis(now))
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +107,41 @@ func (e *Engine) pf14cRevalidateForSubmit(ctx context.Context, tx *store.Tx, a A
 		return nil, err
 	}
 	return pf14cInputsFromRows(def, res.Inputs), nil
+}
+
+func pf14cSlipInputsFromRows(def model.WorkflowDef, rows []model.TicketSlipItem) []SlipItemInput {
+	sections := map[string]model.WorkflowSection{}
+	for _, section := range def.SectionList {
+		if section.SectionType == model.SectionTypeSlip {
+			sections[section.ID] = section
+		}
+	}
+	out := make([]SlipItemInput, 0, len(rows))
+	for _, row := range rows {
+		section, ok := sections[row.SlipSectionID]
+		if !ok {
+			continue
+		}
+		item := SlipItemInput{SlipSectionID: section.ID, Inputs: []SlipFieldInput{}}
+		for _, field := range section.SlipFields {
+			value, exists := slipCell(row, field)
+			if !exists {
+				continue
+			}
+			raw, err := json.Marshal(value)
+			if err != nil {
+				continue
+			}
+			input := SlipFieldInput{SlipFieldID: field.ID, Value: raw}
+			if field.FieldType == "file" {
+				input.Files = pf14StringsOf(value)
+				input.Value = nil
+			}
+			item.Inputs = append(item.Inputs, input)
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func (e *Engine) pf14cStoreForm(ctx context.Context, tx *store.Tx, t *model.Ticket, def model.WorkflowDef, inputs []FieldInput, slips []SlipItemInput, opts formOpts, oldInputs []model.TicketInput, oldSlips []model.TicketSlipItem, now time.Time) error {

@@ -81,6 +81,9 @@ func (n *normalizer) normalizeSlipRows(items []SlipItemInput) ([]model.TicketSli
 	counters := map[string]int{}
 	rows := make([]model.TicketSlipItem, 0, len(items))
 	for _, item := range items {
+		if item.Inputs == nil {
+			return nil, kferr.InvalidParameter("inputs is required for every detail row")
+		}
 		section, err := n.resolveSlipSection(item)
 		if err != nil {
 			return nil, err
@@ -174,6 +177,18 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 			snapshots[field.ID] = snapshot
 		}
 	}
+	// The /form partial detail contract is row based: every editable cell must
+	// be supplied, while inaccessible and role-specific cells are preserved.
+	if n.opts.Partial && !n.opts.Approver {
+		for _, field := range section.SlipFields {
+			if field.FieldType == "calculation" || !n.editableByActor(field) || n.preserveOmitted(field) {
+				continue
+			}
+			if !supplied[field.ID] {
+				return nil, nil, kferr.InvalidParameter("inputs must include every editable detail field")
+			}
+		}
+	}
 	if prev != nil {
 		for _, f := range section.SlipFields {
 			if supplied[f.ID] || !n.preserveOmitted(f) {
@@ -234,11 +249,19 @@ func (n *normalizer) assembleSlips(newRows []model.TicketSlipItem) ([]model.Tick
 		for _, row := range newRows {
 			newCounts[row.SlipSectionID]++
 		}
+		explicitDeleteAll := n.opts.SlipMode == slipReplaceSections && !n.opts.Partial && len(newRows) == 0
 		for sectionID, count := range oldCounts {
 			if n.opts.Blocked[sectionID] {
 				continue
 			}
-			if newCounts[sectionID] < count {
+			// A section omitted from PATCH /form is preserved by the merge below;
+			// only an explicitly replaced section can delete rows.
+			if n.opts.SlipMode == slipReplaceSections && !explicitDeleteAll {
+				if _, explicitlyReplaced := newCounts[sectionID]; !explicitlyReplaced {
+					continue
+				}
+			}
+			if explicitDeleteAll || newCounts[sectionID] < count {
 				n.fail("slipItems", "approvers cannot delete saved detail rows")
 			}
 		}

@@ -46,7 +46,29 @@ func pf14SelectRouteCode(def model.WorkflowDef, values map[string]any) (string, 
 // is left to do, already completed; callers must check ticket.Status.
 func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def model.WorkflowDef, inputs []FieldInput, approvers []ApproverInput, nowTime int64) error {
 	values := pf14InputValues(def, inputs)
-	routeCode, err := pf14SelectRouteCode(def, values)
+	var applicantValues map[string]any
+	if ticket.AuthorID != nil {
+		applicant, err := ActorForUser(ctx, tx, *ticket.AuthorID)
+		if err != nil {
+			return err
+		}
+		blocked, err := pf16BlockedSections(ctx, tx, applicant, *ticket, def)
+		if err != nil {
+			return err
+		}
+		applicantValues = pf14RouteApplicantValues(def, values, blocked)
+	} else {
+		blocked := map[string]bool{}
+		for _, section := range def.SectionList {
+			if section.ViewRestriction {
+				blocked[section.ID] = true
+			}
+		}
+		applicantValues = pf14RouteApplicantValues(def, values, blocked)
+	}
+	// Route branching runs as the applicant. Preserve values from sections
+	// they can view and clear only values from sections they cannot access.
+	routeCode, err := pf14SelectRouteCode(def, applicantValues)
 	if err != nil {
 		return err
 	}
@@ -156,6 +178,24 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	}
 	ticket.CurrentStep = 0
 	return e.pf14Advance(ctx, tx, ticket, store.Time(nowTime))
+}
+
+func pf14RouteApplicantValues(def model.WorkflowDef, values map[string]any, blocked map[string]bool) map[string]any {
+	filtered := make(map[string]any, len(values))
+	for key, value := range values {
+		filtered[key] = value
+	}
+	for _, section := range def.SectionList {
+		if section.SectionType != model.SectionTypeForm || !blocked[section.ID] {
+			continue
+		}
+		for _, field := range section.FormFields {
+			filtered[field.ID] = nil
+			filtered[field.Code] = nil
+			filtered[model.VariableName(field.Code)] = nil
+		}
+	}
+	return filtered
 }
 
 func pf14RouteStepValues(def model.WorkflowDef, values map[string]any) map[string]any {

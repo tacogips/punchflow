@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,12 +66,20 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 	r.globals = globals
 	if n.opts.AuthorID != "" {
 		if user, err := store.GetUser(n.ctx, n.q, n.opts.AuthorID); err == nil {
-			r.metadata["author"] = calcUserJSON(user)
+			if value, err := calcUserJSON(n.ctx, n.q, user); err == nil {
+				r.metadata["author"] = value
+			} else {
+				n.fail("base", "could not load public author custom fields")
+			}
 		}
 	}
 	if n.opts.ProxyClientID != nil {
 		if user, err := store.GetUser(n.ctx, n.q, *n.opts.ProxyClientID); err == nil {
-			r.metadata["proxyClientUser"] = calcUserJSON(user)
+			if value, err := calcUserJSON(n.ctx, n.q, user); err == nil {
+				r.metadata["proxyClientUser"] = value
+			} else {
+				n.fail("base", "could not load public proxy-client custom fields")
+			}
 		}
 	} else {
 		r.metadata["proxyClientUser"] = "null"
@@ -162,7 +171,11 @@ func (n *normalizer) calcReferenceValue(fieldType string, ids []string, value an
 			if err != nil {
 				continue
 			}
-			record = json.RawMessage(calcUserJSON(user))
+			encoded, err := calcUserJSON(n.ctx, n.q, user)
+			if err != nil {
+				continue
+			}
+			record = json.RawMessage(encoded)
 		case "team":
 			team, err := store.GetTeam(n.ctx, n.q, id)
 			if err != nil {
@@ -185,14 +198,21 @@ func (n *normalizer) calcReferenceValue(fieldType string, ids []string, value an
 	return string(raw)
 }
 
-func calcUserJSON(user model.User) string {
+func calcUserJSON(ctx context.Context, q store.Querier, user model.User) (string, error) {
 	fullName := strings.TrimSpace(user.LastName + " " + user.FirstName)
-	value := map[string]any{"id": user.ID, "firstName": user.FirstName, "lastName": user.LastName, "fullName": fullName, "email": user.Email, "code": user.Code, "customFields": user.CustomFields}
+	customFields, err := pf14PublicUserCustomFields(ctx, q, user.CustomFields)
+	if err != nil {
+		return "", err
+	}
+	value := map[string]any{"id": user.ID, "firstName": user.FirstName, "lastName": user.LastName, "fullName": fullName, "email": user.Email, "code": user.Code, "customFields": customFields}
 	if user.EmployeeID != nil {
 		value["employeeId"] = *user.EmployeeID
 	}
-	raw, _ := json.Marshal(value)
-	return string(raw)
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("encode formula user metadata: %w", err)
+	}
+	return string(raw), nil
 }
 
 func (r *calcRun) title() *string {
