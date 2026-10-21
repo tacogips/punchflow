@@ -48,7 +48,14 @@ func pf14cValidateFormValue(ctx context.Context, q store.Querier, field model.Fo
 		if !ok {
 			return badType
 		}
-		if field.MinLength != nil && len([]rune(v)) < *field.MinLength || field.MaxLength != nil && len([]rune(v)) > *field.MaxLength {
+		maxLength := 300
+		if field.FieldType == "text_long" {
+			maxLength = 10000
+		}
+		if field.MaxLength != nil && *field.MaxLength < maxLength {
+			maxLength = *field.MaxLength
+		}
+		if field.MinLength != nil && len([]rune(v)) < *field.MinLength || len([]rune(v)) > maxLength {
 			return fmt.Errorf("has an invalid length")
 		}
 		if field.RegexpFormat != nil && *field.RegexpFormat != "" {
@@ -72,6 +79,11 @@ func pf14cValidateFormValue(ctx context.Context, q store.Querier, field model.Fo
 			}
 		}
 	case "checkbox":
+		switch value.(type) {
+		case []string, []any:
+		default:
+			return badType
+		}
 		values, ok := stringsFromValue(value)
 		if !ok {
 			return badType
@@ -169,14 +181,34 @@ func pf14RoundStoredNumeric(fieldType string, value any) any {
 }
 
 func pf14RoundDecimalString(value string) (string, error) {
+	if len(value) > 4096 {
+		return value, fmt.Errorf("decimal input is too large")
+	}
+	if marker := strings.IndexAny(value, "eE"); marker >= 0 {
+		exponent, err := strconv.Atoi(value[marker+1:])
+		if err != nil {
+			return value, fmt.Errorf("invalid decimal exponent")
+		}
+		if exponent < -308 || exponent > 308 {
+			return value, nil
+		}
+	}
 	r, ok := new(big.Rat).SetString(value)
 	if !ok || r.Sign() == 0 {
 		return value, fmt.Errorf("invalid decimal")
 	}
 	negative := r.Sign() < 0
 	abs := new(big.Rat).Abs(r)
-	approx, _ := strconv.ParseFloat(value, 64)
-	exponent := int(math.Floor(math.Log10(math.Abs(approx))))
+	// Bound the decimal order before constructing powers of ten. ParseFloat
+	// underflows valid decimal strings such as 1e-400 to zero; converting
+	// log10(0) to int can overflow and make big.Int.Exp allocate indefinitely.
+	if r.Num().BitLen() > 4096 || r.Denom().BitLen() > 4096 {
+		return value, fmt.Errorf("decimal magnitude is too large")
+	}
+	exponent := decimalOrder(abs)
+	if exponent < -308 || exponent > 308 {
+		return value, nil
+	}
 	comparePower := func(power int) int {
 		p := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(absInt(power))), nil)
 		bound := new(big.Rat).SetInt(p)
@@ -230,6 +262,24 @@ func absInt(value int) int {
 		return -value
 	}
 	return value
+}
+
+func decimalOrder(value *big.Rat) int {
+	// Decimal input is at most a few kilobytes in API requests. Compare against
+	// bounded powers to find its base-10 order without floating underflow.
+	order := len(value.Num().String()) - len(value.Denom().String())
+	if order >= 0 {
+		bound := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(order)), nil)
+		if value.Cmp(new(big.Rat).SetInt(bound)) < 0 {
+			order--
+		}
+		return order
+	}
+	bound := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-order)), nil)
+	if value.Cmp(new(big.Rat).SetFrac(big.NewInt(1), bound)) < 0 {
+		order--
+	}
+	return order
 }
 
 func pf14cReferenceExists(ctx context.Context, q store.Querier, field model.FormField, id string) (bool, error) {

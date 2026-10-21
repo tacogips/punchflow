@@ -188,7 +188,7 @@ func (a *API) updateGrade(w http.ResponseWriter, r *http.Request) {
 	}
 	if value, ok := raw["level"]; ok {
 		var level int
-		if json.Unmarshal(value, &level) != nil || level < 0 || level > 255 {
+		if string(value) == "null" || json.Unmarshal(value, &level) != nil || level < 0 || level > 255 {
 			kferr.Write(w, kferr.InvalidParameter("Invalid level"))
 			return
 		}

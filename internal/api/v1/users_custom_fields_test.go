@@ -164,3 +164,35 @@ func TestUserCustomFieldsOmitUndefinedCodesAndHideRestrictedFields(t *testing.T)
 		}
 	}
 }
+
+func TestStandardPlanOmitsUserCustomFields(t *testing.T) {
+	env := testutil.New(t)
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE tenant SET plan='standard'`); err != nil {
+		t.Fatal(err)
+	}
+	id := env.UserID(t, "admin")
+	for _, response := range []*testutil.Response{
+		env.Do(t, testutil.Admin, http.MethodGet, "/v1/users/"+id, nil),
+		env.Do(t, testutil.Admin, http.MethodGet, "/v1/users?perPage=100", nil),
+	} {
+		if response.Status != http.StatusOK {
+			t.Fatalf("user response status=%d body=%s", response.Status, response.Body)
+		}
+		var value any
+		response.JSON(t, &value)
+		var objects []map[string]any
+		switch parsed := value.(type) {
+		case map[string]any:
+			objects = append(objects, parsed)
+		case []any:
+			for _, row := range parsed {
+				objects = append(objects, row.(map[string]any))
+			}
+		}
+		for _, object := range objects {
+			if _, present := object["customFields"]; present {
+				t.Fatalf("standard-plan response exposed customFields: %v", object)
+			}
+		}
+	}
+}

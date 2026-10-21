@@ -130,6 +130,7 @@ const (
 
 	TenantPlanStandard   = "standard"
 	TenantPlanEnterprise = "enterprise"
+	TenantPlanTrial      = "trial"
 
 	TenantModeNormal       = "normal"
 	TenantModeAdminWorking = "admin_working"

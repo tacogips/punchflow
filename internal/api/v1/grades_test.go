@@ -35,6 +35,15 @@ func TestGradeCreateUpdateAndConstraints(t *testing.T) {
 	var grade map[string]any
 	created.JSON(t, &grade)
 	id := grade["id"].(string)
+	var before int
+	if err := env.DB.Q().QueryRowContext(t.Context(), "SELECT level FROM grades WHERE id=?", id).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	testutil.AssertError(t, env.Do(t, testutil.Admin, http.MethodPatch, "/v1/grades/"+id, map[string]any{"level": nil}), http.StatusBadRequest, "invalid_parameter")
+	var after int
+	if err := env.DB.Q().QueryRowContext(t.Context(), "SELECT level FROM grades WHERE id=?", id).Scan(&after); err != nil || after != before {
+		t.Fatalf("null grade level changed stored value: before=%d after=%d err=%v", before, after, err)
+	}
 	duplicateLevel := env.Do(t, testutil.Admin, http.MethodPost, "/v1/grades", map[string]any{"name": "Duplicate", "level": 200})
 	testutil.AssertError(t, duplicateLevel, http.StatusUnprocessableEntity, "validation_failed")
 	byCode := env.Do(t, testutil.Admin, http.MethodGet, "/v1/grades/temporary", nil)

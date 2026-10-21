@@ -51,9 +51,10 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	statuses := r.URL.Query()["status[]"]
-	if len(statuses) == 0 {
-		statuses = r.URL.Query()["status"]
+	statuses, err := httpx.QueryArray(r, "status", true)
+	if err != nil {
+		kferr.Write(w, err)
+		return
 	}
 	for _, status := range statuses {
 		if !pf18Contains(model.UserStatuses, status) {
@@ -67,7 +68,13 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.Internal())
 		return
 	}
-	items, err := present.Users(r.Context(), a.d.DB.Q(), ids, present.UserOpts{LastUsedOn: true, CustomFields: true, AllCustomFields: true})
+	tenant, err := store.Tenant(r.Context(), a.d.DB.Q())
+	if err != nil {
+		kferr.Write(w, kferr.Internal())
+		return
+	}
+	includeCustomFields := tenant.Plan == model.TenantPlanEnterprise || tenant.Plan == model.TenantPlanTrial
+	items, err := present.Users(r.Context(), a.d.DB.Q(), ids, present.UserOpts{LastUsedOn: true, CustomFields: includeCustomFields, AllCustomFields: includeCustomFields})
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -152,6 +159,13 @@ func (a *API) createUser(w http.ResponseWriter, r *http.Request) {
 					return kferr.ValidationFailed(map[string][]string{"memberships": {"contains an unknown teamCode"}})
 				}
 				gradeIDs := make([]string, 0, len(membership.GradeCodes))
+				if len(membership.GradeCodes) == 0 {
+					defaultGradeID, err := store.DefaultGradeID(r.Context(), tx)
+					if err != nil {
+						return err
+					}
+					gradeIDs = append(gradeIDs, defaultGradeID)
+				}
 				for _, code := range membership.GradeCodes {
 					id, err := store.GradeIDByCode(r.Context(), tx, code)
 					if err != nil {
@@ -554,7 +568,12 @@ func (a *API) listUserRoles(w http.ResponseWriter, r *http.Request) {
 // pf18UserDetail renders a user. includeHiddenFields adds the custom fields that
 // are not visible to everyone, which callers with the user permission may see.
 func pf18UserDetail(ctx context.Context, q store.Querier, id string, includeHiddenFields bool) (present.UserDetailJSON, error) {
-	out, err := present.UserDetail(ctx, q, id, present.UserOpts{LastUsedOn: true, CustomFields: true, UserType: true, AllCustomFields: includeHiddenFields})
+	tenant, err := store.Tenant(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	includeCustomFields := tenant.Plan == model.TenantPlanEnterprise || tenant.Plan == model.TenantPlanTrial
+	out, err := present.UserDetail(ctx, q, id, present.UserOpts{LastUsedOn: true, CustomFields: includeCustomFields, UserType: true, AllCustomFields: includeCustomFields && includeHiddenFields})
 	if err != nil {
 		return nil, err
 	}

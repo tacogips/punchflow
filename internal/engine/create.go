@@ -26,6 +26,11 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if in.Title != nil && def.TitleInputMode != "input" {
 		return "", nil, kferr.InvalidParameter("Title can only be set when titleInputMode is input")
 	}
+	if in.Title != nil {
+		if err := validateTicketTitle(*in.Title); err != nil {
+			return "", nil, kferr.InvalidParameter("Title must be at most 300 characters")
+		}
+	}
 	if in.Status != model.TicketStatusDraft && in.Status != model.TicketStatusInProgress {
 		return "", nil, kferr.InvalidParameter("Invalid ticket status")
 	}
@@ -89,6 +94,9 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		return "", nil, err
 	}
 	if form.Title != nil {
+		if err := validateTicketTitle(*form.Title); err != nil {
+			return "", nil, kferr.InvalidParameter("Title must be at most 300 characters")
+		}
 		in.Title = form.Title
 	} else if def.TitleInputMode == "none" {
 		in.Title = nil

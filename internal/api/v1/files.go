@@ -12,6 +12,7 @@ import (
 	"punchflow/internal/access"
 	"punchflow/internal/auth"
 	"punchflow/internal/engine"
+	"punchflow/internal/files"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
@@ -66,6 +67,9 @@ func (a *API) uploadFile(w http.ResponseWriter, r *http.Request) {
 		var saveErr error
 		saved, saveErr = a.d.Files.Save(r.Context(), tx, p.User.ID, header.Filename, contentType, part)
 		if saveErr != nil {
+			if errors.Is(saveErr, files.ErrUnsupportedExtension) {
+				return kferr.InvalidParameter("Unsupported file extension")
+			}
 			if strings.Contains(saveErr.Error(), "exceeds maximum size") {
 				return kferr.PayloadTooLarge()
 			}

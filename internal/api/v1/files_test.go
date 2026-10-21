@@ -169,13 +169,24 @@ func TestUploadRejectsInvalidFormAndStandardPlan(t *testing.T) {
 	}
 }
 
+func TestUploadUnsupportedExtensionIsInvalidParameter(t *testing.T) {
+	env := testutil.New(t)
+	response := pf23UploadNamedFile(t, env, "example.exe", []byte("x"))
+	testutil.AssertError(t, response, http.StatusBadRequest, "invalid_parameter")
+}
+
 func pf23UploadFile(t *testing.T, env *testutil.Env, data []byte, includeFile bool) *testutil.Response {
+	return pf23UploadNamedFile(t, env, "receipt.pdf", data, includeFile)
+}
+
+func pf23UploadNamedFile(t *testing.T, env *testutil.Env, filename string, data []byte, includeFile ...bool) *testutil.Response {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	if includeFile {
+	withFile := len(includeFile) == 0 || includeFile[0]
+	if withFile {
 		header := make(textproto.MIMEHeader)
-		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": "file", "filename": "receipt.pdf"}))
+		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": "file", "filename": filename}))
 		header.Set("Content-Type", "application/pdf")
 		part, err := writer.CreatePart(header)
 		if err != nil {

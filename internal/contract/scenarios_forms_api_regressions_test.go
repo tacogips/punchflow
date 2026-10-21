@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	apiv1 "punchflow/internal/api/v1"
 	"punchflow/internal/model"
@@ -65,6 +66,17 @@ func TestContractTicketFormRequestValidation(t *testing.T) {
 		response := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", createBody(inputs))
 		pf26aCheckError(t, response, http.StatusBadRequest, "invalid_parameter", errorSchema)
 	})
+	t.Run("create_underflow_numeric_has_bounded_latency", func(t *testing.T) {
+		inputs := append([]map[string]any(nil), validInputs...)
+		inputs[0] = map[string]any{"formFieldId": fields["amount"], "value": "1e-400000000"}
+		start := time.Now()
+		response := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", createBody(inputs))
+		elapsed := time.Since(start)
+		if elapsed > 2*time.Second {
+			t.Fatalf("extreme underflow request took %s", elapsed)
+		}
+		pf26aCheck(t, operations["createTicket"], response, pf16ResponseSchema(t, compiler, operations["createTicket"]), spec)
+	})
 	t.Run("create_rejects_scalar_checkbox", func(t *testing.T) {
 		inputs := append([]map[string]any(nil), validInputs...)
 		inputs[len(inputs)-1] = map[string]any{"formFieldId": fields["wire-checkbox"], "value": "selected"}
@@ -88,6 +100,12 @@ func TestContractTicketFormRequestValidation(t *testing.T) {
 			"inputs": []map[string]any{{"formFieldId": fields["amount"], "value": 6000}},
 		})
 		pf26aCheck(t, operations["updateTicketForm"], response, pf16ResponseSchema(t, compiler, operations["updateTicketForm"]), spec)
+	})
+	t.Run("differential_update_rejects_scalar_checkbox", func(t *testing.T) {
+		response := env.Do(t, testutil.Employee, http.MethodPatch, "/v1/tickets/"+ticket.ID+"/form", map[string]any{
+			"inputs": []map[string]any{{"formFieldId": fields["wire-checkbox"], "value": "selected"}},
+		})
+		pf26aCheckError(t, response, http.StatusBadRequest, "invalid_parameter", errorSchema)
 	})
 }
 

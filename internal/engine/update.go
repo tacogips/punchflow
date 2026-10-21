@@ -68,6 +68,19 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 			}
 		}
 	}
+	if restWire && partial && (in.Inputs != nil || in.SlipItems != nil) {
+		var inputs []FieldInput
+		if in.Inputs != nil {
+			inputs = *in.Inputs
+		}
+		var slips []SlipItemInput
+		if in.SlipItems != nil {
+			slips = *in.SlipItems
+		}
+		if err = pf27ValidateCheckboxWireValues(def, inputs, slips); err != nil {
+			return nil, err
+		}
+	}
 	now := e.clock.Now()
 	hasUpdate := false
 	if !approver {
@@ -75,6 +88,9 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 			return nil, kferr.InvalidParameter("Title can only be set when titleInputMode is input")
 		}
 		if in.Title != nil {
+			if err := validateTicketTitle(*in.Title); err != nil {
+				return nil, kferr.InvalidParameter("Title must be at most 300 characters")
+			}
 			t.Title = in.Title
 			hasUpdate = true
 		}
@@ -192,6 +208,13 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 	return []model.WebhookEvent{}, nil
 }
 
+func validateTicketTitle(title string) error {
+	if len([]rune(title)) > 300 {
+		return fmt.Errorf("title exceeds 300 characters")
+	}
+	return nil
+}
+
 func (e *Engine) pf14UpdateForm(ctx context.Context, tx *store.Tx, a Actor, id string, in FormPatch) ([]model.WebhookEvent, error) {
 	if len(in.Inputs) == 0 && len(in.SlipItems) == 0 {
 		return nil, kferr.InvalidParameter("Form patch must contain inputs or slip items")
@@ -205,7 +228,7 @@ func (e *Engine) pf14UpdateForm(ctx context.Context, tx *store.Tx, a Actor, id s
 		slipPatch = &in.SlipItems
 	}
 	update.SlipItems = slipPatch
-	return e.pf14cUpdate(ctx, tx, a, id, update, true, false)
+	return e.pf14cUpdate(ctx, tx, a, id, update, true, true)
 }
 
 func pf14cValidateApproverPatch(def model.WorkflowDef, patch []FieldInput) error {

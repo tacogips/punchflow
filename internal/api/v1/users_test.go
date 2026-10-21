@@ -83,6 +83,36 @@ func TestUserCreateUpdateAndDomainRules(t *testing.T) {
 	}
 }
 
+func TestInvitedMembershipDefaultsGrade(t *testing.T) {
+	env := testutil.New(t)
+	created := env.Do(t, testutil.Admin, http.MethodPost, "/v1/users", map[string]any{
+		"email": "invite-default-grade@example.test", "firstName": "Invited", "lastName": "Member",
+		"memberships": []map[string]any{{"teamCode": "sales"}},
+	})
+	if created.Status != http.StatusOK {
+		t.Fatalf("create invited member: status=%d body=%s", created.Status, created.Body)
+	}
+	var user map[string]any
+	created.JSON(t, &user)
+	teamID, err := store.ResolveID(t.Context(), env.DB.Q(), "teams", "sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberships, err := store.GetTeamMemberships(t.Context(), env.DB.Q(), teamID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, membership := range memberships {
+		if membership.UserID == user["id"] {
+			if len(membership.GradeIDs) == 0 {
+				t.Fatal("invited membership has no grade")
+			}
+			return
+		}
+	}
+	t.Fatal("invited user membership was not persisted")
+}
+
 func TestUserStatusTransitionsAndAudit(t *testing.T) {
 	env := testutil.New(t)
 	id := env.UserID(t, "sales-rep")

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"punchflow/internal/model"
@@ -402,5 +403,40 @@ func TestTitleFormulaIsCalculated(t *testing.T) {
 	}
 	if title = e.ticket(id).Title; title == nil || *title != "Expense: taxi (110)" {
 		t.Fatalf("title after update=%v", title)
+	}
+}
+
+func TestCalculatedTicketTitleHonorsGlobalLimit(t *testing.T) {
+	e := pf14Setup(t)
+	prefix := strings.Repeat("x", 300)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		def.TitleInputMode = "calculate"
+		def.TitleFormula = pf16Formula(`CONCAT("` + prefix + `", purpose)`)
+	})
+	_, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, map[string]any{"amount": "100", "purpose": "trip"}), nil)
+	if err == nil {
+		t.Fatal("ticket with formula-derived title above 300 characters was accepted")
+	}
+}
+
+func TestInputTicketTitleHonorsGlobalLimit(t *testing.T) {
+	e := pf14Setup(t)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) { def.TitleInputMode = "input" })
+	workflow, err := store.GetWorkflowByCode(e.ctx, e.db.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, fields := pf14FormDefinition(t, e, "expense-claim")
+	inputs := pf14CompleteInputs(fields, map[string]any{"amount": "100", "purpose": "trip"})
+	title := strings.Repeat("x", 301)
+	err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
+		_, _, createErr := e.engine.Create(e.ctx, tx, e.actor("sales-rep"), CreateInput{
+			Status: model.TicketStatusDraft, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"),
+			Title: &title, Inputs: &inputs,
+		})
+		return createErr
+	})
+	if err == nil {
+		t.Fatal("ticket with input title above 300 characters was accepted")
 	}
 }

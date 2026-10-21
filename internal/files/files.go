@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,10 @@ import (
 )
 
 const pf23DefaultMaxBytes int64 = 50 << 20
+
+// ErrUnsupportedExtension indicates that an upload filename is outside the
+// extension allowlist documented by kickflow.
+var ErrUnsupportedExtension = errors.New("files: unsupported file extension")
 
 // kickflowAllowedExtensions is the upload-wide extension allowlist documented
 // by help-center article 360053857093.
@@ -64,7 +69,7 @@ func New(dataDir string, key []byte, baseURL string, clock kftime.Clock, maxByte
 }
 func (s *Store) Save(ctx context.Context, q store.Querier, uploaderID, filename, contentType string, r io.Reader) (model.File, error) {
 	if !allowedUploadFilename(filename) {
-		return model.File{}, fmt.Errorf("files: unsupported file extension")
+		return model.File{}, ErrUnsupportedExtension
 	}
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
 		return model.File{}, fmt.Errorf("files: create storage directory: %w", err)

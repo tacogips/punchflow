@@ -48,6 +48,44 @@ func pf27ValidateFormWireValues(def model.WorkflowDef, inputs []FieldInput, slip
 	return nil
 }
 
+func pf27ValidateCheckboxWireValues(def model.WorkflowDef, inputs []FieldInput, slips []SlipItemInput) error {
+	formFields := make(map[string]model.FormField)
+	slipFields := make(map[string]model.SlipField)
+	for _, section := range def.SectionList {
+		for _, field := range section.FormFields {
+			if field.FieldType == "checkbox" {
+				formFields[field.ID], formFields[field.Code] = field, field
+			}
+		}
+		for _, field := range section.SlipFields {
+			if field.FieldType == "checkbox" {
+				slipFields[field.ID], slipFields[field.Code] = field, field
+			}
+		}
+	}
+	for _, input := range inputs {
+		_, ok := formFields[input.FormFieldID]
+		if !ok {
+			_, ok = formFields[input.FormFieldCode]
+		}
+		if ok && !pf27ValidWireValue(input.Value, true) {
+			return kferr.InvalidParameter("Invalid form input value")
+		}
+	}
+	for _, slip := range slips {
+		for _, input := range slip.Inputs {
+			_, ok := slipFields[input.SlipFieldID]
+			if !ok {
+				_, ok = slipFields[input.SlipFieldCode]
+			}
+			if ok && !pf27ValidWireValue(input.Value, true) {
+				return kferr.InvalidParameter("Invalid detail input value")
+			}
+		}
+	}
+	return nil
+}
+
 // ValidateRESTFormWireValues applies the createTicket/updateTicket value
 // schema using a workflow ID. The differential updateTicketForm operation
 // intentionally uses a broader value contract.

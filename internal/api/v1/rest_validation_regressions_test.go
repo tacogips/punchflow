@@ -55,3 +55,8 @@ func TestTicketFiltersRejectInvalidSubStatusUUIDs(t *testing.T) {
 		testutil.AssertError(t, env.Do(t, testutil.Employee, http.MethodGet, path, nil), http.StatusBadRequest, "invalid_parameter")
 	}
 }
+
+func TestUserListRejectsRepeatedBareArrayValues(t *testing.T) {
+	env := testutil.New(t)
+	testutil.AssertError(t, env.Do(t, testutil.Admin, http.MethodGet, "/v1/users?status=activated&status=suspended", nil), http.StatusBadRequest, "invalid_parameter")
+}

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
@@ -90,6 +91,9 @@ func (n *normalizer) normalizeSlipRows(items []SlipItemInput) ([]model.TicketSli
 			return nil, kferr.InvalidParameter("Invalid slip section")
 		}
 		position := counters[section.ID]
+		if err := validateDetailRowPosition(position); err != nil {
+			return nil, kferr.InvalidParameter("A detail section cannot contain more than 50 rows")
+		}
 		counters[section.ID]++
 		var prev *model.TicketSlipItem
 		if position < len(existing[section.ID]) {
@@ -109,6 +113,13 @@ func (n *normalizer) normalizeSlipRows(items []SlipItemInput) ([]model.TicketSli
 		rows = append(rows, row)
 	}
 	return rows, nil
+}
+
+func validateDetailRowPosition(position int) error {
+	if position >= 50 {
+		return fmt.Errorf("detail section exceeds 50 rows")
+	}
+	return nil
 }
 
 func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item SlipItemInput, prev *model.TicketSlipItem) (map[string]any, map[string]any, error) {
