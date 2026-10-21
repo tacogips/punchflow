@@ -11,6 +11,7 @@ describe("notification view", () => {
   test("summarises lifecycle events with the actor", () => {
     expect(notificationSummary(base)).toBe("Sales Manager approved a ticket");
     expect(notificationSummary({ ...base, kind: "comment_mention" })).toBe("Sales Manager mentioned you in a comment");
+    expect(notificationSummary({ ...base, kind: "ticket_updated" })).toBe("Sales Manager edited a ticket");
   });
 
   test("phrases approval requests as a task", () => {

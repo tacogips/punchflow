@@ -57,6 +57,13 @@ func (a *API) pf22ListTickets(w http.ResponseWriter, r *http.Request, tasks bool
 			filter.Statuses = append(filter.Statuses, value)
 		}
 	}
+	// subStatusIds[] is shared by the ticket list and the task list.
+	if values, e := httpx.QueryArray(r, "subStatusIds", true); e != nil {
+		kferr.Write(w, e)
+		return
+	} else {
+		filter.SubStatusIDs = values
+	}
 	if tasks {
 		pending := q.Get("pending")
 		if pending != "" && pending != "true" && pending != "false" {
@@ -69,12 +76,6 @@ func (a *API) pf22ListTickets(w http.ResponseWriter, r *http.Request, tasks bool
 			return
 		}
 	} else {
-		if values, e := httpx.QueryArray(r, "subStatusIds", true); e != nil {
-			kferr.Write(w, e)
-			return
-		} else {
-			filter.SubStatusIDs = values
-		}
 		filter.AssigneeUserID = q.Get("assigneeUserId")
 		if values, e := httpx.QueryArray(r, "assigneeStatus", true); e != nil {
 			kferr.Write(w, e)

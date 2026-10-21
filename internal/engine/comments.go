@@ -25,7 +25,8 @@ func (e *Engine) pf14AddComment(ctx context.Context, tx *store.Tx, a Actor, id, 
 		return "", nil, err
 	}
 	if !def.CommentingEnabled {
-		return "", nil, kferr.InvalidState("Comments are disabled for this workflow")
+		// kickflow (changelog 2026-06-22): 422 validation_failed with errors.base.
+		return "", nil, kferr.ValidationFailed(map[string][]string{"base": {"Comments are disabled for this workflow"}})
 	}
 	if strings.TrimSpace(body) == "" && len(files) == 0 {
 		return "", nil, kferr.ValidationFailed(map[string][]string{"body": {"is required"}})

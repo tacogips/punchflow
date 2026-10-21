@@ -63,3 +63,35 @@ func TicketWatchStates(ctx context.Context, q Querier, ticketID string) (map[str
 	}
 	return out, nil
 }
+
+// TicketApproverUserIDs returns the distinct users who are assignees of any
+// step of the ticket, followed by the users who acted on their behalf, in
+// assignment order. They are the ticket's approvers for automatic watching.
+func TicketApproverUserIDs(ctx context.Context, q Querier, ticketID string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT user_id,actual_approver_id FROM ticket_assignees WHERE ticket_id=? ORDER BY created_at,id`, ticketID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list ticket approvers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []string{}
+	seen := map[string]bool{}
+	add := func(id string) {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for rows.Next() {
+		var userID string
+		var actual sql.NullString
+		if err = rows.Scan(&userID, &actual); err != nil {
+			return nil, fmt.Errorf("store: scan ticket approver: %w", err)
+		}
+		add(userID)
+		add(actual.String)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate ticket approvers: %w", err)
+	}
+	return out, nil
+}

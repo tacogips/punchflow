@@ -17,6 +17,7 @@ func TestWatchToggle(t *testing.T) {
 		Watching        bool   `json:"watching"`
 		Source          string `json:"source"`
 		WorkflowWatcher bool   `json:"workflowWatcher"`
+		OptedOut        bool   `json:"optedOut"`
 	}
 	read := func(response *testutil.Response) watchState {
 		t.Helper()
@@ -28,17 +29,32 @@ func TestWatchToggle(t *testing.T) {
 		return state
 	}
 
-	if got := read(e.Do(t, testutil.Employee, http.MethodGet, path, nil)); got.Watching {
-		t.Fatalf("initial watch state = %+v, want not watching", got)
+	// The applicant watches automatically; stopping is an explicit opt-out.
+	if got := read(e.Do(t, testutil.Employee, http.MethodGet, path, nil)); !got.Watching || got.Source != "applicant" || got.OptedOut {
+		t.Fatalf("initial author watch state = %+v, want automatic applicant watching", got)
 	}
-	if got := read(e.Do(t, testutil.Employee, http.MethodPost, path, nil)); !got.Watching || got.Source != "manual" {
-		t.Fatalf("after watch = %+v, want manual watching", got)
+	if got := read(e.Do(t, testutil.Employee, http.MethodDelete, path, nil)); got.Watching || !got.OptedOut {
+		t.Fatalf("after author unwatch = %+v, want opted out", got)
 	}
-	if got := read(e.Do(t, testutil.Employee, http.MethodGet, path, nil)); !got.Watching {
+	if got := read(e.Do(t, testutil.Employee, http.MethodGet, path, nil)); got.Watching || !got.OptedOut {
+		t.Fatalf("opt-out did not persist: %+v", got)
+	}
+	if got := read(e.Do(t, testutil.Employee, http.MethodPost, path, nil)); !got.Watching || got.Source != "applicant" || got.OptedOut {
+		t.Fatalf("after author watch again = %+v, want applicant watching", got)
+	}
+
+	// A user without an automatic subscription needs an explicit one.
+	if got := read(e.Do(t, testutil.Admin, http.MethodGet, path, nil)); got.Watching || got.OptedOut {
+		t.Fatalf("initial admin watch state = %+v, want not watching", got)
+	}
+	if got := read(e.Do(t, testutil.Admin, http.MethodPost, path, nil)); !got.Watching || got.Source != "manual" {
+		t.Fatalf("after admin watch = %+v, want manual watching", got)
+	}
+	if got := read(e.Do(t, testutil.Admin, http.MethodGet, path, nil)); !got.Watching {
 		t.Fatalf("watch did not persist: %+v", got)
 	}
-	if got := read(e.Do(t, testutil.Employee, http.MethodDelete, path, nil)); got.Watching {
-		t.Fatalf("after unwatch = %+v, want not watching", got)
+	if got := read(e.Do(t, testutil.Admin, http.MethodDelete, path, nil)); got.Watching || got.OptedOut {
+		t.Fatalf("after admin unwatch = %+v, want not watching and not an opt-out", got)
 	}
 
 	t.Run("invisible ticket cannot be watched", func(t *testing.T) {
@@ -137,10 +153,10 @@ func TestNotificationDenyRejectWithdraw(t *testing.T) {
 	if countKind(author, "ticket_withdrawn", withdrawn) != 0 {
 		t.Fatalf("author notified of own withdrawal: %v", kinds(author))
 	}
-	// The pending approver sees the withdrawal through the author-as-actor rule:
-	// only watchers and the author are told, so the manager is not.
-	if got := e.inbox(t, testutil.Manager, ""); countKind(got, "ticket_withdrawn", withdrawn) != 0 {
-		t.Fatalf("approver unexpectedly notified of withdrawal: %v", kinds(got))
+	// Approvers watch automatically, so the pending approver hears about the
+	// withdrawal.
+	if got := e.inbox(t, testutil.Manager, ""); countKind(got, "ticket_withdrawn", withdrawn) != 1 {
+		t.Fatalf("approver was not notified of withdrawal: %v", kinds(got))
 	}
 }
 

@@ -87,9 +87,6 @@ func (a *API) createComment(w http.ResponseWriter, r *http.Request) {
 		var callErr error
 		commentID, events, callErr = a.d.Engine.AddComment(r.Context(), tx, actorFor(p), ticketID, body.Body, body.Files)
 		if callErr != nil {
-			if apiErr, ok := kferr.As(callErr); ok && apiErr.Code == "invalid_state" && apiErr.Message == "Comments are disabled for this workflow" {
-				return kferr.ValidationFailed(map[string][]string{"base": {apiErr.Message}})
-			}
 			return callErr
 		}
 		if err := a.d.Events.Enqueue(r.Context(), tx, events); err != nil {

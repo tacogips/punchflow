@@ -17,6 +17,7 @@ type watchJSON struct {
 	Watching        bool   `json:"watching"`
 	Source          string `json:"source"`
 	WorkflowWatcher bool   `json:"workflowWatcher"`
+	OptedOut        bool   `json:"optedOut"`
 }
 
 func (a *API) getWatch(w http.ResponseWriter, r *http.Request) {
@@ -72,5 +73,5 @@ func (a *API) watchStatus(ctx context.Context, q store.Querier, ticketID, userID
 	if err != nil {
 		return watchJSON{}, err
 	}
-	return watchJSON{TicketID: ticketID, Watching: status.Watching, Source: status.Source, WorkflowWatcher: status.WorkflowWatcher}, nil
+	return watchJSON{TicketID: ticketID, Watching: status.Watching, Source: status.Source, WorkflowWatcher: status.WorkflowWatcher, OptedOut: status.OptedOut}, nil
 }

@@ -111,6 +111,12 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		}
 		hasUpdate = true
 	}
+	if in.Viewers != nil || in.WatcherUserID != nil {
+		if err = applyInlineViewers(ctx, tx, a, def, id, in.Viewers, in.WatcherUserID, now); err != nil {
+			return nil, err
+		}
+		hasUpdate = true
+	}
 	if pf14IsSubmission(t.Status, in.Status) {
 		if err = e.pf14cSubmit(ctx, tx, a, &t, def, in.Approvers, now); err != nil {
 			return nil, err

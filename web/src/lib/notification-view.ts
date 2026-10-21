@@ -10,6 +10,7 @@ const kindText: Record<string, string> = {
   ticket_completed: "completed a ticket",
   ticket_withdrawn: "withdrew a ticket",
   ticket_archived: "archived a ticket",
+  ticket_updated: "edited a ticket",
   comment_created: "commented on a ticket",
   comment_mention: "mentioned you in a comment",
 };

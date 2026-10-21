@@ -21,6 +21,8 @@ export default function WatchToggle(props: { ticketId: string }) {
   return <Show when={state()}>{(current) => <span class="watch-toggle">
     <button type="button" aria-pressed={current().watching} disabled={busy()} onClick={toggle}>{current().watching ? "Unwatch" : "Watch"}</button>
     <Show when={current().watching && current().source === "workflow"}><small>watching through the workflow</small></Show>
+    <Show when={current().watching && current().source === "applicant"}><small>watching as the applicant</small></Show>
+    <Show when={current().watching && current().source === "approver"}><small>watching as an approver</small></Show>
     <Show when={error()}><small role="alert">{error()}</small></Show>
   </span>}</Show>;
 }

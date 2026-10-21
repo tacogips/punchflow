@@ -3169,6 +3169,29 @@ paths:
                         items:
                           type: string
                           format: uuid
+                # punchflow snapshot addition: viewers and watcherUserId are documented only in the
+                # kickflow API changelog (2026-08-05, https://developer.kickflow.com/changelog/); the
+                # published schema does not list them yet. Shapes are inferred from the changelog.
+                viewers:
+                  type:
+                    - array
+                    - 'null'
+                  description: 閲覧者として追加するユーザーの配列。存在しない、または削除済みのユーザーIDを指定すると422(validation_failed)になります。一時停止中のユーザーは指定できます。
+                  items:
+                    type: object
+                    required:
+                      - userId
+                    properties:
+                      userId:
+                        type: string
+                        format: uuid
+                        description: 閲覧者として追加するユーザーのUUID
+                watcherUserId:
+                  type:
+                    - string
+                    - 'null'
+                  format: uuid
+                  description: ウォッチャーとして登録するユーザーのUUID。存在しない、または削除済みのユーザーIDを指定すると422(validation_failed)になります。
               required:
                 - status
                 - workflowId
@@ -3699,6 +3722,29 @@ paths:
                         items:
                           type: string
                           format: uuid
+                # punchflow snapshot addition: viewers and watcherUserId are documented only in the
+                # kickflow API changelog (2026-08-05, https://developer.kickflow.com/changelog/); the
+                # published schema does not list them yet. Shapes are inferred from the changelog.
+                viewers:
+                  type:
+                    - array
+                    - 'null'
+                  description: 閲覧者として追加するユーザーの配列。存在しない、または削除済みのユーザーIDを指定すると422(validation_failed)になります。一時停止中のユーザーは指定できます。
+                  items:
+                    type: object
+                    required:
+                      - userId
+                    properties:
+                      userId:
+                        type: string
+                        format: uuid
+                        description: 閲覧者として追加するユーザーのUUID
+                watcherUserId:
+                  type:
+                    - string
+                    - 'null'
+                  format: uuid
+                  description: ウォッチャーとして登録するユーザーのUUID。存在しない、または削除済みのユーザーIDを指定すると422(validation_failed)になります。
   /v1/tickets/{ticketId}/form:
     parameters:
       - schema:

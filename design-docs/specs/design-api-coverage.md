@@ -87,10 +87,10 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 |---|---|---|---|---|---|---|
 | 1 | getCurrentUser | GET | /v1/user | any | users.go | Returns the effective user (SAT: caller) |
 | 2 | listUsers | GET | /v1/users | user | users.go | Filters per spec; `lastUsedOn` included |
-| 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed`; `customFields` only for defined codes (`user-custom-fields.json`), else 422 (INF-81) |
+| 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed`; `customFields` only for defined codes (`user-custom-fields.json`), else 422 (INF-81); `email` must be an address only (`Name <a@b>`, comments, quoted parts and surrounding spaces are `400 invalid_parameter`) so the response satisfies `format: email` |
 | 4 | getUser | GET | /v1/users/{userId} | user | users.go | id or code |
 | 5 | deleteUser | DELETE | /v1/users/{userId} | user | users.go | Soft delete -> `deactivated`, returns UserDetail; archives the user's open tickets (`ticket_archived`), removes pending approver assignments and re-evaluates the affected steps (INF-79) |
-| 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `domain_not_allowed`; `customFields` validated against the definitions (INF-81) |
+| 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `email` is address-only as in createUser; `domain_not_allowed`; `customFields` validated against the definitions (INF-81) |
 | 7 | lookupUserByEmail | GET | /v1/users/lookupByEmail | user | users.go | Exact, case-insensitive match |
 | 8 | reinviteUser | POST | /v1/users/{userId}/reinvite | user | users.go | `deactivated`/`invited` -> `invited` with a new invitation; else INF-24 |
 | 9 | suspendUser | POST | /v1/users/{userId}/suspend | user | users.go | `activated` -> `suspended`; else INF-24 |
@@ -141,10 +141,10 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 54 | listWorkflows | GET | /v1/workflows | any | definitions.go | `status` filter per spec |
 | 55 | getWorkflow | GET | /v1/workflows/{workflowId} | any | definitions.go | WorkflowDetail; integration fields null (DIV-03) |
 | 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; TicketWithStep without inputs/route; INF-02 |
-| 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21) |
-| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-40 |
+| 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21); `viewers[].userId` and `watcherUserId` (INF-NES-16) |
+| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-40; `subStatusIds[]` filters tasks as it does tickets (the list and its `Total` header are filtered) |
 | 59 | getTicket | GET | /v1/tickets/{ticketId} | visible | tickets.go | TicketDetail incl. `actualApprover` |
-| 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, approver fields only) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); `slipItems` replace all rows (INF-75) |
+| 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, approver fields only) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); `slipItems` replace all rows (INF-75); `viewers[]` replaces the user viewers and `watcherUserId` subscribes a watcher (INF-NES-16) |
 | 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; per-section differential detail rows (INF-75); `ticket_updated` |
 | 62 | approveTicket | POST | /v1/tickets/{ticketId}/approve | current assignee or proxy | ticket_actions.go | Engine `Approve`; `ticket_approved`/`ticket_confirmed` for the step acted on even when it needs more approvals (INF-74) (+ `ticket_completed`); approver-required form and detail cells checked (INF-69); INF-22, INF-41 |
 | 63 | rejectTicket | POST | /v1/tickets/{ticketId}/reject | current assignee or proxy | ticket_actions.go | Engine `SendBack`; `ticket_rejected`; INF-12 (skipped steps stay skipped); sub-status restriction INF-61 |
@@ -176,7 +176,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 89 | listRoleMembers | GET | /v1/roles/{roleId}/memberships | role | roles.go | User without `customFields` |
 | 90 | deleteRoleMember | DELETE | /v1/roles/{roleId}/memberships/{userId} | role | roles.go | Removing the last super admin -> 422; removing self (non super admin) -> 403 (INF-43) |
 | 91 | listComments | GET | /v1/tickets/{ticketId}/comments | visible | comments.go | INF-30 |
-| 92 | createComment | POST | /v1/tickets/{ticketId}/comments | visible | comments.go | `commentingEnabled: false` -> 422 `errors.base`; mentions `<@uuid>`; up to 10 `files`; `comment_created` |
+| 92 | createComment | POST | /v1/tickets/{ticketId}/comments | visible | comments.go | `commentingEnabled: false` -> `422 validation_failed` with `errors.base` (engine `AddComment` returns it directly); mentions `<@uuid>`; up to 10 `files`; `comment_created` |
 | 93 | getComment | GET | /v1/tickets/{ticketId}/comments/{commentId} | visible | comments.go | |
 | 94 | updateComment | PATCH | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Attachments unchanged; `comment_updated` |
 | 95 | deleteComment | DELETE | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Soft delete; `comment_updated` |

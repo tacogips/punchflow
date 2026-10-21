@@ -1,7 +1,7 @@
 // Types of the punchflow-only /ui/api/ endpoints (watch subscriptions and the
 // local notification inbox). They are not part of kickflow's /v1 API.
 
-export type WatchSource = "" | "manual" | "workflow";
+export type WatchSource = "" | "manual" | "workflow" | "applicant" | "approver";
 
 export interface WatchState {
   ticketId: string;
@@ -9,12 +9,14 @@ export interface WatchState {
   source: WatchSource;
   /** True when the workflow definition lists the user, even after an opt-out. */
   workflowWatcher: boolean;
+  /** True when the user would watch automatically (applicant, approver, workflow) but opted out. */
+  optedOut: boolean;
 }
 
 export type NotificationKind =
   | "ticket_applied" | "approval_requested" | "ticket_approved" | "ticket_confirmed"
   | "ticket_rejected" | "ticket_denied" | "ticket_completed" | "ticket_withdrawn"
-  | "ticket_archived" | "comment_created" | "comment_mention";
+  | "ticket_archived" | "ticket_updated" | "comment_created" | "comment_mention";
 
 export interface AppNotification {
   id: string;

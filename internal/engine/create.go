@@ -99,6 +99,9 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if err = pf14SyncInputSideEffects(ctx, tx, def, id, nil, nil, form, store.Millis(now)); err != nil {
 		return "", nil, err
 	}
+	if err = applyInlineViewers(ctx, tx, a, def, id, in.Viewers, in.WatcherUserID, now); err != nil {
+		return "", nil, err
+	}
 	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketCreated, id, a.UserID)}
 	if !full {
 		if err = pf14SaveAuthorNominations(ctx, tx, id, def, in.Approvers); err != nil {

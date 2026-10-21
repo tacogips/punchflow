@@ -48,16 +48,19 @@ Migration `0030_watch_notifications.sql`:
 
 ### Watching
 
-Effective watchers of a ticket are:
+Effective watchers of a ticket come from one calculation that is shared by the watch status and by notification delivery (`notify.resolveSubscriptions`). In order:
 
-1. workflow-level watchers from the workflow definition (`watchers`: users, and the members of watcher teams in the active org chart) who have not opted out, then
-2. users with an explicit `watching` row.
+1. the applicant: the ticket's author and its proxy client (`source: "applicant"`),
+2. the approvers: every user with a `ticket_assignees` row on any step of the ticket and the user who acted for such an assignee (`source: "approver"`),
+3. workflow-level watchers from the workflow definition (`watchers`: users, and the members of watcher teams in the active org chart; `source: "workflow"`),
 
-A workflow-level watcher is therefore subscribed automatically, without any row, and the watch toggle reports `source: "workflow"`. Calling `DELETE` records `unwatched`, which wins over the workflow definition from then on; `POST` records `watching` again (`source` stays `workflow` when the definition also lists the user). The workflow is resolved when events fire, so watchers added to a workflow later also receive notifications for tickets that already exist.
+each unless the user has an explicit `unwatched` row, then 4. users with an explicit `watching` row who are not already listed (`source: "manual"`).
+
+Automatic subscribers need no row. Calling `DELETE` records `unwatched`, which wins over every automatic source from then on and is reported as `optedOut: true`; `POST` records `watching` again (the automatic `source` is kept when there is one). The ticket's assignees and the workflow are resolved when events fire, so approvers and workflow watchers added later also receive notifications for tickets that already exist.
 
 Watching requires that the caller can view the ticket (`403 invisible_ticket` otherwise, `404 resource_not_found` for an unknown ticket). Watching does not grant access.
 
-Watch state response: `{ticketId, watching, source: "" | "manual" | "workflow", workflowWatcher}`.
+Watch state response: `{ticketId, watching, source: "" | "manual" | "workflow" | "applicant" | "approver", workflowWatcher, optedOut}`.
 
 ### Notification fan-out
 
@@ -73,10 +76,11 @@ Notifications are produced inside the transaction that produced the event, witho
 | `ticket_completed` | `ticket_completed` | author, proxy client, watchers |
 | `ticket_withdrawn` | `ticket_withdrawn` | author, proxy client, watchers |
 | `ticket_archived` | `ticket_archived` | author, proxy client, watchers |
-| `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected` while `in_progress` | `approval_requested` | unfinished assignees of the current actionable steps |
+| `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected` while `in_progress` | `approval_requested` | unfinished assignees of the current actionable steps; they receive it instead of the generic notice of the same event |
 | `comment_created` | `comment_mention` | users mentioned in the comment |
 | `comment_created` | `comment_created` | author, proxy client, watchers, except mentioned users |
-| `ticket_created`, `ticket_updated`, `comment_updated`, `ping` | none | |
+| `ticket_updated` (ticket or form edit) | `ticket_updated` | author, proxy client, approvers, watchers (the editor is skipped) |
+| `ticket_created`, `comment_updated`, `ping` | none | |
 
 Rules applied to every recipient:
 

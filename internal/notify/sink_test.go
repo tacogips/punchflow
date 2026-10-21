@@ -56,7 +56,6 @@ func TestFanoutIgnoresEventsWithoutNotifications(t *testing.T) {
 	events := []model.WebhookEvent{
 		{Type: model.WebhookEventPing},
 		{Type: model.WebhookEventTicketCreated, TicketID: "t1"},
-		{Type: model.WebhookEventTicketUpdated, TicketID: "t1"},
 		{Type: model.WebhookEventCommentUpdated, TicketID: "t1", CommentID: "c1"},
 		{Type: model.WebhookEventTicketApproved},
 	}

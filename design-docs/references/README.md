@@ -17,7 +17,7 @@ This directory contains reference materials for system design and implementation
 | File | Description |
 |------|-------------|
 | [kickflow-api.md](./kickflow-api.md) | Consolidated English reference: API conventions, all 96 REST operations, all schemas, webhooks, UI feature inventory, confirmed vs inferred |
-| [kickflow-openapi.yaml](./kickflow-openapi.yaml) | Official OpenAPI 3.1 definition (MIT), copied from https://developer.kickflow.com/rest/schema.yaml on 2026-10-20 |
+| [kickflow-openapi.yaml](./kickflow-openapi.yaml) | Official OpenAPI 3.1 definition (MIT), copied from https://developer.kickflow.com/rest/schema.yaml on 2026-10-20; punchflow adds `viewers` and `watcherUserId` to the createTicket/updateTicket request bodies from the 2026-08-05 changelog (marked by a comment) |
 
 ## Reference Documents
 

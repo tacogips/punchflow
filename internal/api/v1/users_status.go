@@ -90,7 +90,7 @@ func (a *API) createUser(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("Missing required user fields"))
 		return
 	}
-	if _, err := mail.ParseAddress(body.Email); err != nil {
+	if !pf08AddressOnlyEmail(body.Email) {
 		kferr.Write(w, kferr.InvalidParameter("Invalid email"))
 		return
 	}
@@ -336,7 +336,7 @@ func (a *API) updateUser(w http.ResponseWriter, r *http.Request) {
 			kferr.Write(w, kferr.InvalidParameter("Invalid email"))
 			return
 		}
-		if _, err := mail.ParseAddress(*patch.Email); err != nil {
+		if !pf08AddressOnlyEmail(*patch.Email) {
 			kferr.Write(w, kferr.InvalidParameter("Invalid email"))
 			return
 		}
@@ -555,4 +555,16 @@ func pf18Contains(values []string, value string) bool {
 }
 func pf18Unique(err error) bool {
 	return err != nil && (strings.Contains(strings.ToLower(err.Error()), "unique constraint") || strings.Contains(strings.ToLower(err.Error()), "is not unique"))
+}
+
+// pf08AddressOnlyEmail reports whether s is a bare email address. The user
+// schemas declare format: email, so RFC 5322 mailbox forms that mail.ParseAddress
+// accepts ("Name <user@example.test>", trailing comments, quoted local parts)
+// are rejected: the stored value is echoed back as User.email unchanged.
+func pf08AddressOnlyEmail(s string) bool {
+	if s == "" || strings.TrimSpace(s) != s || strings.ContainsAny(s, "<>\"(), \t\r\n") {
+		return false
+	}
+	addr, err := mail.ParseAddress(s)
+	return err == nil && addr.Name == "" && addr.Address == s
 }

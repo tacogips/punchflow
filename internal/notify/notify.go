@@ -33,6 +33,7 @@ const (
 	KindTicketCompleted   = "ticket_completed"
 	KindTicketWithdrawn   = "ticket_withdrawn"
 	KindTicketArchived    = "ticket_archived"
+	KindTicketUpdated     = "ticket_updated"
 	KindCommentCreated    = "comment_created"
 	KindCommentMention    = "comment_mention"
 )
@@ -51,6 +52,7 @@ var lifecycleKinds = map[string]string{
 	model.WebhookEventTicketCompleted: KindTicketCompleted,
 	model.WebhookEventTicketWithdrawn: KindTicketWithdrawn,
 	model.WebhookEventTicketArchived:  KindTicketArchived,
+	model.WebhookEventTicketUpdated:   KindTicketUpdated,
 }
 
 // requestEvents are the events after which a different set of approvers may be
@@ -125,13 +127,15 @@ func (r *fanoutRun) event(ctx context.Context, event model.WebhookEvent) error {
 		return err
 	}
 	if lifecycle {
-		if err = r.send(ctx, ticket, kind, event, "", audience, nil); err != nil {
-			return err
-		}
+		// An approver who is asked to act on this event gets the request
+		// instead of a second, generic notice for the same event.
+		var asked map[string]bool
 		if requestEvents[event.Type] {
-			return r.approvalRequests(ctx, ticket, event)
+			if asked, err = r.approvalRequests(ctx, ticket, event); err != nil {
+				return err
+			}
 		}
-		return nil
+		return r.send(ctx, ticket, kind, event, "", audience, asked)
 	}
 	return r.comment(ctx, ticket, event, audience)
 }
@@ -167,14 +171,16 @@ func (r *fanoutRun) comment(ctx context.Context, ticket model.Ticket, event mode
 // approvalRequests notifies the unfinished assignees of the ticket's current
 // actionable steps once per assignment (the assignee row and its last update
 // form the idempotency key, so a send-back that re-activates a step notifies
-// again while a partial approval does not repeat earlier requests).
-func (r *fanoutRun) approvalRequests(ctx context.Context, ticket model.Ticket, event model.WebhookEvent) error {
+// again while a partial approval does not repeat earlier requests). It returns
+// the users who are asked, whether or not a new notification was written.
+func (r *fanoutRun) approvalRequests(ctx context.Context, ticket model.Ticket, event model.WebhookEvent) (map[string]bool, error) {
+	asked := map[string]bool{}
 	if ticket.Status != model.TicketStatusInProgress {
-		return nil
+		return asked, nil
 	}
 	steps, err := store.EngTicketSteps(ctx, r.q, ticket.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, step := range steps {
 		if step.StepOrder != ticket.CurrentStep || step.Status != model.StepStatusInProgress || step.ActionType == model.ActionTypeNone {
@@ -182,19 +188,20 @@ func (r *fanoutRun) approvalRequests(ctx context.Context, ticket model.Ticket, e
 		}
 		assignees, err := store.EngStepAssignees(ctx, r.q, step.ID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, assignee := range assignees {
 			if assignee.Completed {
 				continue
 			}
+			asked[assignee.UserID] = true
 			key := fmt.Sprintf("approval:%s:%d", assignee.ID, store.Millis(assignee.UpdatedAt))
 			if err = r.deliver(ctx, ticket, KindApprovalRequested, event, "", assignee.UserID, &key, true); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	return nil
+	return asked, nil
 }
 
 // send delivers kind to every recipient not in skip, dropping the actor.

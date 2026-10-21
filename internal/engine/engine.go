@@ -58,6 +58,9 @@ type CreateInput struct {
 	Inputs            *[]FieldInput    `json:"inputs"`
 	SlipItems         *[]SlipItemInput `json:"slipItems"`
 	Approvers         []ApproverInput  `json:"approvers"`
+	// Viewers and WatcherUserID follow the 2026-08-05 kickflow changelog.
+	Viewers       *[]InlineViewer `json:"viewers"`
+	WatcherUserID *string         `json:"watcherUserId"`
 }
 type UpdateInput struct {
 	Status            *string          `json:"status"`
@@ -67,6 +70,8 @@ type UpdateInput struct {
 	Inputs            *[]FieldInput    `json:"inputs"`
 	SlipItems         *[]SlipItemInput `json:"slipItems"`
 	Approvers         *[]ApproverInput `json:"approvers"`
+	Viewers           *[]InlineViewer  `json:"viewers"`
+	WatcherUserID     *string          `json:"watcherUserId"`
 }
 type FormPatch struct {
 	Inputs    []FieldInput    `json:"inputs"`
