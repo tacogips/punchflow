@@ -13,10 +13,10 @@ import (
 )
 
 func (e *Engine) pf14Update(ctx context.Context, tx *store.Tx, a Actor, id string, in UpdateInput) ([]model.WebhookEvent, error) {
-	return e.pf14cUpdate(ctx, tx, a, id, in, false)
+	return e.pf14cUpdate(ctx, tx, a, id, in, false, false)
 }
 
-func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id string, in UpdateInput, partial bool) ([]model.WebhookEvent, error) {
+func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id string, in UpdateInput, partial, restWire bool) ([]model.WebhookEvent, error) {
 	t, err := e.pf14Guard(ctx, tx, a, id)
 	if err != nil {
 		return nil, err
@@ -45,6 +45,28 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
 	if err != nil {
 		return nil, err
+	}
+	if restWire && !partial && (in.Inputs != nil || in.SlipItems != nil) {
+		var inputs []FieldInput
+		if in.Inputs != nil {
+			inputs = *in.Inputs
+		}
+		var slips []SlipItemInput
+		if in.SlipItems != nil {
+			slips = *in.SlipItems
+		}
+		if err = pf27ValidateFormWireValues(def, inputs, slips); err != nil {
+			return nil, err
+		}
+		if approver && in.Inputs != nil {
+			blocked, blockErr := pf16BlockedSections(ctx, tx, a, t, def)
+			if blockErr != nil {
+				return nil, blockErr
+			}
+			if err = pf27ValidateApproverInputCompleteness(def, *in.Inputs, blocked); err != nil {
+				return nil, err
+			}
+		}
 	}
 	now := e.clock.Now()
 	hasUpdate := false
@@ -183,7 +205,7 @@ func (e *Engine) pf14UpdateForm(ctx context.Context, tx *store.Tx, a Actor, id s
 		slipPatch = &in.SlipItems
 	}
 	update.SlipItems = slipPatch
-	return e.pf14cUpdate(ctx, tx, a, id, update, true)
+	return e.pf14cUpdate(ctx, tx, a, id, update, true, false)
 }
 
 func pf14cValidateApproverPatch(def model.WorkflowDef, patch []FieldInput) error {

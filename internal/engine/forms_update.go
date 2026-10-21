@@ -95,7 +95,7 @@ func (e *Engine) pf14cRevalidateForSubmit(ctx context.Context, tx *store.Tx, a A
 	if err != nil {
 		return nil, err
 	}
-	opts := formOpts{Full: true, Blocked: blocked, ExistingInputs: existingInputs, ExistingSlips: existingSlips, AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot}
+	opts := formOpts{Full: true, Revalidating: true, Blocked: blocked, ExistingInputs: existingInputs, ExistingSlips: existingSlips, AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot}
 	stored := pf14cInputsFromRows(def, existingInputs)
 	slips := pf14cSlipInputsFromRows(def, existingSlips)
 	if len(slips) > 0 {

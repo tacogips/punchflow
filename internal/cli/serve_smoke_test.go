@@ -72,7 +72,7 @@ func TestServeSmoke(t *testing.T) {
 		t.Errorf("current user status = %d", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
-	ticketBody := `{"status":"in_progress","workflowId":"1f46223b-a6ef-4ee8-884e-d3f1e6b9f13b","authorTeamId":"00000000-0000-4000-8000-000000000021","title":"PF-26 serve smoke","inputs":[{"formFieldId":"6f32e53a-d4ce-4d19-8723-754749c7d803","value":5000},{"formFieldId":"36b5a79c-d51f-45ad-8fab-24fcc9948789","value":"Smoke test"},{"formFieldId":"d10e07d0-0f87-465e-8d5f-c81b9fff9beb","value":"2026-01-01"},{"formFieldId":"6eaffa72-f1cd-4a9f-bb17-4dec8b5449f9","generalMasterItemId":"00000000-0000-4000-8000-000000000041"},{"formFieldId":"12547c53-e398-4b25-b9e2-d90230ba1abe","files":[]},{"formFieldId":"95427a69-4c2c-472e-8799-7653cf1f36cc","value":""}]}`
+	ticketBody := `{"status":"in_progress","workflowId":"1f46223b-a6ef-4ee8-884e-d3f1e6b9f13b","authorTeamId":"00000000-0000-4000-8000-000000000021","title":"PF-26 serve smoke","inputs":[{"formFieldId":"6f32e53a-d4ce-4d19-8723-754749c7d803","value":"5000"},{"formFieldId":"36b5a79c-d51f-45ad-8fab-24fcc9948789","value":"Smoke test"},{"formFieldId":"d10e07d0-0f87-465e-8d5f-c81b9fff9beb","value":"2026-01-01"},{"formFieldId":"6eaffa72-f1cd-4a9f-bb17-4dec8b5449f9","generalMasterItemId":"00000000-0000-4000-8000-000000000041"},{"formFieldId":"12547c53-e398-4b25-b9e2-d90230ba1abe","files":[]},{"formFieldId":"95427a69-4c2c-472e-8799-7653cf1f36cc","value":""}]}`
 	resp = request(http.MethodPost, "/v1/tickets", "pf_pat_dev_employee", strings.NewReader(ticketBody))
 	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(resp.Body)

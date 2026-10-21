@@ -20,7 +20,7 @@ func n03CreateBody(t *testing.T, env *testutil.Env, status string, extra map[str
 	body := map[string]any{
 		"status": status, "workflowId": pf22ExpenseWorkflow, "authorTeamId": teamID,
 		"title": "N03 ticket", "inputs": []map[string]any{
-			{"formFieldId": pf22AmountField, "value": 5000},
+			{"formFieldId": pf22AmountField, "value": "5000"},
 			{"formFieldId": pf22PurposeField, "value": "Inline viewers"},
 			{"formFieldId": pf22ExpenseDateField, "value": "2026-01-01"},
 			{"formFieldId": pf22CostCenterField, "generalMasterItemId": "00000000-0000-4000-8000-000000000041"},
@@ -249,7 +249,7 @@ func TestWatcherUserIDAlsoGrantsPrivateTicketVisibility(t *testing.T) {
 	created := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
 		"status": "in_progress", "workflowId": pf22ExpenseWorkflow, "authorTeamId": teamID,
 		"title": "watcher sharing", "watcherUserId": watcher, "inputs": []map[string]any{
-			{"formFieldId": pf22AmountField, "value": 5000},
+			{"formFieldId": pf22AmountField, "value": "5000"},
 			{"formFieldId": pf22PurposeField, "value": "watcher sharing"},
 			{"formFieldId": pf22ExpenseDateField, "value": "2026-01-01"},
 			{"formFieldId": pf22CostCenterField, "generalMasterItemId": "00000000-0000-4000-8000-000000000041"},

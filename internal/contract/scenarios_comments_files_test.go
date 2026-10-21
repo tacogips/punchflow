@@ -332,7 +332,7 @@ func pf26bCreateExpenseTicket(t *testing.T, env *testutil.Env, signedID string) 
 		input := map[string]any{"formFieldId": fieldIDs[code], "value": nil}
 		switch code {
 		case "amount":
-			input["value"] = 1000
+			input["value"] = "1000"
 		case "purpose":
 			input["value"] = "Contract scenario"
 		case "receipt":

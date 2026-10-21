@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,9 +98,23 @@ func pf14cValidateFormValue(ctx context.Context, q store.Querier, field model.Fo
 		if _, err := time.Parse(layout, v); err != nil {
 			return fmt.Errorf("has an invalid date format")
 		}
-	case "master", "user", "team", "ticket", "file":
+	case "master", "user", "team", "ticket":
 		ids, ok := stringsFromValue(value)
-		if !ok || (!field.Multiple && len(ids) != 1) {
+		if !ok || (!field.Multiple && len(ids) != 1) || field.Multiple && len(ids) > 10 {
+			return badType
+		}
+		for _, id := range ids {
+			valid, err := pf14cReferenceExists(ctx, q, field, id)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return fmt.Errorf("references an unknown or unavailable item")
+			}
+		}
+	case "file":
+		ids, ok := stringsFromValue(value)
+		if !ok || len(ids) > 100 {
 			return badType
 		}
 		for _, id := range ids {
@@ -125,6 +141,95 @@ func pf14cOptionAllowed(options []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// pf14RoundStoredNumeric applies kickflow's 14-significant-digit persistence
+// precision while keeping the JSON representation type used by the request.
+func pf14RoundStoredNumeric(fieldType string, value any) any {
+	if fieldType != "number" && fieldType != "integer" {
+		return value
+	}
+	ok, n := pf14Float(value)
+	if !ok || math.IsNaN(n) || math.IsInf(n, 0) {
+		return value
+	}
+	rounded, err := strconv.ParseFloat(strconv.FormatFloat(n, 'g', 14, 64), 64)
+	if err != nil {
+		return value
+	}
+	switch v := value.(type) {
+	case string:
+		if exact, err := pf14RoundDecimalString(v); err == nil {
+			return exact
+		}
+		return strconv.FormatFloat(rounded, 'f', -1, 64)
+	default:
+		return rounded
+	}
+}
+
+func pf14RoundDecimalString(value string) (string, error) {
+	r, ok := new(big.Rat).SetString(value)
+	if !ok || r.Sign() == 0 {
+		return value, fmt.Errorf("invalid decimal")
+	}
+	negative := r.Sign() < 0
+	abs := new(big.Rat).Abs(r)
+	approx, _ := strconv.ParseFloat(value, 64)
+	exponent := int(math.Floor(math.Log10(math.Abs(approx))))
+	comparePower := func(power int) int {
+		p := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(absInt(power))), nil)
+		bound := new(big.Rat).SetInt(p)
+		if power < 0 {
+			bound.Inv(bound)
+		}
+		return abs.Cmp(bound)
+	}
+	for comparePower(exponent) < 0 {
+		exponent--
+	}
+	for comparePower(exponent+1) >= 0 {
+		exponent++
+	}
+	scale := exponent - 13
+	scaled := new(big.Rat).Set(abs)
+	if scale >= 0 {
+		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
+		scaled.Quo(scaled, new(big.Rat).SetInt(divisor))
+	} else {
+		multiplier := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-scale)), nil)
+		scaled.Mul(scaled, new(big.Rat).SetInt(multiplier))
+	}
+	quotient := new(big.Int).Quo(scaled.Num(), scaled.Denom())
+	remainder := new(big.Int).Rem(scaled.Num(), scaled.Denom())
+	if new(big.Int).Lsh(remainder, 1).Cmp(scaled.Denom()) >= 0 {
+		quotient.Add(quotient, big.NewInt(1))
+	}
+	if negative {
+		quotient.Neg(quotient)
+	}
+	result := new(big.Rat).SetInt(quotient)
+	decimals := 0
+	if scale >= 0 {
+		factor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
+		result.Mul(result, new(big.Rat).SetInt(factor))
+	} else {
+		decimals = -scale
+		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+		result.Quo(result, new(big.Rat).SetInt(divisor))
+	}
+	text := result.FloatString(decimals)
+	if strings.Contains(text, ".") {
+		text = strings.TrimRight(strings.TrimRight(text, "0"), ".")
+	}
+	return text, nil
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func pf14cReferenceExists(ctx context.Context, q store.Querier, field model.FormField, id string) (bool, error) {

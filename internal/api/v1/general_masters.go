@@ -639,6 +639,10 @@ func pf20ValidateMasterValue(f model.GeneralMasterField, v any) error {
 		if !ok {
 			return invalid()
 		}
+		// INF-F7-10: a required checkbox is empty when it has no selected options.
+		if f.Required && len(xs) == 0 {
+			return invalid()
+		}
 		for _, raw := range xs {
 			value, ok := raw.(string)
 			if !ok || !pf20Contains(f.Options, value) {

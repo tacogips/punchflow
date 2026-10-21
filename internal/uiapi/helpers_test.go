@@ -2,6 +2,7 @@ package uiapi_test
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	"punchflow/internal/store"
@@ -88,7 +89,7 @@ func (e *expenseEnv) createTicket(t *testing.T, persona testutil.Persona, spec t
 	body := map[string]any{
 		"status": spec.status, "workflowId": e.workflowID, "authorTeamId": e.teamID, "title": spec.title,
 		"inputs": []map[string]any{
-			{"formFieldId": e.fields["amount"], "value": spec.amount},
+			{"formFieldId": e.fields["amount"], "value": strconv.Itoa(spec.amount)},
 			{"formFieldId": e.fields["purpose"], "value": spec.purpose},
 			{"formFieldId": e.fields["expense-date"], "value": "2026-01-01"},
 			{"formFieldId": e.fields["cost-center"], "generalMasterItemId": masterItemID},
@@ -101,8 +102,8 @@ func (e *expenseEnv) createTicket(t *testing.T, persona testutil.Persona, spec t
 		for _, row := range spec.rows {
 			items = append(items, map[string]any{"slipSectionId": e.slipSection, "inputs": []map[string]any{
 				{"slipFieldId": e.slipFields["item"], "value": row.item},
-				{"slipFieldId": e.slipFields["qty"], "value": row.qty},
-				{"slipFieldId": e.slipFields["unit-price"], "value": row.unit},
+				{"slipFieldId": e.slipFields["qty"], "value": strconv.Itoa(row.qty)},
+				{"slipFieldId": e.slipFields["unit-price"], "value": strconv.Itoa(row.unit)},
 			}})
 		}
 		body["slipItems"] = items

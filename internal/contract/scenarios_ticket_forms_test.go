@@ -2,6 +2,7 @@ package contract_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -240,8 +241,8 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 	slipRow := func(item string, qty, price float64, files []string) map[string]any {
 		return map[string]any{"slipSectionId": linesSection, "inputs": []map[string]any{
 			{"slipFieldId": slipFields["item"], "value": item},
-			{"slipFieldId": slipFields["qty"], "value": qty},
-			{"slipFieldId": slipFields["unit-price"], "value": price},
+			{"slipFieldId": slipFields["qty"], "value": fmt.Sprint(qty)},
+			{"slipFieldId": slipFields["unit-price"], "value": fmt.Sprint(price)},
 			{"slipFieldId": slipFields["photo"], "files": files},
 			{"slipFieldId": slipFields["subtotal"], "value": nil},
 		}}
@@ -249,7 +250,7 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 	created := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
 		"status": "draft", "workflowId": workflowID, "authorTeamId": salesTeamID, "title": "PF-16 detail contract",
 		"inputs": []map[string]any{
-			{"formFieldId": fields["amount"], "value": 100},
+			{"formFieldId": fields["amount"], "value": "100"},
 			{"formFieldId": fields["purpose"], "value": "detail rows"},
 			{"formFieldId": fields["expense-date"], "value": "2026-01-01"},
 			{"formFieldId": fields["cost-center"], "generalMasterItemId": costCenterItemID},

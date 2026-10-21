@@ -41,6 +41,7 @@ type calcRun struct {
 	parsed    map[string]*formula.Expr
 	badParse  map[string]bool
 	changed   bool
+	hidden    map[string]bool
 	metadata  map[string]any
 	globals   map[string]any
 }
@@ -57,7 +58,7 @@ const (
 // errors; runtime failures such as division by zero or non-numeric operands
 // leave the value null.
 func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketSlipItem) (*string, bool) {
-	r := &calcRun{n: n, formVals: map[string]any{}, formCalc: map[string]calcDef{}, formState: map[string]int{}, parsed: map[string]*formula.Expr{}, badParse: map[string]bool{}, metadata: map[string]any{}}
+	r := &calcRun{n: n, formVals: map[string]any{}, formCalc: map[string]calcDef{}, formState: map[string]int{}, parsed: map[string]*formula.Expr{}, badParse: map[string]bool{}, hidden: map[string]bool{}, metadata: map[string]any{}}
 	globals, err := store.CalculationVariables(n.ctx, n.q)
 	if err != nil {
 		n.fail("base", "could not load global calculation variables")
@@ -104,9 +105,21 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 			}
 		}
 	}
+	visibilityValues := make(map[string]any, len(r.formVals)*2)
+	for code, value := range r.formVals {
+		visibilityValues[code] = value
+		if field, ok := n.idx.fieldByCode[code]; ok {
+			visibilityValues[field.ID] = value
+		}
+	}
+	for _, section := range n.def.SectionList {
+		if section.SectionType == model.SectionTypeForm && !n.opts.Blocked[section.ID] && !pf14SectionVisible(section, visibilityValues) {
+			r.hidden[section.ID] = true
+		}
+	}
 	for _, section := range n.def.SectionList {
 		for _, f := range section.FormFields {
-			if f.FieldType == "calculation" && !n.opts.Blocked[section.ID] && n.calculationEditable(f.Author, f.Approver) {
+			if f.FieldType == "calculation" && !n.opts.Blocked[section.ID] && !r.hidden[section.ID] && n.calculationEditable(f.Author, f.Approver) {
 				r.formCalc[f.Code] = calcDef{id: f.ID, code: f.Code, sectionType: section.SectionType, formula: f.Formula, digits: f.DecimalDigit}
 			}
 		}
@@ -385,6 +398,10 @@ func (r *calcRun) formValue(cd calcDef) any {
 }
 
 func (r *calcRun) slipValue(sr *slipRowRef, f model.SlipField) any {
+	if !r.n.calculationEditable(f.Author, f.Approver) {
+		v, _ := slipCell(*sr.row, f)
+		return v
+	}
 	switch sr.state[f.ID] {
 	case calcDone:
 		v, _ := slipCell(*sr.row, f)
@@ -470,6 +487,9 @@ func (s formScope) Lookup(name string) (any, bool) {
 	r := s.r
 	// Kickflow resolves workflow form values before metadata, then globals.
 	if f, ok := r.n.idx.fieldByCode[name]; ok {
+		if r.hidden[r.n.idx.fieldSection[f.ID]] {
+			return nil, false
+		}
 		if cd, isCalc := r.formCalc[f.Code]; isCalc {
 			return r.formValue(cd), true
 		}

@@ -124,7 +124,8 @@ func evalUnary(n unaryNode, env Env) (any, error) {
 		return nil, err
 	}
 	if n.op == "!" {
-		return !truthy(val), nil
+		truth, err := notTruthy(val)
+		return !truth, err
 	}
 	f, err := toNumber(val)
 	if err != nil {
@@ -142,17 +143,21 @@ func evalBinary(n binaryNode, env Env) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if n.op == "&&" && !truthy(l) {
+		left, err := logicalTruthy(l)
+		if err != nil {
+			return nil, err
+		}
+		if n.op == "&&" && !left {
 			return false, nil
 		}
-		if n.op == "||" && truthy(l) {
+		if n.op == "||" && left {
 			return true, nil
 		}
 		r, err := eval(n.right, env)
 		if err != nil {
 			return nil, err
 		}
-		return truthy(r), nil
+		return logicalTruthy(r)
 	}
 	l, err := eval(n.left, env)
 	if err != nil {
@@ -251,7 +256,11 @@ func evalCall(n callNode, env Env) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if truthy(c) {
+		condition, err := ifTruthy(c)
+		if err != nil {
+			return nil, err
+		}
+		if condition {
 			return eval(n.args[1], env)
 		}
 		return eval(n.args[2], env)
@@ -269,13 +278,18 @@ func evalCall(n callNode, env Env) (any, error) {
 		return aggregate(n.name, args)
 	case "AND", "OR":
 		for _, a := range flatten(args) {
-			if truthy(a) != (n.name == "AND") {
+			truth, err := logicalTruthy(a)
+			if err != nil {
+				return nil, err
+			}
+			if truth != (n.name == "AND") {
 				return n.name == "OR", nil
 			}
 		}
 		return n.name == "AND", nil
 	case "NOT":
-		return !truthy(args[0]), nil
+		truth, err := notTruthy(args[0])
+		return !truth, err
 	case "CONCAT":
 		var sb strings.Builder
 		for _, a := range flatten(args) {
@@ -479,11 +493,10 @@ func stringSlice(name string, args []any) (any, error) {
 }
 func formatText(v any, pattern string) (any, error) {
 	if s, ok := v.(string); ok {
-		if d, err := time.Parse("2006-01-02T15:04:05", s); err == nil {
-			return formatDate(d, pattern), nil
-		}
-		if d, err := time.Parse("2006-01-02", s); err == nil {
-			return formatDate(d, pattern), nil
+		for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02T15:04", "2006-01-02 15:04", "2006-01-02"} {
+			if d, err := time.Parse(layout, s); err == nil {
+				return formatDate(d, pattern), nil
+			}
 		}
 		return s, nil
 	}
@@ -541,8 +554,55 @@ func formatDate(d time.Time, pattern string) string {
 		ampm = "午後"
 	}
 	pattern = strings.ReplaceAll(pattern, "AM/PM", "__AMPM__")
+	pattern = formatDateMonthMinuteTokens(pattern)
 	repl := strings.NewReplacer("yyyy", "2006", "YY", "06", "yy", "06", "mmmmm", "1", "mmmm", "January", "mmm", "Jan", "mm", "01", "m", "1", "dddd", "Monday", "ddd", "Mon", "dd", "02", "d", "2", "HH", "15", "hh", "03", "H", "15", "h", "3", "ss", "05", "s", "5", "__AMPM__", ampm)
 	return d.Format(repl.Replace(pattern))
+}
+
+func formatDateMonthMinuteTokens(pattern string) string {
+	var out strings.Builder
+	for i := 0; i < len(pattern); {
+		if pattern[i] != 'm' {
+			out.WriteByte(pattern[i])
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(pattern) && pattern[j] == 'm' {
+			j++
+		}
+		token := pattern[i:j]
+		if len(token) <= 2 && dateMinuteContext(pattern, i, j) {
+			if len(token) == 2 {
+				token = "04"
+			} else {
+				token = "4"
+			}
+		}
+		out.WriteString(token)
+		i = j
+	}
+	return out.String()
+}
+
+func dateMinuteContext(pattern string, start, end int) bool {
+	for i := start - 1; i >= 0; i-- {
+		switch pattern[i] {
+		case 'h', 'H':
+			return true
+		case 'y', 'd':
+			return false
+		}
+	}
+	for i := end; i < len(pattern); i++ {
+		switch pattern[i] {
+		case 's', 'S':
+			return true
+		case 'y', 'd':
+			return false
+		}
+	}
+	return false
 }
 func jsonLookup(v any, path string) (any, error) {
 	raw := toString(v)
@@ -657,20 +717,61 @@ func aggregate(name string, args []any) (any, error) {
 	return acc, nil
 }
 
-func truthy(v any) bool {
+func ifTruthy(v any) (bool, error) {
 	switch x := v.(type) {
 	case nil:
-		return false
+		return false, nil
 	case bool:
-		return x
+		return x, nil
 	case string:
-		s := strings.ToLower(strings.TrimSpace(x))
-		return s != "" && s != "false" && s != "0"
+		if x == "" {
+			return false, nil
+		}
+		return false, evalFail("IF condition must be boolean or numeric")
 	case []any:
-		return len(x) > 0
+		return false, evalFail("IF condition must be boolean or numeric")
 	}
 	f, err := toNumber(v)
-	return err == nil && f != 0
+	if err != nil {
+		return false, err
+	}
+	return f != 0, nil
+}
+
+func logicalTruthy(v any) (bool, error) {
+	switch x := v.(type) {
+	case nil:
+		return false, nil
+	case bool:
+		return x, nil
+	case string:
+		return true, nil
+	case []any:
+		return len(x) > 0, nil
+	}
+	f, err := toNumber(v)
+	if err != nil {
+		return false, err
+	}
+	return f != 0, nil
+}
+
+func notTruthy(v any) (bool, error) {
+	switch x := v.(type) {
+	case nil:
+		return false, nil
+	case bool:
+		return x, nil
+	case string:
+		return x != "", nil
+	case []any:
+		return len(x) > 0, nil
+	}
+	f, err := toNumber(v)
+	if err != nil {
+		return false, err
+	}
+	return f != 0, nil
 }
 
 func toNumber(v any) (float64, error) {

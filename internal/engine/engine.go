@@ -87,6 +87,12 @@ func (e *Engine) Update(ctx context.Context, tx *store.Tx, a Actor, ticketID str
 	return e.pf14Update(ctx, tx, a, ticketID, in)
 }
 
+// UpdateREST applies the ordinary ticket PATCH request and its full-form wire
+// contract after the engine has authorized the actor and ticket.
+func (e *Engine) UpdateREST(ctx context.Context, tx *store.Tx, a Actor, ticketID string, in UpdateInput) ([]model.WebhookEvent, error) {
+	return e.pf14cUpdate(ctx, tx, a, ticketID, in, false, true)
+}
+
 // Submit applies a UI submission comment after the ordinary REST submission
 // state transition, keeping the comment in the same transaction.
 func (e *Engine) Submit(ctx context.Context, tx *store.Tx, a Actor, ticketID string, comment *string) ([]model.WebhookEvent, error) {

@@ -220,6 +220,17 @@ func (a *API) createTicket(w http.ResponseWriter, r *http.Request) {
 	actor := actorFor(p)
 	var out present.TicketDetailJSON
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		var inputs []engine.FieldInput
+		if input.Inputs != nil {
+			inputs = *input.Inputs
+		}
+		var slips []engine.SlipItemInput
+		if input.SlipItems != nil {
+			slips = *input.SlipItems
+		}
+		if e := a.d.Engine.ValidateRESTFormWireValues(r.Context(), tx, input.WorkflowID, inputs, slips); e != nil {
+			return e
+		}
 		id, events, e := a.d.Engine.Create(r.Context(), tx, actor, input)
 		if e != nil {
 			return e
@@ -248,7 +259,7 @@ func (a *API) updateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.pf22Update(w, r, "ticket.update", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
-		return a.d.Engine.Update(ctx, tx, actor, id, input)
+		return a.d.Engine.UpdateREST(ctx, tx, actor, id, input)
 	})
 }
 func (a *API) updateTicketForm(w http.ResponseWriter, r *http.Request) {

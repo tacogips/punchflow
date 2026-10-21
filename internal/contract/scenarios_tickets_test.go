@@ -306,7 +306,7 @@ func pf26aCreateTicket(t *testing.T, env *testutil.Env, operation apiv1.Operatio
 		"status": status, "workflowId": workflowID, "authorTeamId": salesTeamID,
 		"title": "PF-26a contract ticket",
 		"inputs": []map[string]any{
-			{"formFieldId": fields["amount"], "value": 5000},
+			{"formFieldId": fields["amount"], "value": "5000"},
 			{"formFieldId": fields["purpose"], "value": "PF-26a integration test"},
 			{"formFieldId": fields["expense-date"], "value": "2026-01-01"},
 			{"formFieldId": fields["cost-center"], "generalMasterItemId": masterItemID},

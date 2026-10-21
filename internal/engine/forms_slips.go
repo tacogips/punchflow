@@ -186,6 +186,7 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 				continue
 			}
 		}
+		value = pf14RoundStoredNumeric(field.FieldType, value)
 		cells[field.ID] = value
 		if field.FieldType == "master" || field.FieldType == "user" || field.FieldType == "team" || field.FieldType == "ticket" {
 			refs := pf14StringsOf(value)

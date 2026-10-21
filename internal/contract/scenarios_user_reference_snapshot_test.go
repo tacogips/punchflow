@@ -65,7 +65,7 @@ func TestContractTicketSelectedUserSnapshotCustomFields(t *testing.T) {
 	created := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
 		"status": "draft", "workflowId": workflowID, "authorTeamId": salesTeamID, "title": "F5 user snapshot contract",
 		"inputs": []map[string]any{
-			{"formFieldCode": "amount", "value": 10}, {"formFieldCode": "purpose", "value": "snapshot"},
+			{"formFieldCode": "amount", "value": "10"}, {"formFieldCode": "purpose", "value": "snapshot"},
 			{"formFieldCode": "expense-date", "value": "2026-01-01"}, {"formFieldCode": "cost-center", "generalMasterItemId": costCenterItemID},
 			{"formFieldCode": "receipt", "files": []string{}}, {"formFieldCode": "approver-note", "value": ""},
 			{"formFieldCode": "selected-user", "userId": adminID},

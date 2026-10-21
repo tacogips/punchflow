@@ -107,7 +107,7 @@ func compatCreateTicket(t *testing.T, env *testutil.Env, persona testutil.Person
 	res := env.Do(t, persona, http.MethodPost, "/v1/tickets", map[string]any{
 		"status": status, "workflowId": pf22ExpenseWorkflow, "authorTeamId": teamID, "title": "compat",
 		"inputs": []map[string]any{
-			{"formFieldId": pf22AmountField, "value": 5000},
+			{"formFieldId": pf22AmountField, "value": "5000"},
 			{"formFieldId": pf22PurposeField, "value": "Integration test"},
 			{"formFieldId": pf22ExpenseDateField, "value": "2026-01-01"},
 			{"formFieldId": pf22CostCenterField, "generalMasterItemId": "00000000-0000-4000-8000-000000000041"},

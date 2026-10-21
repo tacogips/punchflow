@@ -3,6 +3,7 @@ package ticketui_test
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"punchflow/internal/store"
@@ -48,7 +49,7 @@ func createTicketStatus(t *testing.T, env *testutil.Env, status string, amount i
 	response := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
 		"status": status, "workflowId": workflowID, "authorTeamId": teamID, "title": "ticket UI test",
 		"inputs": []map[string]any{
-			{"formFieldId": fields["amount"], "value": amount},
+			{"formFieldId": fields["amount"], "value": strconv.Itoa(amount)},
 			{"formFieldId": fields["purpose"], "value": "ticket UI test"},
 			{"formFieldId": fields["expense-date"], "value": "2026-01-01"},
 			{"formFieldId": fields["cost-center"], "generalMasterItemId": itemID},

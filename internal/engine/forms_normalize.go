@@ -30,6 +30,9 @@ type formOpts struct {
 	Full bool
 	// Partial is the /form PATCH contract: detail selectors are mandatory.
 	Partial bool
+	// Revalidating marks stored ticket data being checked internally for
+	// submission; those values are not new writes by the applicant.
+	Revalidating bool
 	// Approver marks edits made by a current approver.
 	Approver bool
 	// LockReferenceSnapshots retains reference records after application.
@@ -170,6 +173,20 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 			}
 		}
 		if !n.opts.Approver && !field.Author && field.FieldType != "calculation" {
+			if n.opts.Revalidating {
+				if old, ok := n.existingInput(field.ID); ok {
+					normalized = append(normalized, old)
+					continue
+				}
+			}
+			// Partial edits contain a merged form. A value inherited from the
+			// stored ticket is not an applicant write, even if it is non-null.
+			if n.opts.Supplied != nil && !n.opts.Supplied[field.ID] {
+				if old, ok := n.existingInput(field.ID); ok {
+					normalized = append(normalized, old)
+					continue
+				}
+			}
 			value, _, err := pf14FieldValue(in)
 			if err != nil || !pf14Empty(value) {
 				return nil, kferr.InvalidParameter("Invalid form field code")
@@ -220,6 +237,7 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 				continue
 			}
 		}
+		value = pf14RoundStoredNumeric(field.FieldType, value)
 		raw, err := json.Marshal(value)
 		if err != nil {
 			return nil, fmt.Errorf("engine: encode form value: %w", err)

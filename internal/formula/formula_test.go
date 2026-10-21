@@ -163,7 +163,7 @@ func TestKickflowManualExamples(t *testing.T) {
 		{`exact("hoge", "hoge")`, true}, {`exact("hoge", "fuga")`, false}, {`exact(x, "")`, true}, {`exact($emptyNull, "")`, true},
 		{`concat("a", "b", "c")`, "abc"}, {`concat("abc", 123)`, "abc123"},
 		{`left("あいうえお", 3)`, "あいう"}, {`right("あいうえお", 3)`, "うえお"}, {`mid("あいうえお", 2, 3)`, "いうえ"},
-		{`text(1.2345, "0.##")`, "1.23"}, {`text(1234567, "#,###円")`, "1,234,567円"}, {`text(123, "00000")`, "00123"}, {`text("2024-01-01", "yyyy/mm/dd")`, "2024/01/01"}, {`text("2022-04-08T13:04:56", "hh:mm AM/PM")`, "01:04 午後"},
+		{`text(1.2345, "0.##")`, "1.23"}, {`text(1234567, "#,###円")`, "1,234,567円"}, {`text(123, "00000")`, "00123"}, {`text("2024-01-01", "yyyy/mm/dd")`, "2024/01/01"}, {`text("2022-04-08T13:04:56", "hh:mm AM/PM")`, "01:04 午後"}, {`text("2022-04-08T13:45:56", "hh:mm AM/PM")`, "01:45 午後"}, {`text("2022-04-08 13:45", "yyyy/mm/dd HH:mm")`, "2022/04/08 13:45"},
 		{`json_lookup($author, "$.fullName")`, "山田 太郎"}, {`json_lookup($author, "$.customFields.kana")`, "ヤマダ タロウ"},
 		{`json_lookup($authorTeam, "$.fullName")`, "株式会社とくがわ / ◯◯部"}, {`json_lookup($authorTeam, "$.name")`, "◯◯部"},
 		{`json_lookup($jsonStr, "$[0].name")`, "Taro"}, {`json_lookup($jsonStr, "$[1].age")`, float64(18)}, {`json_lookup($jsonStr, "$[2]")`, `{"age":22,"name":"Hanako"}`},
@@ -197,6 +197,37 @@ func TestKickflowManualExamples(t *testing.T) {
 	}
 	if _, err := time.Parse("2006-01-02", value.(string)); err != nil {
 		t.Fatalf("today()=%v, want ISO date", value)
+	}
+}
+
+func TestKickflowLogicalFunctionCoercion(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want any
+	}{
+		{`and("0")`, true},
+		{`or("false")`, true},
+		{`not("")`, true},
+		{`not("0")`, false},
+		{`if(0, 1, 2)`, 2.0},
+		{`if("", 1, 2)`, 2.0},
+	} {
+		expr, err := Parse(tc.src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := expr.Eval(mapEnv{})
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("Eval(%q)=(%v,%v), want %v", tc.src, got, err, tc.want)
+		}
+	}
+	expr, err := Parse(`if("yes", 1, 2)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var evalErr *EvalError
+	if _, err = expr.Eval(mapEnv{}); !errors.As(err, &evalErr) {
+		t.Fatalf("IF(nonempty string) error=%v, want EvalError", err)
 	}
 }
 
