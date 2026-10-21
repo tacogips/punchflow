@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"punchflow/internal/model"
@@ -54,27 +55,85 @@ func (s *Service) Run(ctx context.Context) error {
 // deliveries were processed. Context cancellation returns immediately.
 func (s *Service) RunOnce(ctx context.Context) (int, error) {
 	now := s.clock.Now()
-	events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, pf09DueBatchLimit, s.pf09ManualIDs())
+	events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, pf09DueBatchLimit)
 	if err != nil {
 		return 0, err
 	}
+	// Group by registration in first-due order. Each group is handled serially,
+	// preserving per-registration order, while independent registrations use the
+	// configured worker bound.
+	type registrationQueue struct {
+		events []model.WebhookDelivery
+	}
+	queues := make([]registrationQueue, 0)
+	queueIndex := make(map[string]int)
+	for _, ev := range events {
+		idx, ok := queueIndex[ev.WebhookID]
+		if !ok {
+			idx = len(queues)
+			queueIndex[ev.WebhookID] = idx
+			queues = append(queues, registrationQueue{})
+		}
+		queues[idx].events = append(queues[idx].events, ev)
+	}
+	workers := s.cfg.Concurrency
+	if workers > len(queues) {
+		workers = len(queues)
+	}
+	if workers == 0 {
+		return 0, nil
+	}
+	type deliveryResult struct {
+		attempted int
+		err       error
+	}
+	jobs := make(chan registrationQueue)
+	results := make(chan deliveryResult, len(queues))
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for queue := range jobs {
+				for _, ev := range queue.events {
+					if ctx.Err() != nil {
+						results <- deliveryResult{err: ctx.Err()}
+						break
+					}
+					attempted, err := s.pf09Process(ctx, ev, now)
+					if err != nil {
+						err = fmt.Errorf("webhook delivery %s: %w", ev.ID, err)
+					}
+					result := deliveryResult{err: err}
+					if attempted {
+						result.attempted = 1
+					}
+					results <- result
+				}
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for _, queue := range queues {
+			select {
+			case jobs <- queue:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go func() { wg.Wait(); close(results) }()
 	attempts := 0
 	var failures []error
-	for _, ev := range events {
-		if err := ctx.Err(); err != nil {
-			return attempts, err
+	for result := range results {
+		attempts += result.attempted
+		if result.err != nil && !errors.Is(result.err, context.Canceled) {
+			failures = append(failures, result.err)
 		}
-		attempted, err := s.pf09Process(ctx, ev, now)
-		if attempted {
-			attempts++
-		}
-		if err == nil {
-			continue
-		}
-		if ctx.Err() != nil {
-			return attempts, ctx.Err()
-		}
-		failures = append(failures, fmt.Errorf("webhook delivery %s: %w", ev.ID, err))
+	}
+	if ctx.Err() != nil {
+		return attempts, ctx.Err()
 	}
 	return attempts, errors.Join(failures...)
 }
@@ -85,12 +144,11 @@ func (s *Service) pf09Process(ctx context.Context, ev model.WebhookDelivery, now
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			// Deleted between batch selection and lookup: cancel this delivery.
-			s.pf09TakeManual(ev.ID)
 			return false, nil
 		}
 		return false, err
 	}
-	manual := s.pf09TakeManual(ev.ID)
+	manual := ev.ManualResendGeneration > ev.ManualResendCompletedGeneration
 	if !hook.Enabled && !manual {
 		// Disabled after batch selection.
 		return false, nil
@@ -109,24 +167,6 @@ func pf09Recorded(err error) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
-}
-
-func (s *Service) pf09ManualIDs() []string {
-	s.manualMu.Lock()
-	defer s.manualMu.Unlock()
-	ids := make([]string, 0, len(s.manual))
-	for id := range s.manual {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
-func (s *Service) pf09TakeManual(id string) bool {
-	s.manualMu.Lock()
-	defer s.manualMu.Unlock()
-	manual := s.manual[id]
-	delete(s.manual, id)
-	return manual
 }
 
 func (s *Service) pf09Deliver(ctx context.Context, ev model.WebhookDelivery, hook model.Webhook, manual bool) error {
@@ -203,7 +243,7 @@ func (s *Service) pf09Record(ctx context.Context, ev model.WebhookDelivery, hook
 	err := s.db.WithTx(ctx, func(tx *store.Tx) error {
 		// Update the event first: a missing row means the webhook (and its
 		// events) was deleted while the request was in flight.
-		if err := store.MarkEventAttempt(ctx, tx, ev.ID, count, next, eventStatus, status, now); err != nil {
+		if err := store.RecordWebhookAttempt(ctx, tx, ev, manual, count, next, eventStatus, status, now); err != nil {
 			return err
 		}
 		if err := store.InsertWebhookAttempt(ctx, tx, attempt); err != nil {

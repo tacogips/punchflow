@@ -63,7 +63,7 @@ func GetFolderAncestors(ctx context.Context, q Querier, id string) ([]model.Fold
 		if e != nil {
 			return nil, e
 		}
-		out = append([]model.Folder{x}, out...)
+		out = append(out, x)
 	}
 	return out, nil
 }

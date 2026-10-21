@@ -15,6 +15,14 @@ import (
 func TestCommentLifecycleAndWebhookEvents(t *testing.T) {
 	env := testutil.New(t)
 	ticketID := pf23CreateExpenseTicket(t, env, "sales-rep", "sales", "")
+	initialTicket := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+ticketID, nil)
+	if initialTicket.Status != http.StatusOK {
+		t.Fatalf("get initial ticket: status=%d body=%s", initialTicket.Status, initialTicket.Body)
+	}
+	var initialSummary struct {
+		LogsCount int `json:"logsCount"`
+	}
+	initialTicket.JSON(t, &initialSummary)
 	mentionedID := env.UserID(t, "accountant")
 	env.RegisterReceiverWebhook(t, "pf23-webhook-secret", model.WebhookEventCommentCreated, model.WebhookEventCommentUpdated)
 	base := "/v1/tickets/" + ticketID + "/comments"
@@ -82,21 +90,28 @@ func TestCommentLifecycleAndWebhookEvents(t *testing.T) {
 	received := env.Receiver.Requests()
 	wantEvents := []string{model.WebhookEventCommentCreated, model.WebhookEventCommentCreated, model.WebhookEventCommentUpdated, model.WebhookEventCommentUpdated}
 	gotEvents := []string{}
+	wantLogs := initialSummary.LogsCount + 1
 	for _, request := range received {
 		var payload struct {
 			EventType string `json:"eventType"`
 			Data      struct {
 				Comment map[string]any `json:"comment"`
-				Ticket  map[string]any `json:"ticket"`
+				Ticket  struct {
+					LogsCount int `json:"logsCount"`
+				} `json:"ticket"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(request.Body, &payload); err != nil {
 			t.Fatalf("decode event: %v", err)
 		}
 		if payload.EventType == model.WebhookEventCommentCreated || payload.EventType == model.WebhookEventCommentUpdated {
-			if payload.Data.Comment == nil || payload.Data.Ticket == nil {
+			if payload.Data.Comment == nil {
 				t.Fatalf("comment event data = %+v", payload.Data)
 			}
+			if got := payload.Data.Ticket.LogsCount; got != wantLogs {
+				t.Fatalf("%s ticket.logsCount=%d, want %d", payload.EventType, got, wantLogs)
+			}
+			wantLogs++
 			gotEvents = append(gotEvents, payload.EventType)
 		}
 		if payload.EventType == "comment_deleted" {

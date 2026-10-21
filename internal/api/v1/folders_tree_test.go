@@ -40,6 +40,23 @@ func TestCreateFolderWithoutParentGoesUnderRoot(t *testing.T) {
 	testutil.AssertError(t, env.Do(t, testutil.Admin, http.MethodPost, "/v1/folders", map[string]any{"parentFolderId": nil}), http.StatusBadRequest, "invalid_parameter")
 }
 
+func TestFolderAncestorsAreImmediateParentFirst(t *testing.T) {
+	env := testutil.New(t)
+	a := createFolder(t, env, map[string]any{"name": "A"})
+	b := createFolder(t, env, map[string]any{"name": "B", "parentFolderId": a["id"]})
+	response := env.Do(t, testutil.Employee, http.MethodGet, "/v1/folders/"+b["id"].(string), nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("get nested folder=%d %s", response.Status, response.Body)
+	}
+	var detail struct {
+		Ancestors []map[string]any `json:"ancestors"`
+	}
+	response.JSON(t, &detail)
+	if len(detail.Ancestors) != 2 || detail.Ancestors[0]["name"] != "A" || detail.Ancestors[1]["name"] != "Root" {
+		t.Fatalf("ancestors=%v, want immediate parent A followed by Root", detail.Ancestors)
+	}
+}
+
 func folderExists(t *testing.T, env *testutil.Env, id string) bool {
 	t.Helper()
 	var n int

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"punchflow/internal/kftime"
@@ -31,14 +30,12 @@ type Config struct {
 
 // Service owns webhook enqueue and delivery behavior.
 type Service struct {
-	db       *store.DB
-	builder  PayloadBuilder
-	clock    kftime.Clock
-	client   *http.Client
-	cfg      Config
-	notify   chan struct{}
-	manualMu sync.Mutex
-	manual   map[string]bool
+	db      *store.DB
+	builder PayloadBuilder
+	clock   kftime.Clock
+	client  *http.Client
+	cfg     Config
+	notify  chan struct{}
 }
 
 // New creates a service with safe local-delivery defaults.
@@ -64,7 +61,7 @@ func New(db *store.DB, b PayloadBuilder, clock kftime.Clock, client *http.Client
 	if client == nil {
 		client = &http.Client{Timeout: cfg.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{Proxy: nil}}
 	}
-	return &Service{db: db, builder: b, clock: clock, client: client, cfg: cfg, notify: make(chan struct{}, 1), manual: make(map[string]bool)}
+	return &Service{db: db, builder: b, clock: clock, client: client, cfg: cfg, notify: make(chan struct{}, 1)}
 }
 
 // Enqueue fans out non-ping events to enabled registrations matching event and workflow filters.
@@ -140,17 +137,13 @@ func (s *Service) Notify() {
 
 // Resend queues a delivery again, preserving its ID and body.
 func (s *Service) Resend(ctx context.Context, q store.Querier, eventID string) error {
-	ev, err := store.GetWebhookEvent(ctx, q, eventID)
-	if err != nil {
+	if _, err := store.GetWebhookEvent(ctx, q, eventID); err != nil {
 		return err
 	}
 	now := s.clock.Now()
-	if err := store.MarkEventAttempt(ctx, q, eventID, ev.AttemptCount, now, model.WebhookStatusPending, nil, now); err != nil {
+	if err := store.QueueWebhookResend(ctx, q, eventID, now, now); err != nil {
 		return err
 	}
-	s.manualMu.Lock()
-	s.manual[eventID] = true
-	s.manualMu.Unlock()
 	s.Notify()
 	return nil
 }

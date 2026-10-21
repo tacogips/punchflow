@@ -48,3 +48,30 @@ func TestFolderCRUDAndRootGuard(t *testing.T) {
 		t.Fatalf("delete=%d %s", deleted.Status, deleted.Body)
 	}
 }
+
+func TestFolderFullNameSortUsesCompletePath(t *testing.T) {
+	env := testutil.New(t)
+	parentA := createFolder(t, env, map[string]any{"name": "A"})
+	parentB := createFolder(t, env, map[string]any{"name": "B"})
+	first := env.Do(t, testutil.Admin, http.MethodPost, "/v1/folders", map[string]any{"name": "Z", "parentFolderId": parentA["id"]})
+	second := env.Do(t, testutil.Admin, http.MethodPost, "/v1/folders", map[string]any{"name": "A", "parentFolderId": parentB["id"]})
+	if first.Status != http.StatusOK || second.Status != http.StatusOK {
+		t.Fatalf("create nested folders: first=%d %s second=%d %s", first.Status, first.Body, second.Status, second.Body)
+	}
+	var z, a map[string]any
+	first.JSON(t, &z)
+	second.JSON(t, &a)
+	response := env.Do(t, testutil.Employee, http.MethodGet, "/v1/folders?sortBy=fullName&perPage=100", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("list folders=%d %s", response.Status, response.Body)
+	}
+	var rows []map[string]any
+	response.JSON(t, &rows)
+	positions := map[string]int{}
+	for i, row := range rows {
+		positions[row["id"].(string)] = i
+	}
+	if positions[z["id"].(string)] >= positions[a["id"].(string)] {
+		t.Fatalf("fullName order puts %v at %d and %v at %d; want Root/A/Z before Root/B/A", z["fullName"], positions[z["id"].(string)], a["fullName"], positions[a["id"].(string)])
+	}
+}

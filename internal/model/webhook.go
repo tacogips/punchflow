@@ -23,19 +23,21 @@ type Webhook struct {
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 type WebhookDelivery struct {
-	ID             string    `json:"id"`
-	WebhookID      string    `json:"webhookId"`
-	EventType      string    `json:"eventType"`
-	TicketID       *string   `json:"ticketId"`
-	CommentID      *string   `json:"commentId"`
-	ActorUserID    *string   `json:"actorUserId"`
-	Body           []byte    `json:"-"`
-	Status         string    `json:"status"`
-	AttemptCount   int       `json:"attemptCount"`
-	NextAttemptAt  time.Time `json:"nextAttemptAt"`
-	LastStatusCode *int      `json:"lastStatusCode"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID                              string    `json:"id"`
+	WebhookID                       string    `json:"webhookId"`
+	EventType                       string    `json:"eventType"`
+	TicketID                        *string   `json:"ticketId"`
+	CommentID                       *string   `json:"commentId"`
+	ActorUserID                     *string   `json:"actorUserId"`
+	Body                            []byte    `json:"-"`
+	Status                          string    `json:"status"`
+	AttemptCount                    int       `json:"attemptCount"`
+	ManualResendGeneration          int64     `json:"-"`
+	ManualResendCompletedGeneration int64     `json:"-"`
+	NextAttemptAt                   time.Time `json:"nextAttemptAt"`
+	LastStatusCode                  *int      `json:"lastStatusCode"`
+	CreatedAt                       time.Time `json:"createdAt"`
+	UpdatedAt                       time.Time `json:"updatedAt"`
 }
 type WebhookAttempt struct {
 	ID             string            `json:"id"`

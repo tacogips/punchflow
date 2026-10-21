@@ -93,10 +93,10 @@ func (a *API) createComment(w http.ResponseWriter, r *http.Request) {
 		if callErr != nil {
 			return callErr
 		}
-		if err := a.d.Events.Enqueue(r.Context(), tx, events); err != nil {
+		if err := pf23Audit(r, tx, p, "comment.create", commentID, ticketID, []string{"body", "files"}, a.d.Clock.Now()); err != nil {
 			return err
 		}
-		return pf23Audit(r, tx, p, "comment.create", commentID, ticketID, []string{"body", "files"}, a.d.Clock.Now())
+		return a.d.Events.Enqueue(r.Context(), tx, events)
 	})
 	if err != nil {
 		kferr.Write(w, err)
@@ -139,24 +139,28 @@ func (a *API) updateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Body string `json:"body"`
+		Body *string `json:"body"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		kferr.Write(w, err)
+		return
+	}
+	if body.Body == nil {
+		kferr.Write(w, kferr.InvalidParameter("body is required"))
 		return
 	}
 	ticketID, commentID := r.PathValue("ticketId"), r.PathValue("commentId")
 	var events []model.WebhookEvent
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		var callErr error
-		events, callErr = a.d.Engine.EditComment(r.Context(), tx, actorFor(p), ticketID, commentID, body.Body)
+		events, callErr = a.d.Engine.EditComment(r.Context(), tx, actorFor(p), ticketID, commentID, *body.Body)
 		if callErr != nil {
 			return callErr
 		}
-		if err := a.d.Events.Enqueue(r.Context(), tx, events); err != nil {
+		if err := pf23Audit(r, tx, p, "comment.update", commentID, ticketID, []string{"body"}, a.d.Clock.Now()); err != nil {
 			return err
 		}
-		return pf23Audit(r, tx, p, "comment.update", commentID, ticketID, []string{"body"}, a.d.Clock.Now())
+		return a.d.Events.Enqueue(r.Context(), tx, events)
 	})
 	if err != nil {
 		kferr.Write(w, err)
@@ -184,10 +188,10 @@ func (a *API) deleteComment(w http.ResponseWriter, r *http.Request) {
 		if callErr != nil {
 			return callErr
 		}
-		if err := a.d.Events.Enqueue(r.Context(), tx, events); err != nil {
+		if err := pf23Audit(r, tx, p, "comment.delete", commentID, ticketID, []string{"id"}, a.d.Clock.Now()); err != nil {
 			return err
 		}
-		return pf23Audit(r, tx, p, "comment.delete", commentID, ticketID, []string{"id"}, a.d.Clock.Now())
+		return a.d.Events.Enqueue(r.Context(), tx, events)
 	})
 	if err != nil {
 		kferr.Write(w, err)

@@ -127,10 +127,13 @@ func (a *API) getWorkflow(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, j)
 }
 
-// definitionStatusFilter reads the status array parameter (status[]=a&status[]=b or
-// repeated status=a&status=b) and rejects values outside the allowed set.
+// definitionStatusFilter reads status[]=value arrays and rejects repeated bare
+// status parameters and values outside the allowed set.
 func definitionStatusFilter(r *http.Request, allowed ...string) ([]string, error) {
-	values := httpx.QueryStrings(r, "status")
+	values, err := httpx.QueryStrings(r, "status")
+	if err != nil {
+		return nil, err
+	}
 	for _, value := range values {
 		valid := false
 		for _, candidate := range allowed {

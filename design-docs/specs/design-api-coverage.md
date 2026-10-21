@@ -143,11 +143,11 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 44 | createCategory | POST | /v1/categories | workflow_misc | categories.go | |
 | 45 | deleteCategory | DELETE | /v1/categories/{categoryId} | workflow_misc | categories.go | |
 | 46 | updateCategory | PATCH | /v1/categories/{categoryId} | workflow_misc | categories.go | |
-| 47 | listFolders | GET | /v1/folders | any | folders.go | |
+| 47 | listFolders | GET | /v1/folders | any | folders.go | `sortBy=fullName` orders by the complete ancestor path before pagination (INF-W7-02) |
 | 48 | createFolder | POST | /v1/folders | workflow_misc | folders.go | Omitted/null parent places the folder under the root folder (root exists from fixtures, INF-83) |
 | 49 | deleteFolder | DELETE | /v1/folders/{folderId} | workflow_misc | folders.go | Root -> `resource_not_editable`; deletes the folder with its descendants in one transaction, retiring (status `deleted`) the workflows and routes inside; needs `workflow`/`route` coverage of each affected folder (INF-83, INF-84) |
 | 50 | updateFolder | PATCH | /v1/folders/{folderId} | workflow_misc | folders.go | Root -> `resource_not_editable` |
-| 51 | getFolder | GET | /v1/folders/{folderId} | any | folders.go | id or code |
+| 51 | getFolder | GET | /v1/folders/{folderId} | any | folders.go | id or code; ancestors are immediate-parent-first through root (INF-W7-03) |
 | 52 | listRoutes | GET | /v1/routes | any | definitions.go | Fixture-defined, read-only (DIV-05) |
 | 53 | getRoute | GET | /v1/routes/{routeId} | any | definitions.go | RouteDetail with steps |
 | 54 | listWorkflows | GET | /v1/workflows | any | definitions.go | `status` filter per spec |
@@ -155,6 +155,11 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; TicketWithStep without inputs/route; INF-02 |
 | 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21); applicant team/grade and reference-valued route conditions are evaluated with form values (INF-R7-01, INF-R7-02); `viewers[].userId` and `watcherUserId` (INF-NES-16) |
 | 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-LIFE-WH13, INF-NUM-02; absent `pending` leaves results unchanged, `pending=true` filters held assignments, and `pending=false` filters non-held assignments; filtering precedes pagination and `Total`; `subStatusIds[]` filters tasks as it does tickets; explicit statuses retain historical assignments (API-03); `assignedToMeAt` uses the latest assignment-entry time after reentry and custom-step creation (INF-M6-06, INF-R7-03) |
+| 54 | listWorkflows | GET | /v1/workflows | any | definitions.go | `status[]` filter per spec; repeated bare array values -> `400 invalid_parameter` (INF-W7-05) |
+| 55 | getWorkflow | GET | /v1/workflows/{workflowId} | any | definitions.go | WorkflowDetail; integration fields null (DIV-03); `nextTicketNumberValue` is null until a number has been issued (INF-W7-04) |
+| 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; `subStatusIds[]` values must be UUIDs; repeated bare array values -> `400 invalid_parameter` (INF-W7-05); TicketWithStep without inputs/route; INF-02 |
+| 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Missing/null `status`, `workflowId`, or `authorTeamId` -> `400 invalid_parameter` (INF-W7-01); Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21); `viewers[].userId` and `watcherUserId` (INF-NES-16) |
+| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-LIFE-WH13, INF-NUM-02; absent `pending` leaves results unchanged, `pending=true` filters held assignments, and `pending=false` filters non-held assignments; filtering precedes pagination and `Total`; `subStatusIds[]` values must be UUIDs (INF-W7-05); explicit statuses retain historical assignments (API-03); `assignedToMeAt` sorting uses the current matching assignment only (INF-M6-06) |
 | 59 | getTicket | GET | /v1/tickets/{ticketId} | visible | tickets.go | TicketDetail incl. `actualApprover` |
 | 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, authorized form/detail fields) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); for in-progress approvers, only `inputs` and `slipItems` are applied and other parameters are ignored (INF-F6-07); `slipItems` replace all rows for applicants and preserve omitted sections for approvers (INF-75, INF-F5-01); `viewers[]` replaces the user viewers and `watcherUserId` subscribes a watcher for applicant updates (INF-NES-16) |
 | 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; per-section differential detail rows (INF-75, INF-F5-01); each submitted row requires every editable cell for applicants and approvers, while omitted inaccessible cells are preserved and explicit null clears (INF-F6-02); unchanged historical references survive unrelated patches (INF-F5-06); `ticket_updated` |
@@ -170,7 +175,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 71 | uploadFile | POST | /v1/files | any | files.go | multipart field `file`; INF-26, INF-27, INF-39 |
 | 72 | getFile | GET | /v1/files/{signedId} | visible ticket and attachment section | files.go | File metadata and a user-bound download URL are returned only when at least one referencing attachment location is viewable; download rechecks ticket and section access (INF-26, INF-R7-04) |
 | 73 | listGeneralMasters | GET | /v1/generalMasters | master_read or master | general_masters.go | |
-| 74 | createGeneralMaster | POST | /v1/generalMasters | master | general_masters.go | Fields (custom fields) included; each field must supply `required` (INF-M6-03) |
+| 74 | createGeneralMaster | POST | /v1/generalMasters | master | general_masters.go | Missing required field-definition properties (`title`, `code`, `required`, `fieldType`) -> `400 invalid_parameter`; explicit invalid values -> 422; fields (custom fields) included (INF-W7-01, INF-M6-03) |
 | 75 | getGeneralMaster | GET | /v1/generalMasters/{generalMasterId} | master_read or master | general_masters.go | id or code |
 | 76 | updateGeneralMaster | PATCH | /v1/generalMasters/{generalMasterId} | master | general_masters.go | `fields` merge by `code` (INF-82) |
 | 77 | deleteGeneralMaster | DELETE | /v1/generalMasters/{generalMasterId} | master | general_masters.go | Deletes items |
@@ -190,7 +195,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 91 | listComments | GET | /v1/tickets/{ticketId}/comments | visible | comments.go | INF-30 |
 | 92 | createComment | POST | /v1/tickets/{ticketId}/comments | visible | comments.go | Required non-null `body` even when files are supplied; explicit empty string is a string value (INF-M6-08); `commentingEnabled: false` -> `422 validation_failed` with `errors.base`; mentions `<@uuid>`; up to 10 `files`; `comment_created` |
 | 93 | getComment | GET | /v1/tickets/{ticketId}/comments/{commentId} | visible | comments.go | |
-| 94 | updateComment | PATCH | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Attachments unchanged; `comment_updated` |
+| 94 | updateComment | PATCH | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Missing/null `body` -> `400 invalid_parameter`; attachments unchanged; `comment_updated` (INF-W7-01) |
 | 95 | deleteComment | DELETE | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Soft delete; `comment_updated` |
 | 96 | listAuditLogs | GET | /v1/auditLogs | audit | audit_logs.go | INF-29; mutation `systemType` is null except for automation (API-04) |
 

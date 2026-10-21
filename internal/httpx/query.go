@@ -22,12 +22,11 @@ func QueryArray(r *http.Request, key string, allowBare bool) ([]string, error) {
 	return values, nil
 }
 
-// QueryStrings reads a list-valued parameter given as repeated key[] values,
-// repeated bare key values, or a mixture of both.
-func QueryStrings(r *http.Request, key string) []string {
-	q := r.URL.Query()
-	values := append([]string(nil), q[key+"[]"]...)
-	return append(values, q[key]...)
+// QueryStrings reads a list-valued parameter using key[]=value serialization.
+// A single bare key=value is also accepted for compatibility, but repeated
+// bare values are ambiguous and are rejected.
+func QueryStrings(r *http.Request, key string) ([]string, error) {
+	return QueryArray(r, key, true)
 }
 
 // QueryTime parses an optional timestamp or date query parameter.

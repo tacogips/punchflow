@@ -382,6 +382,89 @@ func TestWebhookPersistAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestWebhookRegistrationsDeliverConcurrently(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	slowStarted, releaseSlow := make(chan struct{}), make(chan struct{})
+	fastDelivered := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(slowStarted)
+		<-releaseSlow
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fastDelivered <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fast.Close()
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "slow", Name: "slow", URL: slow.URL, Enabled: true})
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "fast", Name: "fast", URL: fast.URL, Enabled: true})
+	pf09InsertPending(t, ctx, db, "slow-event", "slow", now)
+	pf09InsertPending(t, ctx, db, "fast-event", "fast", now)
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{Concurrency: 2})
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(ctx); done <- err }()
+	<-slowStarted
+	select {
+	case <-fastDelivered:
+	case <-time.After(time.Second):
+		close(releaseSlow)
+		t.Fatal("fast registration waited for slow receiver")
+	}
+	close(releaseSlow)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWebhookResendDuringOutstandingAttemptIsPreserved(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	started, release := make(chan struct{}), make(chan struct{})
+	var requests atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "hook", Name: "hook", URL: receiver.URL, Enabled: true})
+	pf09InsertPending(t, ctx, db, "event", "hook", now)
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{})
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(ctx); done <- err }()
+	<-started
+	if err := svc.Resend(ctx, db.Q(), "event"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	event, err := store.GetWebhookEvent(ctx, db.Q(), "event")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Status != model.WebhookStatusPending || event.ManualResendGeneration != 1 || event.ManualResendCompletedGeneration != 0 {
+		t.Fatalf("outstanding attempt consumed resend: %#v", event)
+	}
+	if count, err := svc.RunOnce(ctx); err != nil || count != 1 {
+		t.Fatalf("resend RunOnce = %d, %v", count, err)
+	}
+	attempts, err := store.ListWebhookAttempts(ctx, db.Q(), "event")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 2 || attempts[1].AttemptNo != 2 || !attempts[1].Manual {
+		t.Fatalf("attempts = %#v, want original and manual resend", attempts)
+	}
+}
+
 func TestWebhookNoSecretOmitsSignature(t *testing.T) {
 	db, ctx := pf09TestDB(t)
 	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)

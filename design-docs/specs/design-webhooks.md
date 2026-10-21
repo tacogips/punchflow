@@ -51,7 +51,7 @@ Events are produced by the engine (and the UI API) in this order within one acti
 | User deletion | one `ticket_archived` per archived authored ticket, attributed to the acting administrator; affected approver steps remain unresolved and do not emit completion | INF-79, INF-LIFE-API-06 |
 | Team deletion | one `ticket_archived` per unfinished ticket authored from the deleted team, attributed to the acting administrator | INF-LIFE-API-05 |
 | UI control operations: cancel approval, add/remove custom step, attach/detach label | `ticket_updated` (one per real change) | Raise is audited but emits no webhook event (INF-66) |
-| Comment create / update / delete, or a comment sent with approve/reject/deny, UI submission, or UI approval cancellation | `comment_created` / `comment_updated` | After the action event (INF-22, INF-R5-07) |
+| Comment create / update / delete, or a comment sent with approve/reject/deny, UI submission, or UI approval cancellation | `comment_created` / `comment_updated` | After the action event (INF-22, INF-R5-07); standalone REST comment audit entries are inserted before payload construction, so `ticket.logsCount` includes the operation's own log (INF-W7-08) |
 
 ### Payload and headers
 
@@ -70,7 +70,7 @@ Ticket payloads use the shared presenter with an explicit webhook policy. Values
 
 - One dispatcher per server process, started by `serve` with the server context and stopped on shutdown (waits for in-flight attempts up to the 10 s timeout).
 - Wake-ups: `Notify()` after commits that enqueued events, a 1 s ticker, and startup (so persisted pending events survive restarts).
-- Selection: due rows (`status = pending AND next_attempt_at <= now`) ordered by `next_attempt_at, created_seq`, restricted in SQL (before the batch limit) to rows of enabled webhooks plus rows with a pending manual resend, so a backlog of undeliverable rows of disabled webhooks never starves enabled ones; the rows of disabled webhooks stay `pending` untouched. At most one in-flight attempt per webhook (preserves first-attempt order per webhook); at most 4 concurrent attempts overall.
+- Selection: due rows (`status = pending AND next_attempt_at <= now`) ordered by `next_attempt_at, created_seq`, restricted in SQL (before the batch limit) to rows of enabled webhooks plus rows with an unconsumed persisted manual-resend generation, so a backlog of undeliverable rows of disabled webhooks never starves enabled ones; the rows of disabled webhooks stay `pending` untouched. At most one in-flight attempt per webhook (preserves first-attempt order per webhook); at most 4 concurrent registration queues overall. A slow receiver therefore does not hold up another registration.
 - HTTP client: 10 s timeout; redirects not followed (3xx is a failure); proxy from environment disabled. No TLS verification override (dev receivers normally use plain `http://localhost`).
 - Outcome: exactly `200` = success (`succeeded`, clears webhook `first_failure_at`). Anything else, timeout or connection error = failure: record the attempt, and if `attempt_count < 11` set `next_attempt_at = now + backoff(attempt_count)` (INF-08), otherwise `failed`. Auto-disable per INF-10.
 - No database transaction is held during the HTTP call.
@@ -82,7 +82,7 @@ Ticket payloads use the shared presenter with an explicit webhook policy. Values
 | Operation | Behavior |
 |---|---|
 | Send test (`POST /admin/api/webhooks/{id}/ping`) | Enqueues a `ping` for that webhook and returns the event row |
-| Resend (`POST /admin/api/webhook-events/{eventId}/resend`) | Sets the row back to `pending`, `next_attempt_at = now`; the next attempt is flagged `manual`, reuses the delivery id and body, recomputes the signature with the current secret (INF-09). Allowed in any status, also for disabled webhooks (the attempt is still made) |
+| Resend (`POST /admin/api/webhook-events/{eventId}/resend`) | Increments a persisted manual-resend generation, sets the row to `pending` and `next_attempt_at = now`; one queued manual generation is consumed per attempt. An older in-flight result cannot overwrite a newer resend. The attempt is flagged `manual`, reuses the delivery id and body, and recomputes the signature with the current secret (INF-09). Allowed in any status, also for disabled webhooks (the attempt is still made) |
 | Fire event (`POST /admin/api/webhook-events`) | Body `{eventType, ticketId?, commentId?, webhookIds?}`. Builds the payload from the current state of the referenced ticket/comment (ticket required for ticket_* and comment_*, comment required for comment_*), actor = the admin. With `webhookIds` it targets those webhooks ignoring their filters; without it, normal fan-out rules apply. Returns every created delivery row, including normal fan-out; returns `[]` when no registrations match (INF-M6-09) |
 | List / inspect | `GET /admin/api/webhooks/{id}/events` (paginated like /v1), `GET /admin/api/webhook-events/{eventId}` with its attempts |
 

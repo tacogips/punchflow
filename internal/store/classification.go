@@ -77,7 +77,7 @@ func DeleteCategory(ctx context.Context, q Querier, id string) error {
 	return nil
 }
 func FolderList(ctx context.Context, q Querier, offset, limit int, sortBy string, desc bool) ([]model.Folder, int, error) {
-	order := map[string]string{"createdAt": "created_at", "name": "name", "fullName": "name"}[sortBy]
+	order := map[string]string{"createdAt": "created_at", "name": "name"}[sortBy]
 	if order == "" {
 		order = "name"
 	}
@@ -90,7 +90,21 @@ func FolderList(ctx context.Context, q Querier, offset, limit int, sortBy string
 	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM folders`).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := q.QueryContext(ctx, `SELECT id FROM folders ORDER BY `+order+`,id LIMIT ? OFFSET ?`, limit, offset)
+	query := `SELECT id FROM folders ORDER BY ` + order + `,id LIMIT ? OFFSET ?`
+	if sortBy == "fullName" {
+		order = "paths.full_name"
+		if desc {
+			order += " DESC"
+		} else {
+			order += " ASC"
+		}
+		query = `WITH RECURSIVE paths(id,full_name) AS (
+			SELECT id,name FROM folders WHERE parent_id IS NULL
+			UNION ALL
+			SELECT f.id,paths.full_name||'/'||f.name FROM folders f JOIN paths ON f.parent_id=paths.id
+		) SELECT folders.id FROM folders LEFT JOIN paths ON paths.id=folders.id ORDER BY ` + order + `,folders.id LIMIT ? OFFSET ?`
+	}
+	rows, err := q.QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

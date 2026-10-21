@@ -182,30 +182,18 @@ func InsertWebhookEvent(ctx context.Context, q Querier, v model.WebhookDelivery)
 	return nil
 }
 
-const dueWebhookEventColumns = "e.id,e.webhook_id,e.event_type,e.ticket_id,e.comment_id,e.actor_user_id,e.body,e.status,e.attempt_count,e.next_attempt_at,e.last_status_code,e.created_at,e.updated_at"
+const dueWebhookEventColumns = "e.id,e.webhook_id,e.event_type,e.ticket_id,e.comment_id,e.actor_user_id,e.body,e.status,e.attempt_count,e.next_attempt_at,e.last_status_code,e.created_at,e.updated_at,e.manual_resend_generation,e.manual_resend_completed_generation"
 
 // DueWebhookEvents returns pending rows ready for delivery, oldest first.
 //
 // Eligibility is applied in SQL before the limit so a backlog of rows that cannot
 // be delivered never starves deliverable ones: only rows of enabled webhooks are
-// returned, plus the rows listed in manualIDs (operator resends, which are
+// returned, plus rows with an unconsumed manual-resend generation (which are
 // attempted even when the webhook is disabled).
-func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int, manualIDs []string) ([]model.WebhookDelivery, error) {
+func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int) ([]model.WebhookDelivery, error) {
 	query := "SELECT " + dueWebhookEventColumns + " FROM webhook_events e JOIN webhooks w ON w.id=e.webhook_id WHERE e.status='pending' AND e.next_attempt_at<=?"
 	args := []any{Millis(now)}
-	if len(manualIDs) == 0 {
-		query += " AND w.enabled=1"
-	} else {
-		placeholders := make([]byte, 0, len(manualIDs)*2)
-		for i, id := range manualIDs {
-			if i > 0 {
-				placeholders = append(placeholders, ',')
-			}
-			placeholders = append(placeholders, '?')
-			args = append(args, id)
-		}
-		query += " AND (w.enabled=1 OR e.id IN (" + string(placeholders) + "))"
-	}
+	query += " AND (w.enabled=1 OR e.manual_resend_generation>e.manual_resend_completed_generation)"
 	query += " ORDER BY e.next_attempt_at,e.rowid LIMIT ?"
 	args = append(args, limit)
 	rows, err := q.QueryContext(ctx, query, args...)
@@ -229,7 +217,7 @@ func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int, 
 
 // GetWebhookEvent loads one delivery row.
 func GetWebhookEvent(ctx context.Context, q Querier, id string) (model.WebhookDelivery, error) {
-	v, err := pf09ScanDelivery(q.QueryRowContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at FROM webhook_events WHERE id=?", id))
+	v, err := pf09ScanDelivery(q.QueryRowContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,manual_resend_generation,manual_resend_completed_generation FROM webhook_events WHERE id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.WebhookDelivery{}, ErrNotFound
 	}
@@ -242,7 +230,7 @@ func ListWebhookEvents(ctx context.Context, q Querier, webhookID string, offset,
 	if err := q.QueryRowContext(ctx, "SELECT count(*) FROM webhook_events WHERE webhook_id=?", webhookID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("store: count webhook events: %w", err)
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at FROM webhook_events WHERE webhook_id=? ORDER BY created_at DESC,rowid DESC LIMIT ? OFFSET ?", webhookID, limit, offset)
+	rows, err := q.QueryContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,manual_resend_generation,manual_resend_completed_generation FROM webhook_events WHERE webhook_id=? ORDER BY created_at DESC,rowid DESC LIMIT ? OFFSET ?", webhookID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list webhook events: %w", err)
 	}
@@ -270,6 +258,45 @@ func MarkEventAttempt(ctx context.Context, q Querier, id string, count int, next
 	n, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("store: count marked webhook attempt: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// QueueWebhookResend persists a manual resend generation without letting an
+// outstanding attempt consume it when that attempt finishes.
+func QueueWebhookResend(ctx context.Context, q Querier, id string, next, now time.Time) error {
+	result, err := q.ExecContext(ctx, `UPDATE webhook_events SET manual_resend_generation=manual_resend_generation+1,status='pending',next_attempt_at=?,updated_at=? WHERE id=?`, Millis(next), Millis(now), id)
+	if err != nil {
+		return fmt.Errorf("store: queue webhook resend: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: count queued webhook resend: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RecordWebhookAttempt updates the event outcome unless a newer manual resend
+// was queued after the attempt snapshot. A newer resend remains immediately due.
+func RecordWebhookAttempt(ctx context.Context, q Querier, ev model.WebhookDelivery, manual bool, count int, next time.Time, status string, lastStatus *int, now time.Time) error {
+	result, err := q.ExecContext(ctx, `UPDATE webhook_events SET
+		attempt_count=?,last_status_code=?,updated_at=?,
+		status=CASE WHEN manual_resend_generation>? OR (?=1 AND manual_resend_completed_generation+1<manual_resend_generation) THEN 'pending' ELSE ? END,
+		next_attempt_at=CASE WHEN manual_resend_generation>? OR (?=1 AND manual_resend_completed_generation+1<manual_resend_generation) THEN next_attempt_at ELSE ? END,
+		manual_resend_completed_generation=CASE WHEN ?=1 THEN manual_resend_completed_generation+1 ELSE manual_resend_completed_generation END
+		WHERE id=?`, count, lastStatus, Millis(now), ev.ManualResendGeneration, manual, status, ev.ManualResendGeneration, manual, Millis(next), manual, ev.ID)
+	if err != nil {
+		return fmt.Errorf("store: record webhook attempt result: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: count recorded webhook attempt: %w", err)
 	}
 	if n == 0 {
 		return ErrNotFound
@@ -421,7 +448,7 @@ func pf09ScanDelivery(row interface{ Scan(...any) error }) (model.WebhookDeliver
 	var ticket, comment, actor sql.NullString
 	var status sql.NullInt64
 	var next, created, updated int64
-	if err := row.Scan(&v.ID, &v.WebhookID, &v.EventType, &ticket, &comment, &actor, &v.Body, &v.Status, &v.AttemptCount, &next, &status, &created, &updated); err != nil {
+	if err := row.Scan(&v.ID, &v.WebhookID, &v.EventType, &ticket, &comment, &actor, &v.Body, &v.Status, &v.AttemptCount, &next, &status, &created, &updated, &v.ManualResendGeneration, &v.ManualResendCompletedGeneration); err != nil {
 		return model.WebhookDelivery{}, fmt.Errorf("store: scan webhook event: %w", err)
 	}
 	if ticket.Valid {

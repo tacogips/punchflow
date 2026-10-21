@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -62,6 +63,12 @@ func (a *API) pf22ListTickets(w http.ResponseWriter, r *http.Request, tasks bool
 		kferr.Write(w, e)
 		return
 	} else {
+		for _, value := range values {
+			if !store.IsUUID(value) {
+				kferr.Write(w, kferr.InvalidParameter("Invalid subStatusIds"))
+				return
+			}
+		}
 		filter.SubStatusIDs = values
 	}
 	if tasks {
@@ -211,9 +218,26 @@ func (a *API) createTicket(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	var input engine.CreateInput
-	if err := httpx.DecodeJSON(r, &input); err != nil {
+	var raw json.RawMessage
+	if err := httpx.DecodeJSON(r, &raw); err != nil {
 		kferr.Write(w, err)
+		return
+	}
+	var properties map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &properties); err != nil {
+		kferr.Write(w, kferr.InvalidJSON())
+		return
+	}
+	for _, key := range []string{"status", "workflowId", "authorTeamId"} {
+		value, ok := properties[key]
+		if !ok || string(value) == "null" {
+			kferr.Write(w, kferr.InvalidParameter(key+" is required"))
+			return
+		}
+	}
+	var input engine.CreateInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		kferr.Write(w, kferr.InvalidParameter("Invalid ticket request"))
 		return
 	}
 	p, _ := auth.FromContext(r.Context())

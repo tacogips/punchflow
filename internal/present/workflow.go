@@ -22,7 +22,7 @@ func Workflow(ctx context.Context, q store.Querier, id string) (WorkflowJSON, er
 		return nil, e
 	}
 	var next any
-	if d.TicketNumberFormat != nil {
+	if d.TicketNumberFormat != nil && m.TicketNumberCounter > 0 {
 		next = m.TicketNumberCounter + 1
 	}
 	_, nextByKey, _, err := pf08WorkflowNumbering(ctx, q, d)

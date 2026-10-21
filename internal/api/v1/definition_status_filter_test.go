@@ -49,7 +49,6 @@ func TestWorkflowListStatusArrayFilter(t *testing.T) {
 		{"?status[]=invisible", []string{"leave-request"}},
 		{"?status[]=visible", []string{"expense-claim", "purchase-request"}},
 		{"?status[]=visible&status[]=invisible", all},
-		{"?status=invisible&status=visible", all},
 		{"?status=invisible", []string{"leave-request"}},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
@@ -65,6 +64,7 @@ func TestWorkflowListStatusArrayFilter(t *testing.T) {
 	if res := env.Do(t, testutil.Employee, http.MethodGet, "/v1/workflows?status[]=error", nil); res.Status != http.StatusBadRequest {
 		t.Fatalf("route-only status on workflows status=%d want 400", res.Status)
 	}
+	testutil.AssertError(t, env.Do(t, testutil.Employee, http.MethodGet, "/v1/workflows?status=invisible&status=visible", nil), http.StatusBadRequest, "invalid_parameter")
 }
 
 func TestRouteListStatusArrayFilter(t *testing.T) {
@@ -81,7 +81,7 @@ func TestRouteListStatusArrayFilter(t *testing.T) {
 		{"?status[]=error", []string{"purchase"}},
 		{"?status[]=visible", []string{"expense-large", "expense-standard", "leave"}},
 		{"?status[]=visible&status[]=error", all},
-		{"?status=error&status=visible", all},
+		{"?status[]=error&status[]=visible", all},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			got := codesOf(t, env.Do(t, testutil.Employee, http.MethodGet, "/v1/routes"+tc.query, nil))

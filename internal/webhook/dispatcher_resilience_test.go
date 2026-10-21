@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -110,7 +111,7 @@ func TestWebhookDeletedBetweenSelectionAndLookup(t *testing.T) {
 	if err := svc.Resend(ctx, db.Q(), "event"); err != nil {
 		t.Fatal(err)
 	}
-	events, err := store.DueWebhookEvents(ctx, db.Q(), now, 10, nil)
+	events, err := store.DueWebhookEvents(ctx, db.Q(), now, 10)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("due events = %d, %v", len(events), err)
 	}
@@ -124,8 +125,8 @@ func TestWebhookDeletedBetweenSelectionAndLookup(t *testing.T) {
 	if hits.Load() != 0 {
 		t.Fatalf("receiver was called %d times for a deleted webhook", hits.Load())
 	}
-	if svc.pf09TakeManual("event") {
-		t.Fatal("manual flag survived deletion of the delivery")
+	if _, err := store.GetWebhookEvent(ctx, db.Q(), "event"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deleted delivery lookup error = %v, want not found", err)
 	}
 }
 

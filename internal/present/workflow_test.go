@@ -143,3 +143,38 @@ func TestWorkflowPresenterContracts(t *testing.T) {
 	pf08Keys(t, input, "id value createdAt updatedAt field")
 	pf08Keys(t, input.(map[string]any)["field"], "id title description code fieldType required fieldOrder visible initialDisplay options createdAt updatedAt")
 }
+
+func TestWorkflowNextTicketNumberIsNullBeforeFirstAllocation(t *testing.T) {
+	ctx, db := pf08DB(t)
+	q := db.Q()
+	definition, err := store.WorkflowDefByID(ctx, q, "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	format := "WF-[number]"
+	definition.TicketNumberFormat = &format
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.ExecContext(ctx, `UPDATE workflows SET definition_json=?,ticket_number_counter=0 WHERE id='wf'`, string(encoded)); err != nil {
+		t.Fatal(err)
+	}
+	workflow, err := Workflow(ctx, q, "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workflow["nextTicketNumberValue"] != nil {
+		t.Fatalf("unallocated workflow nextTicketNumberValue=%v, want null", workflow["nextTicketNumberValue"])
+	}
+	if _, err := q.ExecContext(ctx, `UPDATE workflows SET ticket_number_counter=1 WHERE id='wf'`); err != nil {
+		t.Fatal(err)
+	}
+	workflow, err = Workflow(ctx, q, "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workflow["nextTicketNumberValue"] != int64(2) {
+		t.Fatalf("allocated workflow nextTicketNumberValue=%v, want 2", workflow["nextTicketNumberValue"])
+	}
+}
