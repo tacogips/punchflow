@@ -347,12 +347,18 @@ func (a *API) deleteRoleMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	roleID, userID := r.PathValue("roleId"), r.PathValue("userId")
-	if !store.IsUUID(roleID) || !store.IsUUID(userID) {
-		kferr.Write(w, kferr.InvalidParameter("Invalid role or user id"))
+	if !store.IsUUID(roleID) {
+		kferr.Write(w, kferr.InvalidParameter("Invalid role id"))
 		return
 	}
+	resolvedUserID, err := store.ResolveID(r.Context(), a.d.DB.Q(), "users", userID)
+	if err != nil {
+		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	userID = resolvedUserID
 	principal, _ := auth.FromContext(r.Context())
-	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		role, err := store.GetRole(r.Context(), tx, roleID)
 		if err != nil {
 			return err

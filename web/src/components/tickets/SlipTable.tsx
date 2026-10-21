@@ -6,6 +6,7 @@ import FormFields from "./FormFields";
 
 export type SlipRows = Record<string, Record<string, FieldState>[]>;
 export default function SlipTable(props: {
+  workflowId: string;
   code: string;
   title: string;
   fields: FormField[];
@@ -20,7 +21,7 @@ export default function SlipTable(props: {
     props.setRows((rows) => ({ ...rows, [props.code]: (rows[props.code] ?? []).map((row, i) => i === index ? (typeof value === "function" ? value(row) : value) : row) }));
   };
   return <section class="slip-table"><h3>{props.title}</h3><For each={props.rows()[props.code] ?? []}>{(_, index) => <fieldset class="slip-row">
-    <legend>Row {index() + 1}</legend><FormFields fields={props.fields} state={rowAccessor(index())} setState={setRow(index())} errors={props.errors} />
+    <legend>Row {index() + 1}</legend><FormFields workflowId={props.workflowId} fields={props.fields} state={rowAccessor(index())} setState={setRow(index())} errors={props.errors} />
     <button type="button" onClick={() => remove(index())}>Remove row</button>
   </fieldset>}</For><button type="button" onClick={add}>Add row</button></section>;
 }

@@ -63,3 +63,32 @@ func TestWorkflowRouteReadAPI(t *testing.T) {
 		t.Fatalf("route invalid status=%d %s", bad.Status, bad.Body)
 	}
 }
+
+func TestRouteNumericConditionThresholdUsesStringResponse(t *testing.T) {
+	env := testutil.New(t)
+	res := env.Do(t, testutil.Employee, http.MethodGet, "/v1/routes/purchase", nil)
+	if res.Status != http.StatusOK {
+		t.Fatalf("get purchase route: status=%d body=%s", res.Status, res.Body)
+	}
+	var route map[string]any
+	res.JSON(t, &route)
+	steps := route["steps"].([]any)
+	for _, rawStep := range steps {
+		step := rawStep.(map[string]any)
+		condition, ok := step["routeStepCondition"].(map[string]any)
+		if !ok {
+			continue
+		}
+		fields := condition["routeStepConditionFields"].([]any)
+		for _, rawField := range fields {
+			field := rawField.(map[string]any)
+			if field["fieldKey"] == "number_variable" {
+				if field["value"] != "50000" {
+					t.Fatalf("numeric condition value=%#v, want string 50000", field["value"])
+				}
+				return
+			}
+		}
+	}
+	t.Fatal("purchase route has no populated numeric route condition")
+}

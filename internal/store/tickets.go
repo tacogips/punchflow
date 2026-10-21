@@ -217,12 +217,18 @@ func EngInsertAssignee(ctx context.Context, q Querier, x model.TicketAssignee) e
 	if err != nil {
 		return fmt.Errorf("store: insert engine assignee: %w", err)
 	}
+	if _, err = q.ExecContext(ctx, `INSERT OR IGNORE INTO ticket_approver_history(ticket_id,user_id) VALUES(?,?)`, x.TicketID, x.UserID); err != nil {
+		return fmt.Errorf("store: record ticket approver history: %w", err)
+	}
 	return nil
 }
 func EngUpdateAssignee(ctx context.Context, q Querier, x model.TicketAssignee) error {
 	_, err := q.ExecContext(ctx, `UPDATE ticket_assignees SET user_id=?,completed=?,completed_at=?,pending=CASE WHEN user_id<>? THEN 0 ELSE ? END,actual_approver_id=?,assigned_at=?,updated_at=? WHERE id=?`, x.UserID, x.Completed, NullMillis(x.CompletedAt), x.UserID, x.Pending, x.ActualApproverID, NullMillis(x.AssignedAt), Millis(x.UpdatedAt), x.ID)
 	if err != nil {
 		return fmt.Errorf("store: update engine assignee: %w", err)
+	}
+	if _, err = q.ExecContext(ctx, `INSERT OR IGNORE INTO ticket_approver_history(ticket_id,user_id) VALUES(?,?)`, x.TicketID, x.UserID); err != nil {
+		return fmt.Errorf("store: record ticket approver history: %w", err)
 	}
 	return nil
 }

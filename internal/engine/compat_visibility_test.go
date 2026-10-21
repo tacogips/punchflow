@@ -347,6 +347,51 @@ func TestManagerSharingRefreshesOnLaterStepTransition(t *testing.T) {
 	t.Fatal("manager added after submission was not shared at the next-step transition")
 }
 
+func TestImmediatelyCompletedSubmissionStillSnapshotsAutomaticSharing(t *testing.T) {
+	e := pf14Setup(t)
+	skipped := compatUserStep("condition-skip", 1, model.ActionTypeApprove, "finance-manager")
+	skipped.RouteStepCondition = &model.RouteStepCondition{ConditionType: model.StepConditionTypeConditionalSkip, CombinationType: model.StepCombinationAll, RouteStepConditionFields: []model.ConditionField{{FieldKey: model.StepConditionFieldKeyNumberVariable, Variable: "$amount", Symbol: "greater_than", Value: 1000}}}
+	compatSetRoute(t, e, "expense-claim", skipped)
+	compatSetWorkflow(t, e, "expense-claim", "$.visibleToTeamMembers", true)
+	compatSetWorkflow(t, e, "expense-claim", "$.visibleToManager", "direct")
+	teamMember := e.user("finance-manager")
+	if _, err := e.db.Q().ExecContext(e.ctx, `INSERT INTO team_memberships(id,team_id,user_id,leader,grade_ids,created_at,updated_at) VALUES(?,?,?,0,'[]',0,0)`, store.NewID(), e.team("sales"), teamMember); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := compatCreateExpense(t, e, "sales-rep", "sales", model.TicketStatusInProgress, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.ticket(id).Status; got != model.TicketStatusCompleted {
+		t.Fatalf("ticket status=%s, want completed", got)
+	}
+	for _, userCode := range []string{"sales-manager", "finance-manager"} {
+		if err := e.engine.CanView(e.ctx, e.db.Q(), e.actor(userCode), id); err != nil {
+			t.Fatalf("automatic audience %s cannot view immediately completed ticket: %v", userCode, err)
+		}
+	}
+}
+
+func TestFormerApproverRetainsVisibilityAfterRouteRebuild(t *testing.T) {
+	e := pf14Setup(t)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if err != nil || len(steps) == 0 {
+		t.Fatalf("ticket steps=%v err=%v", steps, err)
+	}
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), steps[0].ID)
+	if err != nil || len(assignees) == 0 {
+		t.Fatalf("step assignees=%v err=%v", assignees, err)
+	}
+	former := assignees[0].UserID
+	if err := e.db.WithTx(e.ctx, func(tx *store.Tx) error { return store.EngDeleteTicketSteps(e.ctx, tx, id) }); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.engine.CanView(e.ctx, e.db.Q(), Actor{UserID: former}, id); err != nil {
+		t.Fatalf("former approver lost visibility after route rebuild: %v", err)
+	}
+}
+
 func TestCompletedTicketDoesNotReceiveNewManagerSharing(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetWorkflow(t, e, "expense-claim", "$.visibleToManager", "direct")

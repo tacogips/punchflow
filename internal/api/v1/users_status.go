@@ -26,8 +26,8 @@ type pf18InviteMembership struct {
 }
 
 type pf18CustomField struct {
-	Code  string `json:"code"`
-	Value any    `json:"value"`
+	Code  string          `json:"code"`
+	Value json.RawMessage `json:"value"`
 }
 
 type pf18CreateUserBody struct {

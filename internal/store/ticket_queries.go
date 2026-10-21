@@ -96,20 +96,23 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 		// historical statuses retain the caller's completed assignment rows.
 		if len(filter.Statuses) == 0 {
 			values = append(values, model.StepStatusInProgress)
-			add("EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.completed=0 AND ts.status=?"+pendingClause+")", values...)
+			assigneeWhere += " AND ta.completed=0 AND ts.status=?" + pendingClause
 		} else {
-			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+pendingClause+")", values...)
+			assigneeWhere += pendingClause
 		}
 		if filter.AssignedToMeAtStart != nil {
-			assigneeWhere, values = taskAssigneeWhere("ta")
 			values = append(values, Millis(*filter.AssignedToMeAtStart))
-			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.assigned_at>=?)", values...)
+			assigneeWhere += " AND ta.assigned_at>=?"
 		}
 		if filter.AssignedToMeAtEnd != nil {
-			assigneeWhere, values = taskAssigneeWhere("ta")
 			values = append(values, Millis(*filter.AssignedToMeAtEnd))
-			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.assigned_at<=?)", values...)
+			assigneeWhere += " AND ta.assigned_at<=?"
 		}
+		assignmentJoin := ""
+		if len(filter.Statuses) == 0 {
+			assignmentJoin = " JOIN ticket_steps ts ON ts.id=ta.ticket_step_id"
+		}
+		add("EXISTS (SELECT 1 FROM ticket_assignees ta"+assignmentJoin+" WHERE ta.ticket_id=t.id AND "+assigneeWhere+")", values...)
 	} else if filter.AssigneeUserID != "" {
 		clause := "EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND ta.user_id=?"
 		values := []any{filter.AssigneeUserID}

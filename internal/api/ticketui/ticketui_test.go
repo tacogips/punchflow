@@ -128,6 +128,42 @@ func TestControlsEndpoint(t *testing.T) {
 	testutil.AssertError(t, env.Do(t, testutil.Employee, http.MethodGet, "/ui/api/unknown", nil), http.StatusNotFound, "endpoint_not_found")
 }
 
+func TestApplicationTeamsAndWorkflowMasterItemsAreAvailableToApplicants(t *testing.T) {
+	env := testutil.New(t)
+	teams := env.Do(t, testutil.Employee, http.MethodGet, "/ui/api/application-teams", nil)
+	if teams.Status != http.StatusOK {
+		t.Fatalf("application teams: %d %s", teams.Status, teams.Body)
+	}
+	var teamItems []struct {
+		ID          string `json:"id"`
+		ApproveOnly bool   `json:"approveOnly"`
+	}
+	teams.JSON(t, &teamItems)
+	if len(teamItems) == 0 {
+		t.Fatal("application teams are empty for an ordinary applicant")
+	}
+	for _, team := range teamItems {
+		if team.ApproveOnly {
+			t.Fatalf("application teams included approve-only team %s", team.ID)
+		}
+	}
+
+	items := env.Do(t, testutil.Employee, http.MethodGet, "/ui/api/workflows/expense-claim/form-fields/cost-center/master-items", nil)
+	if items.Status != http.StatusOK {
+		t.Fatalf("workflow master items: %d %s", items.Status, items.Body)
+	}
+	var masterItems []struct {
+		ID   string `json:"id"`
+		Code string `json:"code"`
+	}
+	items.JSON(t, &masterItems)
+	if len(masterItems) == 0 || masterItems[0].ID == "" {
+		t.Fatalf("workflow master items = %+v, want populated selectable items", masterItems)
+	}
+	testutil.AssertError(t, env.Do(t, testutil.Employee, http.MethodGet, "/ui/api/workflows/expense-claim/form-fields/amount/master-items", nil), http.StatusNotFound, "resource_not_found")
+	testutil.AssertError(t, env.Do(t, "", http.MethodGet, "/ui/api/application-teams", nil), http.StatusUnauthorized, "invalid_access_token")
+}
+
 func TestCancelApprovalEndpoint(t *testing.T) {
 	env := testutil.New(t)
 	id := createTicket(t, env)

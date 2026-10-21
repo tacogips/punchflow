@@ -53,11 +53,24 @@ func SyncProxySharingForTicket(ctx context.Context, tx *store.Tx, ticketID strin
 // manager audiences when a ticket is submitted and when a later step becomes
 // active. Viewer additions remain after team membership changes.
 func SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, ticketID string) error {
+	return pf14SyncWorkflowManagerSharingForTicket(ctx, tx, ticketID, false)
+}
+
+func pf14SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, ticketID string, allowCompleted bool) error {
 	ticket, err := store.EngLoadTicket(ctx, tx, ticketID)
 	if err != nil {
 		return err
 	}
-	if ticket.Status != model.TicketStatusInProgress || ticket.AuthorTeamID == nil {
+	if ticket.AuthorTeamID == nil {
+		return nil
+	}
+	switch ticket.Status {
+	case model.TicketStatusInProgress:
+	case model.TicketStatusCompleted:
+		if !allowCompleted {
+			return nil
+		}
+	default:
 		return nil
 	}
 	def, err := store.WorkflowDefByID(ctx, tx, ticket.WorkflowID)
@@ -158,6 +171,9 @@ func (e *Engine) pf14EffectiveVisibility(ctx context.Context, q store.Querier, a
 		if allowed, err := pf14TicketViewer(ctx, q, a, t.ID); err != nil || allowed {
 			return allowed, err
 		}
+	}
+	if historicalApprover, err := store.TicketApproverHistory(ctx, q, t.ID, a.UserID); err != nil || historicalApprover {
+		return historicalApprover, err
 	}
 	return pf14AssigneeViewer(ctx, q, a, t)
 }

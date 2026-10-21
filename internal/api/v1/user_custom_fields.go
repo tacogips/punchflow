@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"punchflow/internal/kferr"
@@ -28,7 +29,7 @@ func pf18ApplyCustomFields(ctx context.Context, q store.Querier, base map[string
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
-		if entry.Code == "" {
+		if entry.Code == "" || len(entry.Value) == 0 {
 			return nil, kferr.InvalidParameter("Invalid customFields")
 		}
 		def, ok := byCode[entry.Code]
@@ -39,7 +40,11 @@ func pf18ApplyCustomFields(ctx context.Context, q store.Querier, base map[string
 			return nil, kferr.ValidationFailed(map[string][]string{"customFields": {fmt.Sprintf("contains the code %q more than once", entry.Code)}})
 		}
 		seen[entry.Code] = true
-		value, err := def.NormalizeValue(entry.Value)
+		var rawValue any
+		if err := json.Unmarshal(entry.Value, &rawValue); err != nil {
+			return nil, kferr.InvalidParameter("Invalid customFields")
+		}
+		value, err := def.NormalizeValue(rawValue)
 		if err != nil {
 			return nil, kferr.ValidationFailed(map[string][]string{"customFields": {fmt.Sprintf("value for %q %s", entry.Code, err.Error())}})
 		}

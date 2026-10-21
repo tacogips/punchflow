@@ -139,7 +139,7 @@ func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[
 		} else {
 			out["generalMaster"] = nil
 		}
-		out["defaultGeneralMasterItem"] = nil
+		out["defaultGeneralMasterItem"] = pf08DefaultGeneralMasterItem(ctx, q, f.GeneralMasterCode, f.DefaultGeneralMasterItemCode)
 	} else {
 		out["generalMaster"] = nil
 		out["defaultGeneralMasterItem"] = nil
@@ -155,6 +155,26 @@ func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[
 	out["selectableTicketWorkflows"] = []any{}
 	return out
 }
+
+func pf08DefaultGeneralMasterItem(ctx context.Context, q store.Querier, masterCode, itemCode string) any {
+	if itemCode == "" {
+		return nil
+	}
+	masterID, err := store.ResolveID(ctx, q, "general_masters", masterCode)
+	if err != nil {
+		return nil
+	}
+	itemID, err := store.MasterItemIDByCode(ctx, q, masterID, itemCode)
+	if err != nil {
+		return nil
+	}
+	item, err := GeneralMasterItem(ctx, q, itemID)
+	if err != nil {
+		return nil
+	}
+	return item
+}
+
 func pf08SlipField(f model.SlipField) map[string]any {
 	allowed := f.AllowedExtensions
 	if allowed == nil {

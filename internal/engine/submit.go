@@ -36,7 +36,7 @@ func pf14FinishSubmission(ctx context.Context, tx *store.Tx, t *model.Ticket, de
 	if err := SyncProxySharingForTicket(ctx, tx, t.ID, now); err != nil {
 		return nil, err
 	}
-	if err := SyncWorkflowManagerSharingForTicket(ctx, tx, t.ID); err != nil {
+	if err := pf14SyncWorkflowManagerSharingForTicket(ctx, tx, t.ID, true); err != nil {
 		return nil, err
 	}
 	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketOpened, t.ID, actorID)}

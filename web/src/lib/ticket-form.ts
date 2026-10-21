@@ -33,13 +33,30 @@ function storedValue(input: Loose | undefined, fieldType: string, multiple: bool
   return value ?? null;
 }
 
+function defaultFieldValue(field: FormField): unknown {
+  const definition = obj(field);
+  if (definition.useTodayForDefaultValue === true && field.fieldType === "date") {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${today.getFullYear()}-${month}-${day}`;
+  }
+  if (field.fieldType === "master" || field.fieldType === "general_master" || field.fieldType === "general_master_item") {
+    const id = str(obj(definition.defaultGeneralMasterItem).id);
+    return id || (field.multiple === true ? [] : null);
+  }
+  if (definition.defaultValue !== undefined && definition.defaultValue !== null) return definition.defaultValue;
+  return field.multiple === true ? [] : null;
+}
+
 /** Restores form-field state from a stored ticket (or empty state for a new one). */
 export function formStateFromTicket(workflow: WorkflowDetail, ticket?: TicketDetail): Record<string, FieldState> {
   const state: Record<string, FieldState> = {};
   const inputs = arr(ticket?.inputs).map(obj);
   for (const section of workflow.sectionList ?? []) for (const field of section.formFields ?? []) {
     const input = inputs.find((item) => item.formFieldId === field.id || item.formFieldCode === field.code || obj(item.formField).code === field.code);
-    state[field.code] = { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value: storedValue(input, field.fieldType, field.multiple === true) };
+    const value = input ? storedValue(input, field.fieldType, field.multiple === true) : defaultFieldValue(field);
+    state[field.code] = { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value };
   }
   return state;
 }

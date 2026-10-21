@@ -2,6 +2,7 @@ package present
 
 import (
 	"context"
+	"fmt"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 	"sort"
@@ -115,7 +116,15 @@ func pf08ActiveChartID(ctx context.Context, q store.Querier) string {
 }
 
 func pf08RouteStepConditionField(ctx context.Context, q store.Querier, f model.ConditionField) map[string]any {
-	out := map[string]any{"id": f.ID, "variable": pf08NullableString(f.Variable), "fieldKey": f.FieldKey, "symbol": f.Symbol, "value": f.Value, "grade": nil, "team": nil, "generalMaster": nil, "generalMasterItem": nil}
+	value := f.Value
+	if f.FieldKey == "author_grade" || f.FieldKey == "author_team" || f.FieldKey == "general_master_variable" || f.Symbol == "is_empty" || f.Symbol == "is_not_empty" {
+		value = nil
+	} else if value != nil {
+		if _, ok := value.(string); !ok {
+			value = fmt.Sprint(value)
+		}
+	}
+	out := map[string]any{"id": f.ID, "variable": pf08NullableString(f.Variable), "fieldKey": f.FieldKey, "symbol": f.Symbol, "value": value, "grade": nil, "team": nil, "generalMaster": nil, "generalMasterItem": nil}
 	code, _ := f.Value.(string)
 	if f.FieldKey == "general_master_variable" {
 		masterCode := f.GeneralMasterCode

@@ -40,6 +40,7 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 		t.Fatal("expense-claim fixture has no form field for section conditions")
 	}
 	var formTarget *model.FormField
+	var masterDefaultField *model.FormField
 	var formCondition *model.FormField
 	var slipSection *model.WorkflowSection
 	for i := range def.SectionList {
@@ -51,14 +52,17 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 			switch section.FormFields[j].Code {
 			case "purpose":
 				formTarget = &section.FormFields[j]
+			case "cost-center":
+				masterDefaultField = &section.FormFields[j]
 			case "amount":
 				formCondition = &section.FormFields[j]
 			}
 		}
 	}
-	if formTarget == nil || formCondition == nil || slipSection == nil {
+	if formTarget == nil || masterDefaultField == nil || formCondition == nil || slipSection == nil {
 		t.Fatal("expense-claim fixture is missing fields for custom validation contract")
 	}
+	masterDefaultField.DefaultGeneralMasterItemCode = "cc-sales"
 	gt100 := "100"
 	formTarget.CustomValidations = []model.FormCustomValidation{{
 		ID: "00000000-0000-4000-8000-0000000000b5", CombinationType: "all", ErrorMessage: "Amount is too high",
@@ -121,11 +125,21 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 				Code          string         `json:"code"`
 				GeneralMaster map[string]any `json:"generalMaster"`
 			} `json:"slipFields"`
+			FormFields []struct {
+				Code                     string         `json:"code"`
+				GeneralMaster            map[string]any `json:"generalMaster"`
+				DefaultGeneralMasterItem map[string]any `json:"defaultGeneralMasterItem"`
+			} `json:"formFields"`
 		} `json:"sectionList"`
 	}
 	response.JSON(t, &workflow)
-	found, foundMaster := false, false
+	found, foundMaster, foundDefault := false, false, false
 	for _, section := range workflow.SectionList {
+		for _, field := range section.FormFields {
+			if field.Code == "cost-center" && field.GeneralMaster["code"] == "cost-centers" && field.DefaultGeneralMasterItem["code"] == "cc-sales" {
+				foundDefault = true
+			}
+		}
 		if section.ID == slipSectionID && section.SectionType == model.SectionTypeSlip {
 			if !section.AllowApproverToAddItems {
 				t.Fatal("populated detail section did not present allowApproverToAddItems=true")
@@ -144,6 +158,9 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 	}
 	if !foundMaster {
 		t.Fatal("workflow detail field omitted its populated general-master metadata")
+	}
+	if !foundDefault {
+		t.Fatal("workflow form field omitted its populated default general-master item")
 	}
 	var customExpressionFound bool
 	for _, section := range workflow.SectionList {

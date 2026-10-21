@@ -57,6 +57,8 @@ type Operation struct {
 var operations = [...]Operation{
 	{Name: "listLabels", Method: http.MethodGet, Pattern: "/ui/api/labels", Handle: (*API).listLabels},
 	{Name: "listSubStatuses", Method: http.MethodGet, Pattern: "/ui/api/sub-statuses", Handle: (*API).listSubStatuses},
+	{Name: "listApplicationTeams", Method: http.MethodGet, Pattern: "/ui/api/application-teams", Handle: (*API).listApplicationTeams},
+	{Name: "listWorkflowMasterItems", Method: http.MethodGet, Pattern: "/ui/api/workflows/{workflowId}/form-fields/{fieldCode}/master-items", Handle: (*API).listWorkflowMasterItems},
 	{Name: "getTicketControls", Method: http.MethodGet, Pattern: "/ui/api/tickets/{ticketId}/controls", Handle: (*API).getControls},
 	{Name: "attachTicketLabel", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/labels", Handle: (*API).attachLabel},
 	{Name: "detachTicketLabel", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/labels/{labelId}", Handle: (*API).detachLabel},
@@ -112,6 +114,116 @@ func (a *API) listSubStatuses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, present.SubStatuses(items))
+}
+
+// listApplicationTeams returns the caller's active-chart teams that can be
+// used as an application team. The public listUserTeams API requires team
+// management permission, which ordinary browser users do not have.
+func (a *API) listApplicationTeams(w http.ResponseWriter, r *http.Request) {
+	if err := auth.Require(r); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	p, ok := auth.FromContext(r.Context())
+	if !ok || p.User.ID == "" {
+		kferr.Write(w, kferr.InvalidAccessToken())
+		return
+	}
+	ids, _, err := store.UserTeamIDs(r.Context(), a.d.DB.Q(), p.User.ID, 0, 10000)
+	if err != nil {
+		kferr.Write(w, kferr.Internal())
+		return
+	}
+	items := make([]present.TeamJSON, 0, len(ids))
+	for _, id := range ids {
+		team, err := store.GetTeam(r.Context(), a.d.DB.Q(), id)
+		if err != nil {
+			kferr.Write(w, kferr.Internal())
+			return
+		}
+		if team.ApproveOnly {
+			continue
+		}
+		item, err := present.Team(r.Context(), a.d.DB.Q(), id)
+		if err != nil {
+			kferr.Write(w, kferr.Internal())
+			return
+		}
+		items = append(items, item)
+	}
+	httpx.WriteJSON(w, http.StatusOK, items)
+}
+
+// listWorkflowMasterItems serves selectable records only for a master field
+// exposed by the requested workflow. This lets ordinary applicants fill a
+// workflow form without granting general-master administration permission.
+func (a *API) listWorkflowMasterItems(w http.ResponseWriter, r *http.Request) {
+	if err := auth.Require(r); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	q := a.d.DB.Q()
+	workflowID, err := store.ResolveID(r.Context(), q, "workflows", r.PathValue("workflowId"))
+	if err != nil {
+		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	workflow, err := store.GetWorkflow(r.Context(), q, workflowID)
+	if err != nil || workflow.Status != model.WorkflowStatusVisible {
+		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	definition, err := store.WorkflowDefByID(r.Context(), q, workflowID)
+	if err != nil {
+		kferr.Write(w, kferr.Internal())
+		return
+	}
+	fieldCode := r.PathValue("fieldCode")
+	masterCode := ""
+	for _, section := range definition.SectionList {
+		for _, field := range section.FormFields {
+			if field.Code == fieldCode && (field.FieldType == "master" || field.FieldType == "general_master") {
+				masterCode = field.GeneralMasterCode
+				break
+			}
+		}
+		if masterCode != "" {
+			break
+		}
+		for _, field := range section.SlipFields {
+			if field.Code == fieldCode && (field.FieldType == "master" || field.FieldType == "general_master") {
+				masterCode = field.GeneralMasterCode
+				break
+			}
+		}
+		if masterCode != "" {
+			break
+		}
+	}
+	if masterCode == "" {
+		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	masterID, err := store.ResolveID(r.Context(), q, "general_masters", masterCode)
+	if err != nil {
+		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	rows, _, err := store.GeneralMasterItemsList(r.Context(), q, masterID, 0, 10000, "code", false)
+	if err != nil {
+		kferr.Write(w, kferr.Internal())
+		return
+	}
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	items, err := present.GeneralMasterItems(r.Context(), q, ids)
+	if err != nil {
+		kferr.Write(w, kferr.Internal())
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, items)
 }
 
 func (a *API) getControls(w http.ResponseWriter, r *http.Request) {

@@ -139,6 +139,12 @@ func TestRoleMembershipAndSelfEditGuards(t *testing.T) {
 	if got := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/roles/"+roleID+"/memberships/"+engManagerID, nil); got.Status != http.StatusOK || len(got.Body) != 0 {
 		t.Fatalf("delete role member status/body = %d/%q, want 200/empty", got.Status, got.Body)
 	}
+	if got := env.Do(t, testutil.Admin, http.MethodPost, "/v1/roles/"+roleID+"/memberships", map[string]any{"userIds": []string{engManagerID}}); got.Status != http.StatusOK {
+		t.Fatalf("re-add role member status=%d body=%s", got.Status, got.Body)
+	}
+	if got := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/roles/"+roleID+"/memberships/eng-manager", nil); got.Status != http.StatusOK || len(got.Body) != 0 {
+		t.Fatalf("delete role member by user code status/body = %d/%q, want 200/empty", got.Status, got.Body)
+	}
 	if got := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/roles/"+roleID, nil); got.Status != http.StatusOK || len(got.Body) != 0 {
 		t.Fatalf("delete role status/body = %d/%q, want 200/empty", got.Status, got.Body)
 	}

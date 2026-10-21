@@ -89,6 +89,24 @@ func TestTicketCreateGetAndVisibility(t *testing.T) {
 	testutil.AssertError(t, unknown, http.StatusNotFound, "resource_not_found")
 }
 
+func TestLinkedTicketCountCountsReciprocalRelationshipOnce(t *testing.T) {
+	env := testutil.New(t)
+	first := pf22CreateTicket(t, env, testutil.Employee, "draft", 5000)
+	second := pf22CreateTicket(t, env, testutil.Employee, "draft", 5000)
+	if _, err := env.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_links(ticket_id,linked_ticket_id,created_at) VALUES(?,?,0),(?,?,0)`, first, second, second, first); err != nil {
+		t.Fatal(err)
+	}
+	res := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+first, nil)
+	if res.Status != http.StatusOK {
+		t.Fatalf("get linked ticket: status=%d body=%s", res.Status, res.Body)
+	}
+	var ticket map[string]any
+	res.JSON(t, &ticket)
+	if ticket["linkedTicketsCount"] != float64(1) {
+		t.Fatalf("linkedTicketsCount=%v, want 1", ticket["linkedTicketsCount"])
+	}
+}
+
 func TestTasksPendingAndAssignedToCurrentUser(t *testing.T) {
 	env := testutil.New(t)
 	id := pf22CreateTicket(t, env, testutil.Employee, "in_progress", 5000)
@@ -184,6 +202,22 @@ func TestTasksPendingAndAssignedToCurrentUser(t *testing.T) {
 	sorted.JSON(t, &sortedRows)
 	if len(sortedRows) < 2 || sortedRows[0]["id"] != secondCreated || sortedRows[1]["id"] != firstCreated {
 		t.Fatalf("assignedToMeAt ascending order = %v; want %s before %s", sortedRows, secondCreated, firstCreated)
+	}
+	// Both bounds must qualify the same assignment row. The matching ticket
+	// has one assignment before and one after the requested interval.
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_assignees SET assigned_at=1000 WHERE ticket_id=? AND user_id=?`, firstCreated, managerID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,pending,assigned_at,created_at,updated_at) SELECT ?,ticket_step_id,ticket_id,user_id,0,0,10000,created_at,updated_at FROM ticket_assignees WHERE ticket_id=? AND user_id=? LIMIT 1`, store.NewID(), firstCreated, managerID); err != nil {
+		t.Fatal(err)
+	}
+	outside := env.Do(t, testutil.Manager, http.MethodGet, "/v1/tickets/tasks?status=in_progress&assignedToMeAtStart=1970-01-01T00:00:04.000Z&assignedToMeAtEnd=1970-01-01T00:00:06.000Z", nil)
+	var outsideRows []map[string]any
+	outside.JSON(t, &outsideRows)
+	for _, row := range outsideRows {
+		if row["id"] == firstCreated {
+			t.Fatalf("ticket with assignments only outside the interval matched: %v", outsideRows)
+		}
 	}
 	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE users SET status='suspended' WHERE id=?`, managerID); err != nil {
 		t.Fatal(err)

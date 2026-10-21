@@ -15,17 +15,13 @@ const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
 const str = (v: unknown): string => typeof v === "string" ? v : "";
 const sections = (workflow: WorkflowDetail): SectionListItem[] => workflow.sectionList ?? [];
 export default function TicketEdit() {
-  const params = useParams(); const [search] = useSearchParams(); const [chosenWorkflow, setChosenWorkflow] = createSignal(search.workflow ?? "");
+  const params = useParams(); const [search] = useSearchParams(); const [chosenWorkflow, setChosenWorkflow] = createSignal(str(search.workflow ?? ""));
   const [ticket, { refetch: refetchTicket }] = createResource(() => params.id, (id) => id ? apiFetch<TicketDetail>("GET", `/v1/tickets/${id}`) : Promise.resolve(undefined));
   const [workflows] = createResource(() => apiList<Workflow>("/v1/workflows", { perPage: "100" }).then((result) => result.items));
   const workflowId = () => chosenWorkflow() || str(obj(obj(ticket()).workflow).id);
   const [workflow] = createResource(workflowId, (id) => id ? apiFetch<WorkflowDetail>("GET", `/v1/workflows/${id}`) : Promise.resolve(undefined));
   const me = () => session()?.user;
-  const [teams] = createResource(() => me()?.id, async (id) => {
-    if (!id) return [];
-    const response = await apiFetch<unknown>("GET", `/v1/users/${encodeURIComponent(id)}/teams`);
-    return (Array.isArray(response) ? response : arr(obj(response).items)) as Team[];
-  });
+  const [teams] = createResource(() => me()?.id, async (id) => id ? apiFetch<Team[]>("GET", "/ui/api/application-teams") : []);
   const [form, setForm] = createSignal<Record<string, FieldState>>({}); const [slips, setSlips] = createSignal<SlipRows>({});
   const [title, setTitle] = createSignal(""); const [teamId, setTeamId] = createSignal(""); const [proxyClientUserId, setProxyClientUserId] = createSignal("");
   const [approvers, setApprovers] = createSignal<Record<string, string>>({}); const [submissionComment, setSubmissionComment] = createSignal(""); const [errors, setErrors] = createSignal<Record<string, string[]>>({}); const [error, setError] = createSignal(""); const [busy, setBusy] = createSignal(false); const [initialized, setInitialized] = createSignal("");
@@ -82,8 +78,8 @@ export default function TicketEdit() {
             <Show when={obj(definition()).titleInputMode === "input" || obj(definition()).allowTitle === true}><label>Title<input value={title()} onInput={(event) => setTitle(event.currentTarget.value)} /></label></Show>
           </Show>
           <For each={sections(definition())}>{(section) => <Show when={canView(section) && sectionConditionMet(section, conditionInputs())}><section><h2>{section.title || (section.sectionType === "slip" ? "Items" : "Form")}</h2>
-            <Show when={section.sectionType === "form"} fallback={<SlipTable code={slipKey(section)} title={section.title ?? "Items"} fields={(section.slipFields ?? []).filter(editableField)} rows={slips} setRows={setSlips} errors={errors()} />}>
-              <FormFields fields={(section.formFields ?? []).filter(editableField)} state={form} setState={setForm} errors={errors()} />
+            <Show when={section.sectionType === "form"} fallback={<SlipTable workflowId={workflowId()} code={slipKey(section)} title={section.title ?? "Items"} fields={(section.slipFields ?? []).filter(editableField)} rows={slips} setRows={setSlips} errors={errors()} />}>
+              <FormFields workflowId={workflowId()} fields={(section.formFields ?? []).filter(editableField)} state={form} setState={setForm} errors={errors()} />
             </Show>
           </section></Show>}</For>
           <For each={routeSteps().filter((step) => obj(step).stepType === "author_customizable")}>{(step) => { const code = str(obj(step).code); return <label>Approvers for {str(obj(step).title) || code}<input value={approvers()[code] ?? ""} onInput={(event) => setApprovers((current) => ({ ...current, [code]: event.currentTarget.value }))} placeholder="User IDs separated by commas" /></label>; }}</For>

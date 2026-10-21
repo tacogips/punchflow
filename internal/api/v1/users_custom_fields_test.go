@@ -122,6 +122,20 @@ func TestUserCustomFieldsPatchMergesAndNullClears(t *testing.T) {
 	}
 }
 
+func TestUserCustomFieldsPatchRejectsMissingValueWithoutClearing(t *testing.T) {
+	env := testutil.New(t)
+	id := env.UserID(t, "admin")
+	before := customFieldsOf(t, decodeObject(t, env.Do(t, testutil.Admin, http.MethodGet, "/v1/users/"+id, nil)))
+	res := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/users/"+id, map[string]any{
+		"customFields": []map[string]any{{"code": "cost-center"}},
+	})
+	testutil.AssertError(t, res, http.StatusBadRequest, "invalid_parameter")
+	after := customFieldsOf(t, decodeObject(t, env.Do(t, testutil.Admin, http.MethodGet, "/v1/users/"+id, nil)))
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("malformed patch changed custom fields: before=%+v after=%+v", before, after)
+	}
+}
+
 func TestUserCustomFieldsOmitUndefinedCodesAndHideRestrictedFields(t *testing.T) {
 	env := testutil.New(t)
 	id := env.UserID(t, "sales-rep")

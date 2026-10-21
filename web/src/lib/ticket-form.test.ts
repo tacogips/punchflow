@@ -132,6 +132,25 @@ describe("restoring a stored ticket", () => {
   });
 });
 
+describe("new ticket defaults", () => {
+  test("applies field defaults while retaining stored values on existing tickets", () => {
+    const defaults: WorkflowDetail = { ...workflow, sectionList: [{
+      id: "defaults", sectionType: "form", title: "Defaults", formFields: [
+        { id: "radio", code: "choice", name: "Choice", fieldType: "radio_button", defaultValue: "approved" },
+        { id: "date", code: "today", name: "Today", fieldType: "date", useTodayForDefaultValue: true },
+        { id: "master", code: "master", name: "Master", fieldType: "master", generalMaster: { id: "gm" }, defaultGeneralMasterItem: { id: "item-1", name: "Default item" } },
+      ],
+    }] };
+    const fresh = formStateFromTicket(defaults);
+    expect(fresh.choice.value).toBe("approved");
+    expect(fresh.today.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(fresh.master.value).toBe("item-1");
+
+    const existing = { ...ticket, inputs: [{ id: "stored", formFieldId: "radio", value: "rejected", formField: { code: "choice" } }] } as TicketDetail;
+    expect(formStateFromTicket(defaults, existing).choice.value).toBe("rejected");
+  });
+});
+
 describe("section view restrictions", () => {
   const restricted: SectionListItem = { id: "sec-secret", sectionType: "form", title: "Secret", formFields: [{ id: "f-salary", code: "salary", name: "Salary", fieldType: "number" }], viewRestriction: true, allowViewAuthor: false, sectionViewers: [] } as SectionListItem;
   const restrictedWorkflow: WorkflowDetail = { ...workflow, sectionList: [workflow.sectionList[0], restricted] };

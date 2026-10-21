@@ -1,7 +1,7 @@
 import { For, Show, createResource } from "solid-js";
 import type { Accessor, Setter } from "solid-js";
 import type { FormField, GeneralMasterItem } from "../../api/types";
-import { apiList, apiUpload } from "../../api/client";
+import { apiFetch, apiUpload } from "../../api/client";
 import type { FieldState } from "../../lib/form-model";
 
 // Conditional display is section-level (kickflow conditions belong to form
@@ -13,6 +13,7 @@ const str = (v: unknown): string => typeof v === "string" ? v : "";
 const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
 
 function FieldControl(props: {
+  workflowId: string;
   field: FormField;
   value: unknown;
   onChange: (value: unknown) => void;
@@ -20,8 +21,10 @@ function FieldControl(props: {
 }) {
   const fieldType = props.field.fieldType;
   const options = arr(props.field.options ?? props.field.optionList).map((value) => typeof value === "string" ? { value, name: value } : obj(value));
-  const masterId = str(props.field.generalMasterId ?? props.field.masterId);
-  const [masterItems] = createResource(() => masterId ? apiList<GeneralMasterItem>(`/v1/generalMasters/${encodeURIComponent(masterId)}/items`).then((r) => r.items) : Promise.resolve([]));
+  const generalMasterId = str(obj(props.field.generalMaster).id);
+  const [masterItems] = createResource(() => generalMasterId
+    ? apiFetch<GeneralMasterItem[]>("GET", `/ui/api/workflows/${encodeURIComponent(props.workflowId)}/form-fields/${encodeURIComponent(props.field.code)}/master-items`)
+    : Promise.resolve([]));
   const selected = () => Array.isArray(props.value) ? props.value.map(String).join(", ") : props.value == null ? "" : String(props.value);
   const common = { id: props.field.code, name: props.field.code, disabled: fieldType === "calculation" };
   if (fieldType === "checkbox") return <div class="field-control checkbox-group"><For each={options}>{(option) => {
@@ -35,7 +38,7 @@ function FieldControl(props: {
   }}</For></div>;
   if (fieldType === "text_long") return <textarea {...common} value={selected()} onInput={(event) => props.onChange(event.currentTarget.value)} />;
   if (["pull_down", "radio_button", "master", "general_master"].includes(fieldType)) {
-    const items = masterId ? masterItems() ?? [] : options.map((option) => ({ id: str(option.id ?? option.value), name: str(option.name ?? option.label), code: str(option.code ?? option.value) } as GeneralMasterItem));
+    const items = generalMasterId ? masterItems() ?? [] : options.map((option) => ({ id: str(option.id ?? option.value), name: str(option.name ?? option.label), code: str(option.code ?? option.value) } as GeneralMasterItem));
     const multiple = obj(props.field).multiple === true;
     const selectedValues = () => Array.isArray(props.value) ? props.value.map(String) : props.value == null || props.value === "" ? [] : [String(props.value)];
     return <select {...common} multiple={multiple} value={multiple ? selectedValues() : selected()} onChange={(event) => props.onChange(multiple ? Array.from(event.currentTarget.selectedOptions, (option) => option.value) : event.currentTarget.value || null)}>
@@ -52,6 +55,7 @@ function FieldControl(props: {
 }
 
 export default function FormFields(props: {
+  workflowId: string;
   fields: FormField[];
   state: Accessor<Record<string, FieldState>>;
   setState: Setter<Record<string, FieldState>>;
@@ -67,7 +71,7 @@ export default function FormFields(props: {
   };
   return <div class="form-fields"><For each={props.fields}>{(field) => (
     <div class="form-field"><label for={field.code}>{str((field as unknown as Loose).title) || field.name}{field.required ? " *" : ""}</label>
-      <FieldControl field={field} value={props.state()[field.code]?.value} onChange={(value) => update(field, value)} onFile={(file) => addFile(field, file)} />
+      <FieldControl workflowId={props.workflowId} field={field} value={props.state()[field.code]?.value} onChange={(value) => update(field, value)} onFile={(file) => addFile(field, file)} />
       <Show when={props.errors?.[field.code]}><ul class="field-errors"><For each={props.errors?.[field.code]}>{(error) => <li>{error}</li>}</For></ul></Show>
     </div>
   )}</For></div>;

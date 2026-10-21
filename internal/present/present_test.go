@@ -248,6 +248,25 @@ func TestPresentCoreKeySets(t *testing.T) {
 	}
 }
 
+func TestRouteConditionValuesFollowNullableStringSchema(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		field model.ConditionField
+		want  any
+	}{
+		{name: "numeric threshold", field: model.ConditionField{FieldKey: "number_variable", Symbol: "greater_than", Value: float64(50000)}, want: "50000"},
+		{name: "team reference", field: model.ConditionField{FieldKey: "author_team", Symbol: "equal"}, want: nil},
+		{name: "empty comparison", field: model.ConditionField{FieldKey: "text_variable", Symbol: "is_empty", Value: "ignored"}, want: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := pf08RouteStepConditionField(context.Background(), nil, tc.field)["value"]
+			if got != tc.want {
+				t.Fatalf("value=%#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPresentMasterItemInputIDs(t *testing.T) {
 	ctx, db := pf08DB(t)
 	q := db.Q()

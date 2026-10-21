@@ -40,7 +40,7 @@ func Tickets(ctx context.Context, q Querier, ids []string) ([]model.Ticket, erro
 }
 
 func TicketCounts(ctx context.Context, q Querier, id string) (comments, logs, links int, err error) {
-	err = q.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM comments WHERE ticket_id=? AND deleted_at IS NULL),(SELECT count(*) FROM audit_logs WHERE ticket_id=?),(SELECT count(*) FROM ticket_links WHERE ticket_id=? OR linked_ticket_id=?)`, id, id, id, id).Scan(&comments, &logs, &links)
+	err = q.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM comments WHERE ticket_id=? AND deleted_at IS NULL),(SELECT count(*) FROM audit_logs WHERE ticket_id=?),(SELECT count(*) FROM ticket_links WHERE ticket_id=?)`, id, id, id).Scan(&comments, &logs, &links)
 	if err != nil {
 		err = fmt.Errorf("store: count ticket relations: %w", err)
 	}
@@ -66,6 +66,16 @@ func TicketViewers(ctx context.Context, q Querier, id string) ([]model.TicketVie
 		out = append(out, x)
 	}
 	return out, rows.Err()
+}
+
+// TicketApproverHistory reports whether userID has ever been assigned to the ticket.
+func TicketApproverHistory(ctx context.Context, q Querier, ticketID, userID string) (bool, error) {
+	var exists bool
+	err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ticket_approver_history WHERE ticket_id=? AND user_id=?)`, ticketID, userID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("store: check ticket approver history: %w", err)
+	}
+	return exists, nil
 }
 
 func TicketInputs(ctx context.Context, q Querier, id string) ([]model.TicketInput, error) {
