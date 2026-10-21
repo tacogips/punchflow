@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -479,6 +480,219 @@ func TestWebhookAdmitsNewRegistrationWhileAnotherBatchIsInFlight(t *testing.T) {
 	}
 }
 
+func TestWebhookDispatcherRotatesRegistrationsWithBacklogs(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	startedA, startedB := make(chan struct{}), make(chan struct{})
+	releaseA, releaseB := make(chan struct{}), make(chan struct{})
+	aBacklogDelivered, healthyDelivered := make(chan struct{}, 1), make(chan struct{}, 1)
+	var aRequests atomic.Int32
+	a := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if aRequests.Add(1) == 1 {
+			close(startedA)
+			<-releaseA
+		} else {
+			select {
+			case aBacklogDelivered <- struct{}{}:
+			default:
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer a.Close()
+	b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(startedB)
+		<-releaseB
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer b.Close()
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		healthyDelivered <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer healthy.Close()
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "a", Name: "a", URL: a.URL, Enabled: true})
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "b", Name: "b", URL: b.URL, Enabled: true})
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "healthy", Name: "healthy", URL: healthy.URL, Enabled: true})
+	for i := 0; i < 4; i++ {
+		pf09InsertPending(t, ctx, db, fmt.Sprintf("a-%d", i), "a", now)
+		pf09InsertPending(t, ctx, db, fmt.Sprintf("b-%d", i), "b", now)
+	}
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{Concurrency: 2, PollEvery: time.Millisecond})
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(runCtx); done <- err }()
+	select {
+	case <-startedA:
+	case err := <-done:
+		t.Fatalf("dispatcher exited before registration a started: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("registration a did not start")
+	}
+	select {
+	case <-startedB:
+	case err := <-done:
+		t.Fatalf("dispatcher exited before registration b started: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("registration b did not start")
+	}
+	pf09InsertPending(t, ctx, db, "healthy-event", "healthy", now)
+	svc.Notify()
+	close(releaseA)
+	select {
+	case <-healthyDelivered:
+	case <-aBacklogDelivered:
+		cancel()
+		close(releaseB)
+		<-done
+		t.Fatal("registration a received another backlog event before the healthy registration")
+	case <-time.After(2 * time.Second):
+		cancel()
+		close(releaseB)
+		<-done
+		t.Fatal("healthy registration was starved by older backlogs")
+	}
+	cancel()
+	close(releaseB)
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunOnce after cancellation = %v", err)
+	}
+}
+
+func TestWebhookAdmitsDueRetryWhileAnotherRegistrationIsBusy(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	slowStarted, releaseSlow := make(chan struct{}), make(chan struct{})
+	var retryRequests atomic.Int32
+	retryStarted := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(slowStarted)
+		<-releaseSlow
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+	retry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if retryRequests.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		retryStarted <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer retry.Close()
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "slow", Name: "slow", URL: slow.URL, Enabled: true})
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "retry", Name: "retry", URL: retry.URL, Enabled: true})
+	pf09InsertPending(t, ctx, db, "slow-event", "slow", now)
+	pf09InsertPending(t, ctx, db, "retry-event", "retry", now)
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{Concurrency: 2, PollEvery: time.Millisecond, RetryBase: 10 * time.Second})
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(runCtx); done <- err }()
+	select {
+	case <-slowStarted:
+	case err := <-done:
+		t.Fatalf("dispatcher exited before slow registration started: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow registration did not start")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		ev, err := store.GetWebhookEvent(ctx, db.Q(), "retry-event")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ev.AttemptCount == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("initial retry attempt was not recorded")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	clock.Advance(Backoff(10*time.Second, 1))
+	svc.Notify()
+	select {
+	case <-retryStarted:
+	case <-time.After(2 * time.Second):
+		cancel()
+		close(releaseSlow)
+		<-done
+		t.Fatal("due retry was not admitted while another registration remained busy")
+	}
+	cancel()
+	close(releaseSlow)
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunOnce after cancellation = %v", err)
+	}
+}
+
+func TestWebhookAdmitsResendWhileAnotherRegistrationIsBusy(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	slowStarted, releaseSlow := make(chan struct{}), make(chan struct{})
+	firstResendStarted, releaseFirstResend := make(chan struct{}), make(chan struct{})
+	secondResendStarted := make(chan struct{}, 1)
+	var resendRequests atomic.Int32
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(slowStarted)
+		<-releaseSlow
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if resendRequests.Add(1) == 1 {
+			close(firstResendStarted)
+			<-releaseFirstResend
+		} else {
+			secondResendStarted <- struct{}{}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer resend.Close()
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "slow", Name: "slow", URL: slow.URL, Enabled: true})
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "resend", Name: "resend", URL: resend.URL, Enabled: true})
+	pf09InsertPending(t, ctx, db, "slow-event", "slow", now)
+	pf09InsertPending(t, ctx, db, "resend-event", "resend", now)
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{Concurrency: 2, PollEvery: time.Millisecond})
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(runCtx); done <- err }()
+	select {
+	case <-slowStarted:
+	case err := <-done:
+		t.Fatalf("dispatcher exited before slow registration started: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow registration did not start")
+	}
+	select {
+	case <-firstResendStarted:
+	case err := <-done:
+		t.Fatalf("dispatcher exited before resend registration started: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("initial delivery did not start")
+	}
+	if err := svc.Resend(ctx, db.Q(), "resend-event"); err != nil {
+		t.Fatal(err)
+	}
+	close(releaseFirstResend)
+	select {
+	case <-secondResendStarted:
+	case <-time.After(2 * time.Second):
+		cancel()
+		close(releaseSlow)
+		<-done
+		t.Fatal("accepted resend was not admitted while another registration remained busy")
+	}
+	cancel()
+	close(releaseSlow)
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunOnce after cancellation = %v", err)
+	}
+}
+
 func TestWebhookAutoDisablePreservesAcceptedResend(t *testing.T) {
 	db, ctx := pf09TestDB(t)
 	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
@@ -498,7 +712,13 @@ func TestWebhookAutoDisablePreservesAcceptedResend(t *testing.T) {
 	pf09InsertPending(t, ctx, db, "event", "hook", now)
 	svc := New(db, pf09TestBuilder{}, clock, nil, Config{MaxAttempts: 1})
 	done := make(chan error, 1)
-	go func() { _, err := svc.RunOnce(ctx); done <- err }()
+	go func() {
+		count, err := svc.RunOnce(ctx)
+		if err == nil && count != 2 {
+			err = fmt.Errorf("RunOnce attempted %d deliveries, want 2", count)
+		}
+		done <- err
+	}()
 	<-started
 	if err := svc.Resend(ctx, db.Q(), "event"); err != nil {
 		t.Fatal(err)
@@ -515,12 +735,19 @@ func TestWebhookAutoDisablePreservesAcceptedResend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hook.Enabled || event.Status != model.WebhookStatusPending || event.ManualResendGeneration != 1 || event.ManualResendCompletedGeneration != 0 {
-		t.Fatalf("auto-disable lost accepted resend: webhook=%#v event=%#v", hook, event)
+	if hook.Enabled || event.Status != model.WebhookStatusFailed || event.AttemptCount != 2 || event.ManualResendGeneration != 1 || event.ManualResendCompletedGeneration != 1 {
+		t.Fatalf("accepted resend was not attempted after auto-disable: webhook=%#v event=%#v", hook, event)
 	}
 	due, err := store.DueWebhookEvents(ctx, db.Q(), now, 10)
-	if err != nil || len(due) != 1 || due[0].ID != "event" {
-		t.Fatalf("disabled resend selection = %#v, %v; want pending event", due, err)
+	if err != nil || len(due) != 0 {
+		t.Fatalf("completed resend remained due = %#v, %v; want no pending event", due, err)
+	}
+	attempts, err := store.ListWebhookAttempts(ctx, db.Q(), "event")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 2 || attempts[1].AttemptNo != 2 || !attempts[1].Manual {
+		t.Fatalf("attempts = %#v, want original and manual resend", attempts)
 	}
 }
 
@@ -542,7 +769,13 @@ func TestWebhookResendDuringOutstandingAttemptIsPreserved(t *testing.T) {
 	pf09InsertPending(t, ctx, db, "event", "hook", now)
 	svc := New(db, pf09TestBuilder{}, clock, nil, Config{})
 	done := make(chan error, 1)
-	go func() { _, err := svc.RunOnce(ctx); done <- err }()
+	go func() {
+		count, err := svc.RunOnce(ctx)
+		if err == nil && count != 2 {
+			err = fmt.Errorf("RunOnce attempted %d deliveries, want 2", count)
+		}
+		done <- err
+	}()
 	<-started
 	if err := svc.Resend(ctx, db.Q(), "event"); err != nil {
 		t.Fatal(err)
@@ -555,11 +788,8 @@ func TestWebhookResendDuringOutstandingAttemptIsPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if event.Status != model.WebhookStatusPending || event.ManualResendGeneration != 1 || event.ManualResendCompletedGeneration != 0 {
-		t.Fatalf("outstanding attempt consumed resend: %#v", event)
-	}
-	if count, err := svc.RunOnce(ctx); err != nil || count != 1 {
-		t.Fatalf("resend RunOnce = %d, %v", count, err)
+	if event.Status != model.WebhookStatusSucceeded || event.AttemptCount != 2 || event.ManualResendGeneration != 1 || event.ManualResendCompletedGeneration != 1 {
+		t.Fatalf("outstanding attempt did not admit accepted resend: %#v", event)
 	}
 	attempts, err := store.ListWebhookAttempts(ctx, db.Q(), "event")
 	if err != nil {

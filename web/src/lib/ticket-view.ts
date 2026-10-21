@@ -9,6 +9,24 @@ export function buildApprovers(raw: Record<string, string>): { routeStepCode: st
   });
 }
 
+/** Returns nominee steps from the route objects embedded in workflow route conditions. */
+export function routeNominationSteps(routeConditions: unknown): Loose[] {
+  const seen = new Set<string>();
+  return asArray(routeConditions).flatMap((condition) => asArray(asRecord(asRecord(condition).route).steps))
+    .map(asRecord).filter((step) => {
+      if (step.stepType !== "author_customizable") return false;
+      const key = asString(step.code) || asString(step.id);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** Returns ticket sections the presenter marked visible, with their populated inputs. */
+export function visibleTicketSections(ticketSections: unknown): Loose[] {
+  return asArray(ticketSections).map(asRecord).filter((section) => section.visible !== false);
+}
+
 type Loose = Record<string, unknown>;
 const asRecord = (value: unknown): Loose => value && typeof value === "object" ? value as Loose : {};
 const asArray = (value: unknown): unknown[] => Array.isArray(value) ? value : [];

@@ -8,7 +8,7 @@ How callers authenticate to `/v1` and `/admin/api`, how the browser UI logs in t
 |---|---|---|---|
 | kickflow-compatible API | `/v1/` | kickflow clients under test, the UI | Bearer PAT, Bearer SAT + `X-Caller-Id`, or UI session cookie (+ CSRF header) |
 | Dev admin API | `/admin/api/` | UI admin screens, test harnesses (curl) | Same as `/v1` |
-| UI helper API | `/ui/api/` | UI watch toggle, notification inbox, keyword search, CSV exports (see `design-notifications-export-search.md`) | Same as `/v1` |
+| UI helper API | `/ui/api/` | UI watch toggle, notification inbox, keyword search, CSV exports (see `design-notifications-export-search.md`), ticket controls and local workflow-admin helpers | Same as `/v1`; helpers enforce the applicable resource permission |
 | Browser auth | `/auth/` | UI | OIDC redirect flow, local login (flag), session endpoints |
 | Signed file downloads | `/files/download/` | Anyone holding a signed URL | HMAC signature + expiry in the URL (INF-26) |
 | SPA | everything else | Browser | Static assets; `index.html` fallback |
@@ -37,6 +37,10 @@ A role's `permissionList` entry may be `restricted` and name the folders, genera
 Kickflow documents applicant-ticket and approval-request handover as administrator UI operations and has no public REST endpoint for them. Punchflow exposes them under `/ui/api/admin/tickets/` and shows controls on the Users page to users with `ticket_write`. Applicant handover updates the direct applicant and selected target team for eligible unproxied drafts, in-progress and rejected tickets. Approval handover replaces incomplete assignees on active steps. Explicit ticket lists are limited to 1,000 and require ticket visibility; blank lists select all eligible tickets. Each changed ticket records an audit log and a `ticket_updated` webhook event in the same transaction.
 
 - `store.UserGrants` merges the entries of all of a user's roles into one `PermissionGrant` per permission: any unrestricted entry makes the grant unrestricted; otherwise `Targets` is the union of the restricted entries' targets, with folder and team targets expanded to their descendants. A restricted entry with no targets matches nothing.
+
+### Custom numbering counter reset (INF-D9-06)
+
+Kickflow documents manual reset as a workflow-management UI action rather than a public REST operation. Punchflow exposes `POST /ui/api/admin/workflows/{workflowId}/custom-numberings/{customNumberingId}/reset`, checks the caller's `workflow` permission against the workflow folder, and resets only the selected custom numbering counter (or its configured shared numbering-key counter) to zero. The next allocation is 1; previously issued ticket values are retained. The Workflow detail UI shows this action to workflow managers.
 - `auth.Principal` carries the grants: `Has` (held in any scope), `Unrestricted`, `Allows(permission, target)`, `AllowsAny` and `Targets`.
 - Handlers use `requireTarget` (the grant covers a given folder, master or team) and `requireUnrestricted` (operations without a single target). Out-of-scope access returns `403 missing_permission`; list endpoints filter to the covered resources. Deleting a folder needs `workflow`/`route` coverage of every folder it retires (INF-83).
 - `ticket_read` is the one restricted permission the engine consults: principal-to-actor conversion does not pass a scoped grant as global; it hands the engine the granted folder IDs (`Actor.ReadFolderIDs`) and `Engine.CanView` lets the actor read tickets of workflows in those folders (INF-36). Section presenters resolve the same grant against the actual ticket workflow folder before applying its section override (INF-SEC-03); ticket UI, exports, watch access and notification visibility use the scoped actor conversion too.

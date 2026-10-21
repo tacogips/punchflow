@@ -72,6 +72,7 @@ var operations = [...]Operation{
 	{Name: "assignCurrentApprover", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/assignees", Handle: (*API).assignCurrentApprover},
 	{Name: "handoverApplicants", Method: http.MethodPost, Pattern: "/ui/api/admin/tickets/applicant-handover", Handle: (*API).handoverApplicants},
 	{Name: "handoverApprovalRequests", Method: http.MethodPost, Pattern: "/ui/api/admin/tickets/approval-handover", Handle: (*API).handoverApprovalRequests},
+	{Name: "resetCustomNumbering", Method: http.MethodPost, Pattern: "/ui/api/admin/workflows/{workflowId}/custom-numberings/{customNumberingId}/reset", Handle: (*API).resetCustomNumbering},
 }
 
 // Operations returns a copy of the route table.

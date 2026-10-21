@@ -262,21 +262,25 @@ export const approverEditable = (workflow: WorkflowDetail, field: FormField): bo
 export interface FormPayload { inputs?: TicketInputBody[]; slipItems?: SlipItemBody[] }
 
 /**
- * Builds the full applicant write payload, retaining all known values and
- * null placeholders for hidden or read-only fields. Approver writes remain
- * differential: only viewable, approver-editable values are sent.
+ * Builds the full applicant write payload. Sections the actor cannot enter
+ * are omitted, while non-editable fields in accessible sections use null
+ * placeholders so the server preserves their stored values. Approver writes
+ * remain differential: only viewable, approver-editable values are sent.
  */
 export function buildFormPayload(workflow: WorkflowDetail, form: Record<string, FieldState>, slips: SlipRows, options: { viewable: (section: SectionListItem) => boolean; approver: boolean; editable?: (field: FormField) => boolean }): FormPayload {
-  const sectionList = (workflow.sectionList ?? []).filter((section) => options.approver ? options.viewable(section) : true);
+  const sectionList = (workflow.sectionList ?? []).filter((section) => options.viewable(section));
   const visible: WorkflowDetail = { ...workflow, sectionList };
   const applicantForm = { ...form };
   const applicantSlips = { ...slips };
-  if (!options.approver) for (const section of workflow.sectionList ?? []) {
-    if (options.viewable(section)) continue;
+  if (!options.approver) for (const section of sectionList) {
     if (section.sectionType === "form") for (const field of section.formFields ?? []) {
+      if ((field as unknown as Loose).author !== false) continue;
       applicantForm[field.code] = { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value: null };
     }
-    if (section.sectionType === "slip") applicantSlips[slipKey(section)] = (slips[slipKey(section)] ?? []).map(() => Object.fromEntries((section.slipFields ?? []).map((field) => [field.code, { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value: null }])));
+    if (section.sectionType === "slip") applicantSlips[slipKey(section)] = (slips[slipKey(section)] ?? []).map((row) => Object.fromEntries((section.slipFields ?? []).map((field) => [field.code, {
+      code: field.code, fieldType: field.fieldType, multiple: field.multiple === true,
+      value: (field as unknown as Loose).author === false ? null : row[field.code]?.value ?? null,
+    }])));
   }
   const fieldFilter = (field: FormField) => (field as unknown as Loose).hidden !== true && (options.editable?.(field) ?? (!options.approver || approverEditable(workflow, field)));
   const inputs = toTicketInputs(visible, options.approver ? form : applicantForm).filter((input) => {

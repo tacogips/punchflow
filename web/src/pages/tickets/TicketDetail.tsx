@@ -5,6 +5,7 @@ import { apiFetch, apiList } from "../../api/client";
 import { session } from "../../session";
 import { formatJst } from "../../lib/format";
 import { attachmentsOf, inputLabel, inputValueText, userLabel } from "../../lib/ticket-view";
+import { visibleTicketSections } from "../../lib/ticket-view";
 import { NO_CONTROLS, normalizeControls, subStatusRestrictions, uiTicketPath } from "../../lib/ticket-controls";
 import ActionBar from "../../components/tickets/ActionBar";
 import ControlsBar from "../../components/tickets/ControlsBar";
@@ -52,7 +53,7 @@ function TicketContent(props: {
       <button type="submit" disabled={props.busy || !replacementUserId().trim()}>Add approver</button>
     </form></Show>
     <TicketLabels ticketId={t.id} labels={labels()} onChanged={props.onChanged} />
-    <section><h2>Form inputs</h2><dl class="ticket-inputs"><For each={arr(t.inputs)}>{(input) => <><dt>{inputLabel(input)}</dt><dd>{inputValueText(input)}<Show when={attachmentsOf(input).length}><ul><For each={attachmentsOf(input)}>{(file) => <li><a href={file.url}>{file.filename}</a></li>}</For></ul></Show></dd></>}</For></dl>
+    <section><h2>Form inputs</h2><For each={visibleTicketSections(t.ticketSections)}>{(section) => <dl class="ticket-inputs"><For each={arr(section.inputs)}>{(input) => <><dt>{inputLabel(input)}</dt><dd>{inputValueText(input)}<Show when={attachmentsOf(input).length}><ul><For each={attachmentsOf(input)}>{(file) => <li><a href={file.url}>{file.filename}</a></li>}</For></ul></Show></dd></>}</For></dl>}</For>
       <For each={arr(t.slipItems)}>{(slip, index) => <section><h3>{str(obj(slip).title) || `Slip row ${index() + 1}`}</h3><dl><For each={arr(obj(slip).inputs)}>{(input) => <><dt>{inputLabel(input)}</dt><dd>{inputValueText(input)}<Show when={attachmentsOf(input).length}><ul><For each={attachmentsOf(input)}>{(file) => <li><a href={file.url}>{file.filename}</a></li>}</For></ul></Show></dd></>}</For></dl></section>}</For>
     </section>
     <section><h2>Approval steps</h2><StepList steps={t.steps ?? []} currentStep={Number(t.currentStep ?? 0)} removableStepIds={props.controls.removableCustomStepIds} busy={props.busy} onRemoveStep={props.onRemoveStep} /></section>

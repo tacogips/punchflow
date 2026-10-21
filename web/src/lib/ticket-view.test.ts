@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TicketDetail, TicketStep } from "../api/types";
-import { attachmentsOf, availableActions, buildApprovers, inputLabel, inputValueText, sendBackTargets, stepSummary, userLabel } from "./ticket-view";
+import { attachmentsOf, availableActions, buildApprovers, inputLabel, inputValueText, routeNominationSteps, sendBackTargets, stepSummary, userLabel, visibleTicketSections } from "./ticket-view";
 
 const user = { id: "u1", name: "User", email: "u@example.test" };
 const ticket = (overrides: Record<string, unknown> = {}) => ({
@@ -44,6 +44,24 @@ describe("ticket view rules", () => {
 
   test("returns no nominated approvers for empty input", () => {
     expect(buildApprovers({})).toEqual([]);
+  });
+
+  test("reads nomination steps from presenter-shaped route conditions", () => {
+    const conditions = [
+      { route: { id: "r1", steps: [{ id: "s1", code: "custom", stepType: "author_customizable" }, { id: "s2", code: "fixed", stepType: "user" }] } },
+      { route: { id: "r2", steps: [{ id: "s3", code: "custom", stepType: "author_customizable" }, { id: "s4", code: "branch_custom", stepType: "author_customizable" }] } },
+      { route: null },
+    ];
+    expect(routeNominationSteps(conditions).map((step) => step.code)).toEqual(["custom", "branch_custom"]);
+  });
+
+  test("ticket form detail renders only sections presenter marks visible", () => {
+    const sections = visibleTicketSections([
+      { sectionId: "public", visible: true, inputs: [{ formField: { code: "name" }, value: "Ada" }] },
+      { sectionId: "conditional", visible: false, inputs: [{ formField: { code: "salary" }, value: "secret" }] },
+      { sectionId: "unconditional", inputs: [{ formField: { code: "note" }, value: "ok" }] },
+    ]);
+    expect(sections.flatMap((section) => (section.inputs as unknown[]).map((input) => inputLabel(input)))).toEqual(["name", "note"]);
   });
 
   test("current assignee can approve, send back and deny, but not withdraw", () => {

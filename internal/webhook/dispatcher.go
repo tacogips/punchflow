@@ -62,9 +62,10 @@ func (s *Service) RunOnce(ctx context.Context) (int, error) {
 	}
 	workers := s.cfg.Concurrency
 	queues := make(map[string][]model.WebhookDelivery)
-	queueOrder := make([]string, 0)
+	readyOrder := make([]string, 0)
+	ready := make(map[string]bool)
 	known := make(map[string]bool)
-	attemptedIDs := make(map[string]bool)
+	failedThisPass := make(map[string]bool)
 	active := make(map[string]bool)
 	results := make(chan deliveryResult, workers)
 	attempts := 0
@@ -83,56 +84,55 @@ func (s *Service) RunOnce(ctx context.Context) (int, error) {
 		if ctx.Err() != nil {
 			return attempts, ctx.Err()
 		}
-		// Refill due work on every scheduler pass. The ID set filters rows whose
-		// requests are still in flight or whose attempt already ran in this pass.
+		// Refill due work on every scheduler pass. Known IDs remain excluded only
+		// while queued or in flight, so a new retry deadline or resend generation
+		// can be admitted as soon as the previous attempt completes. Processing
+		// errors are held until the next RunOnce pass because no attempt may have
+		// been persisted to make the row's next-attempt state advance.
 		now := s.clock.Now()
 		events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, pf09DueBatchLimit)
 		if err != nil {
 			return attempts, err
 		}
 		for _, ev := range events {
-			if known[ev.ID] || attemptedIDs[ev.ID] {
+			if known[ev.ID] || failedThisPass[ev.ID] {
 				continue
-			}
-			if _, exists := queues[ev.WebhookID]; !exists {
-				queueOrder = append(queueOrder, ev.WebhookID)
 			}
 			queues[ev.WebhookID] = append(queues[ev.WebhookID], ev)
 			known[ev.ID] = true
+			if !active[ev.WebhookID] && !ready[ev.WebhookID] {
+				readyOrder = append(readyOrder, ev.WebhookID)
+				ready[ev.WebhookID] = true
+			}
 		}
 
-		// Start one event per idle registration. A later event for that
-		// registration remains queued until its previous attempt completes.
-		for len(active) < workers {
-			started := false
-			for i := 0; i < len(queueOrder); i++ {
-				hookID := queueOrder[i]
-				if active[hookID] || len(queues[hookID]) == 0 {
-					continue
+		// Admit ready registrations in round-robin order. A registration is
+		// returned to the tail only after its active attempt completes, so idle
+		// registrations with due work get a turn before any backlog repeats.
+		for len(active) < workers && len(readyOrder) > 0 {
+			hookID := readyOrder[0]
+			readyOrder = readyOrder[1:]
+			delete(ready, hookID)
+			if active[hookID] || len(queues[hookID]) == 0 {
+				continue
+			}
+			ev := queues[hookID][0]
+			queues[hookID] = queues[hookID][1:]
+			active[hookID] = true
+			go func(ev model.WebhookDelivery) {
+				attempted, err := s.pf09Process(ctx, ev, s.clock.Now())
+				if err != nil {
+					err = fmt.Errorf("webhook delivery %s: %w", ev.ID, err)
 				}
-				ev := queues[hookID][0]
-				queues[hookID] = queues[hookID][1:]
-				active[hookID] = true
-				started = true
-				go func(ev model.WebhookDelivery) {
-					attempted, err := s.pf09Process(ctx, ev, s.clock.Now())
-					if err != nil {
-						err = fmt.Errorf("webhook delivery %s: %w", ev.ID, err)
-					}
-					result := deliveryResult{event: ev, err: err}
-					if attempted {
-						result.attempted = 1
-					}
-					select {
-					case results <- result:
-					case <-ctx.Done():
-					}
-				}(ev)
-				break
-			}
-			if !started {
-				break
-			}
+				result := deliveryResult{event: ev, err: err}
+				if attempted {
+					result.attempted = 1
+				}
+				select {
+				case results <- result:
+				case <-ctx.Done():
+				}
+			}(ev)
 		}
 
 		if len(active) == 0 {
@@ -153,7 +153,13 @@ func (s *Service) RunOnce(ctx context.Context) (int, error) {
 		case result := <-results:
 			delete(active, result.event.WebhookID)
 			delete(known, result.event.ID)
-			attemptedIDs[result.event.ID] = true
+			if result.err != nil {
+				failedThisPass[result.event.ID] = true
+			}
+			if len(queues[result.event.WebhookID]) > 0 && !ready[result.event.WebhookID] {
+				readyOrder = append(readyOrder, result.event.WebhookID)
+				ready[result.event.WebhookID] = true
+			}
 			attempts += result.attempted
 			if result.err != nil && !errors.Is(result.err, context.Canceled) {
 				failures = append(failures, result.err)

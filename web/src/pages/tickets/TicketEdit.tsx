@@ -4,7 +4,7 @@ import type { FormField, SectionListItem, TicketDetail, Team, Workflow, Workflow
 import { apiFetch, apiList } from "../../api/client";
 import { toTicketInputs, type FieldState } from "../../lib/form-model";
 import { buildFormPayload, conditionValues, formStateFromTicket, sectionConditionMet, sectionViewable, slipKey, slipRowsFromTicket } from "../../lib/ticket-form";
-import { buildApprovers } from "../../lib/ticket-view";
+import { buildApprovers, routeNominationSteps } from "../../lib/ticket-view";
 import type { SlipRows } from "../../components/tickets/SlipTable";
 import FormFields from "../../components/tickets/FormFields";
 import SlipTable from "../../components/tickets/SlipTable";
@@ -38,7 +38,7 @@ export default function TicketEdit() {
     if (!params.id && !teamId() && myTeams.length > 0) setTeamId(str(myTeams[0]?.id));
   });
   const approverEdit = () => params.id !== undefined && ticket()?.status === "in_progress";
-  const routeSteps = () => arr(obj(obj(workflow()).route).steps);
+  const routeSteps = () => routeNominationSteps(obj(workflow()).routeConditions);
   const memberTeams = (): Team[] => teams.state === "ready" ? teams() ?? [] : [];
   const canView = (section: SectionListItem) => sectionViewable(section, ticket(), { userId: me()?.id, permissions: session()?.permissions, teamIds: memberTeams().map((team) => team.id) });
   const conditionInputs = () => { const definition = workflow(); return definition ? conditionValues(toTicketInputs(definition, form())) : {}; };
@@ -112,7 +112,7 @@ export default function TicketEdit() {
               <FormFields workflowId={workflowId()} fields={(section.formFields ?? []).filter((field) => (field as unknown as Record<string, unknown>).hidden !== true)} state={form} setState={setForm} errors={errors()} actor={formActor()} overwritable={overwritable()} onTicketSelect={copySelectedTicket} />
             </Show>
           </section></Show>}</For>
-          <For each={routeSteps().filter((step) => obj(step).stepType === "author_customizable")}>{(step) => { const code = str(obj(step).code); return <label>Approvers for {str(obj(step).title) || code}<input value={approvers()[code] ?? ""} onInput={(event) => setApprovers((current) => ({ ...current, [code]: event.currentTarget.value }))} placeholder="User IDs separated by commas" /></label>; }}</For>
+          <For each={routeSteps()}>{(step) => { const code = str(step.code); return <label>Approvers for {str(step.title) || code}<input value={approvers()[code] ?? ""} onInput={(event) => setApprovers((current) => ({ ...current, [code]: event.currentTarget.value }))} placeholder="User IDs separated by commas" /></label>; }}</For>
           <Show when={!approverEdit() && obj(workflow()).commentingEnabled !== false}><label>Submission comment<textarea value={submissionComment()} onInput={(event) => setSubmissionComment(event.currentTarget.value)} /></label></Show>
           <Show when={errors().base?.length}><ul class="field-errors"><For each={errors().base}>{(message) => <li>{message}</li>}</For></ul></Show>
           <div class="form-actions"><Show when={!approverEdit()}><button type="button" disabled={busy()} onClick={() => void save("draft")}>Save draft</button></Show><button disabled={busy()}>{approverEdit() ? "Save changes" : params.id ? "Save and submit" : "Submit"}</button></div>
