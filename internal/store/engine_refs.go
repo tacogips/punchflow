@@ -84,6 +84,9 @@ func EngActiveProxyApplicant(ctx context.Context, q Querier, clientUserID, proxy
 		if err = json.Unmarshal([]byte(workflows), &allowed); err != nil {
 			return false, fmt.Errorf("store: decode engine proxy applicant workflows: %w", err)
 		}
+		if len(allowed) == 0 {
+			return true, nil
+		}
 		for _, id := range allowed {
 			if id == workflowID {
 				return true, nil

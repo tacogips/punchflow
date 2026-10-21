@@ -167,6 +167,20 @@ func TestFormFieldTypes(t *testing.T) {
 }
 
 func TestProxyApplicantCreate(t *testing.T) {
+	t.Run("empty workflow restriction is unrestricted", func(t *testing.T) {
+		e := pf14Setup(t)
+		client := e.user("ceo")
+		if _, err := e.db.Q().ExecContext(e.ctx, `UPDATE proxy_applicants SET workflow_ids='[]' WHERE user_id=? AND proxy_user_id=?`, client, e.user("assistant")); err != nil {
+			t.Fatal(err)
+		}
+		id, err := pf14cCreate(t, e, "expense-claim", "assistant", map[string]any{"amount": "100", "purpose": "unrestricted proxy"}, &client)
+		if err != nil {
+			t.Fatalf("unrestricted proxy create: %v", err)
+		}
+		if got := e.ticket(id); got.ProxyClientUserID == nil || *got.ProxyClientUserID != client {
+			t.Fatalf("proxy client=%v, want %s", got.ProxyClientUserID, client)
+		}
+	})
 	t.Run("registered proxy creates with actor as author", func(t *testing.T) {
 		e := pf14Setup(t)
 		client := e.user("ceo")

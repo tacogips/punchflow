@@ -159,8 +159,23 @@ func pf14CheckNextCustomApprovers(ctx context.Context, tx *store.Tx, t model.Tic
 		if err != nil {
 			return err
 		}
-		if len(approvers) == 0 {
+		minimum := 1
+		if routeStep.MinCustomAssignees != nil {
+			minimum = *routeStep.MinCustomAssignees
+		}
+		if len(approvers) < minimum {
 			return kferr.AssignmentRequiredBeforeApprove()
+		}
+		if len(approvers) == 0 && minimum == 0 {
+			for _, step := range steps {
+				if step.StepOrder != nextOrder || step.RouteStepCode == nil || *step.RouteStepCode != routeStep.Code {
+					continue
+				}
+				step.Status, step.Skip = model.StepStatusSkipped, true
+				if err = store.EngUpdateStep(ctx, tx, step); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -346,9 +361,7 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 			if step.StepOrder != next || pf15StepDone(*step) {
 				continue
 			}
-			step.Status = model.StepStatusInProgress
-			step.UpdatedAt = now
-			if err = e.pf14RefreshTeamAssignments(ctx, tx, t, step, now); err != nil {
+			if err = e.pf14EnterStep(ctx, tx, t, step, now); err != nil {
 				return err
 			}
 			if pf15StepDone(*step) {
@@ -392,6 +405,32 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 		return err
 	}
 	return SyncWorkflowManagerSharingForTicket(ctx, tx, t.ID)
+}
+
+// pf14EnterStep applies the shared step-entry work used by advancement and
+// send-back: refresh team assignments, timestamp newly active assignees, and
+// persist the step's active state.
+func (e *Engine) pf14EnterStep(ctx context.Context, tx *store.Tx, ticket *model.Ticket, step *model.TicketStep, now time.Time) error {
+	step.Status = model.StepStatusInProgress
+	step.UpdatedAt = now
+	if err := e.pf14RefreshTeamAssignments(ctx, tx, ticket, step, now); err != nil {
+		return err
+	}
+	assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
+	if err != nil {
+		return err
+	}
+	for i := range assignees {
+		if assignees[i].AssignedAt != nil {
+			continue
+		}
+		assignees[i].AssignedAt = &now
+		assignees[i].UpdatedAt = now
+		if err = store.EngUpdateAssignee(ctx, tx, assignees[i]); err != nil {
+			return err
+		}
+	}
+	return store.EngUpdateStep(ctx, tx, *step)
 }
 func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id string, to int, comment *string) ([]model.WebhookEvent, error) {
 	t, err := e.pf14Guard(ctx, tx, a, id)
@@ -461,11 +500,11 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 			if step.StepOrder != to || step.Status == model.StepStatusSkipped {
 				continue
 			}
-			step.Status = model.StepStatusInProgress
-			if err = store.EngUpdateStep(ctx, tx, *step); err != nil {
+			if err = e.pf14EnterStep(ctx, tx, &t, step, now); err != nil {
 				return nil, err
 			}
-			reactivated = true
+			// Step-entry updates viewer grants together with assignment refresh.
+			reactivated = reactivated || !pf15StepDone(*step)
 		}
 		if !reactivated {
 			// Every step of the target group was skipped: continue with the
@@ -473,6 +512,12 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 			if err = e.pf14Advance(ctx, tx, &t, now); err != nil {
 				return nil, err
 			}
+		}
+		if err = SyncProxySharingForTicket(ctx, tx, t.ID, now); err != nil {
+			return nil, err
+		}
+		if err = SyncWorkflowManagerSharingForTicket(ctx, tx, t.ID); err != nil {
+			return nil, err
 		}
 	}
 	t.UpdatedAt = now

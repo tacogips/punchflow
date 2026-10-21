@@ -36,6 +36,22 @@ func TestValidateCustomRouteAndSectionExpressions(t *testing.T) {
 	}
 }
 
+func TestValidateRouteOtherVariableCondition(t *testing.T) {
+	set, err := Parse(pf06FSSub(t, "testdata/minimal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.Routes[0].Steps[0].RouteStepCondition = &model.RouteStepCondition{
+		ID:                       "00000000-0000-4000-8000-000000000041",
+		ConditionType:            model.StepConditionTypeConditional,
+		CombinationType:          model.StepCombinationAll,
+		RouteStepConditionFields: []model.ConditionField{{ID: "00000000-0000-4000-8000-000000000042", FieldKey: "other_variable", Variable: "$external", Symbol: "is_empty"}},
+	}
+	if err := Validate(set); err != nil {
+		t.Fatalf("other_variable condition should validate: %v", err)
+	}
+}
+
 func strPtr(value string) *string { return &value }
 
 func TestValidateInvalidCases(t *testing.T) {
@@ -50,7 +66,6 @@ func TestValidateInvalidCases(t *testing.T) {
 		{"dangling-user-code", FileRoles, "[0].memberCodes[1]"},
 		{"two-current-charts", FileOrganizationCharts, "$"},
 		{"custom-combination", FileWorkflows, "[0].routeConditions[0].combinationExpression"},
-		{"other-variable", FileWorkflows, "[0].routeConditions[0].conditionFields[0].fieldKey"},
 		{"both-thresholds", FileRoutes, "[0].steps[0]"},
 		{"route-no-else", FileWorkflows, "[0].routeConditions"},
 		{"pat-without-user", FileTokens, "[0].userCode"},

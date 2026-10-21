@@ -58,6 +58,9 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 			if er != nil {
 				return nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
 			}
+			if team.ApproveOnly {
+				return nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
+			}
 			member, er := store.EngUserIsActiveMember(ctx, tx, a.UserID, team.ID)
 			if er != nil {
 				return nil, er
@@ -335,15 +338,24 @@ func pf14cCustomizeAssignees(ctx context.Context, tx *store.Tx, t model.Ticket, 
 	if err != nil {
 		return err
 	}
+	definition, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
+	if err != nil {
+		return err
+	}
+	inputRows, err := store.EngTicketInputs(ctx, tx, t.ID)
+	if err != nil {
+		return err
+	}
+	nominationValues := pf14RouteStepValues(definition, pf14InputValues(definition, pf14InputsFromRows(definition, inputRows)))
 	ticketSteps, err := store.EngTicketSteps(ctx, tx, t.ID)
 	if err != nil {
 		return err
 	}
 	for _, v := range approvers {
-		validStep := false
+		var selected *model.RouteStep
 		for _, routeStep := range route.Steps {
 			if routeStep.Code == v.RouteStepCode && routeStep.StepType == model.StepTypeAssigneeCustomizable {
-				validStep = true
+				selected = &routeStep
 				break
 			}
 		}
@@ -354,8 +366,13 @@ func pf14cCustomizeAssignees(ctx context.Context, tx *store.Tx, t model.Ticket, 
 				break
 			}
 		}
-		if !validStep || step == nil {
+		if selected == nil || step == nil {
 			return kferr.InvalidParameter("Invalid customizable route step")
+		}
+		for _, userID := range v.UserIDs {
+			if err = pf14bValidateNominee(ctx, tx, userID, selected.Targets, nominationValues); err != nil {
+				return err
+			}
 		}
 		if err = store.EngInsertCustomApprovers(ctx, tx, t.ID, v.RouteStepCode, v.UserIDs); err != nil {
 			return err

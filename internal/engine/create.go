@@ -36,6 +36,9 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if err != nil {
 		return "", nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
 	}
+	if authorTeam.ApproveOnly {
+		return "", nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
+	}
 	member, err := store.EngUserIsActiveMember(ctx, tx, a.UserID, authorTeam.ID)
 	if err != nil {
 		return "", nil, err

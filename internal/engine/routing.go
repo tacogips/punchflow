@@ -121,6 +121,12 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 				}
 			}
 		}
+		// Kickflow's manager route has one final self-approval fallback after
+		// manager searches and the configured fallback produce no candidate.
+		if len(userIDs) == 0 && step.StepType == model.StepTypeManager && step.AllowSelfApproval && ticket.AuthorID != nil {
+			userIDs = []string{*ticket.AuthorID}
+			skip = false
+		}
 		status := model.StepStatusPending
 		if skip {
 			status = model.StepStatusSkipped
@@ -162,9 +168,12 @@ func pf14RouteStepValues(def model.WorkflowDef, values map[string]any) map[strin
 			continue
 		}
 		for _, field := range section.FormFields {
-			delete(filtered, field.ID)
-			delete(filtered, field.Code)
-			delete(filtered, model.VariableName(field.Code))
+			// Keep restricted references present with a known-empty value. Route
+			// conditions must distinguish empty from an unknown variable so
+			// is_empty/is_not_empty behave like Kickflow in either mode.
+			filtered[field.ID] = nil
+			filtered[field.Code] = nil
+			filtered[model.VariableName(field.Code)] = nil
 		}
 	}
 	return filtered
@@ -207,6 +216,9 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 			return nil, err
 		}
 		for _, id := range custom {
+			if err := pf14bValidateNominee(ctx, tx, id, step.Targets, values); err != nil {
+				return nil, err
+			}
 			add(id)
 		}
 	case model.StepTypeAssigneeCustomizable:
@@ -215,6 +227,9 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 			return nil, err
 		}
 		for _, id := range custom {
+			if err := pf14bValidateNominee(ctx, tx, id, step.Targets, values); err != nil {
+				return nil, err
+			}
 			add(id)
 		}
 	case model.StepTypeTeam, model.StepTypeDynamicTeam:
@@ -314,6 +329,50 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 	return ids, nil
 }
 
+func pf14bValidateNominee(ctx context.Context, q store.Querier, userID string, targets []model.RouteTarget, values map[string]any) error {
+	active, err := store.EngUserActive(ctx, q, userID)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return kferr.ValidationFailed(map[string][]string{"approvers": {"contains an inactive user"}})
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	for _, target := range targets {
+		teamIDs, err := pf14TargetTeams(ctx, q, target, values)
+		if err != nil {
+			return err
+		}
+		expanded := []string{}
+		for _, teamID := range teamIDs {
+			candidates, err := pf14bTargetTeamIDs(ctx, q, teamID, target.Descendants)
+			if err != nil {
+				return err
+			}
+			expanded = append(expanded, candidates...)
+		}
+		for _, teamID := range expanded {
+			memberships, err := store.EngActiveMemberships(ctx, q, userID, teamID)
+			if err != nil {
+				return err
+			}
+			if len(memberships) == 0 {
+				continue
+			}
+			matches, err := pf14bUserMatchesGrade(ctx, q, userID, teamID, target.GradeSymbol, target.GradeCodes)
+			if err != nil {
+				return err
+			}
+			if matches {
+				return nil
+			}
+		}
+	}
+	return kferr.ValidationFailed(map[string][]string{"approvers": {"does not match the route target restrictions"}})
+}
+
 // pf14RefreshTeamAssignments recalculates only team-based assignments when a
 // route step becomes current. Manager steps retain their application snapshot.
 func (e *Engine) pf14RefreshTeamAssignments(ctx context.Context, tx *store.Tx, ticket *model.Ticket, ticketStep *model.TicketStep, now time.Time) error {
@@ -406,6 +465,8 @@ func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *mode
 	matched := 0
 	for _, field := range fields {
 		actual, ok := pf14VariableValue(values, field.Variable)
+		var err error
+		operator := field.Symbol
 		switch field.FieldKey {
 		case model.StepConditionFieldKeyAuthorTeam:
 			if ticket.AuthorTeamID == nil {
@@ -413,6 +474,11 @@ func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *mode
 				break
 			}
 			actual, ok = *ticket.AuthorTeamID, true
+			if teamID, err := pf14bConditionTeamID(ctx, tx, field.Value); err != nil {
+				return false, err
+			} else if teamID != "" {
+				field.Value = teamID
+			}
 			if field.Symbol == "descendants_or_equal" || field.Symbol == "not_descendants_or_equal" {
 				ancestors, err := store.EngTeamAncestors(ctx, tx, *ticket.AuthorTeamID)
 				if err != nil && err != store.ErrNotFound {
@@ -469,10 +535,26 @@ func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *mode
 				}
 			}
 			continue
-		case model.StepConditionFieldKeyTextVariable, model.StepConditionFieldKeyNumberVariable, model.StepConditionFieldKeyCheckboxVariable, model.StepConditionFieldKeyGeneralMasterVariable:
+		case model.StepConditionFieldKeyTextVariable, model.StepConditionFieldKeyNumberVariable, model.StepConditionFieldKeyCheckboxVariable, model.StepConditionFieldKeyGeneralMasterVariable, "other_variable":
 			actual, ok = pf14VariableValue(values, field.Variable)
+			if field.FieldKey == model.StepConditionFieldKeyGeneralMasterVariable && field.GeneralMasterCode != "" {
+				if field.GeneralMasterItemCode != "" {
+					field.Value = field.GeneralMasterItemCode
+				}
+				actual, ok, err = pf14bResolveMasterConditionValue(ctx, tx, actual, ok, field)
+				if err != nil {
+					return false, err
+				}
+				if _, multiple := actual.([]string); multiple {
+					switch field.Symbol {
+					case "equal":
+						operator = "include"
+					case "not_equal":
+						operator = "exclude"
+					}
+				}
+			}
 		}
-		operator := field.Symbol
 		if field.FieldKey == model.StepConditionFieldKeyCheckboxVariable && operator == "equal" {
 			operator = "include"
 		}
@@ -484,6 +566,64 @@ func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *mode
 		return matched > 0, nil
 	}
 	return matched == len(fields), nil
+}
+
+func pf14bConditionTeamID(ctx context.Context, q store.Querier, value any) (string, error) {
+	codeOrID := fmt.Sprint(value)
+	if codeOrID == "" || codeOrID == "<nil>" {
+		return "", nil
+	}
+	chartID, err := store.ActiveOrgChartID(ctx, q)
+	if err != nil {
+		return "", err
+	}
+	id, err := store.TeamIDByCode(ctx, q, chartID, codeOrID)
+	if err == store.ErrNotFound {
+		return codeOrID, nil
+	}
+	return id, err
+}
+
+func pf14bResolveMasterConditionValue(ctx context.Context, q store.Querier, actual any, ok bool, field model.ConditionField) (any, bool, error) {
+	if !ok {
+		return actual, false, nil
+	}
+	values := []any{actual}
+	switch selected := actual.(type) {
+	case []any:
+		values = selected
+	case []string:
+		values = make([]any, len(selected))
+		for i := range selected {
+			values[i] = selected[i]
+		}
+	}
+	matched := make([]string, 0, len(values))
+	for _, selected := range values {
+		itemID := fmt.Sprint(selected)
+		item, err := store.GetGeneralMasterItem(ctx, q, itemID)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return nil, false, err
+		}
+		master, err := store.GetGeneralMaster(ctx, q, item.GeneralMasterID)
+		if err != nil {
+			return nil, false, err
+		}
+		if master.Code != field.GeneralMasterCode {
+			continue
+		}
+		if field.GeneralMasterItemCode != "" && item.Code != field.GeneralMasterItemCode {
+			continue
+		}
+		matched = append(matched, item.Code)
+	}
+	if len(matched) == 1 {
+		return matched[0], true, nil
+	}
+	return matched, true, nil
 }
 
 func pf14bUserMatchesTargets(ctx context.Context, tx *store.Tx, userID, teamID string, targets []model.RouteTarget) (bool, error) {

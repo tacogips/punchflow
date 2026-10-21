@@ -52,6 +52,10 @@ func pf14FinishSubmission(ctx context.Context, tx *store.Tx, t *model.Ticket, de
 // (or, when the entry sets descendants, a team below it) and the user must hold
 // a grade accepted by the entry's grade restriction in the author team.
 func pf14CheckApplicable(ctx context.Context, q store.Querier, userID string, def model.WorkflowDef, authorTeamID string) error {
+	team, err := store.GetTeam(ctx, q, authorTeamID)
+	if err != nil || team.ApproveOnly {
+		return kferr.TicketCreateRestricted()
+	}
 	if def.AvailableToEveryone || len(def.AvailableTeams) == 0 {
 		return nil
 	}
@@ -115,15 +119,20 @@ func pf14SaveAuthorNominations(ctx context.Context, tx *store.Tx, ticketID strin
 			return kferr.InvalidParameter("Invalid customizable route step")
 		}
 		if route != nil {
-			valid := false
+			var selected *model.RouteStep
 			for _, step := range route.Steps {
 				if step.Code == nomination.RouteStepCode && step.StepType == model.StepTypeAuthorCustomizable {
-					valid = true
+					selected = &step
 					break
 				}
 			}
-			if !valid {
+			if selected == nil {
 				return kferr.InvalidParameter("Invalid customizable route step")
+			}
+			for _, id := range nomination.UserIDs {
+				if err := pf14bValidateNominee(ctx, tx, id, selected.Targets, values); err != nil {
+					return err
+				}
 			}
 		}
 		userIDs, err := pf14ResolveUserRefs(ctx, tx, nomination.UserIDs)
@@ -132,6 +141,13 @@ func pf14SaveAuthorNominations(ctx context.Context, tx *store.Tx, ticketID strin
 		}
 		if len(userIDs) != len(nomination.UserIDs) {
 			return kferr.ValidationFailed(map[string][]string{"approvers": {"contains an unknown user"}})
+		}
+		if route == nil {
+			for _, id := range userIDs {
+				if err = pf14bValidateNominee(ctx, tx, id, nil, values); err != nil {
+					return err
+				}
+			}
 		}
 		if err = store.EngInsertCustomApprovers(ctx, tx, ticketID, nomination.RouteStepCode, userIDs); err != nil {
 			return err

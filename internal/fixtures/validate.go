@@ -293,9 +293,7 @@ func Validate(s *Set) error {
 				}
 				for k, cf := range st.RouteStepCondition.RouteStepConditionFields {
 					pf := fmt.Sprintf("%s.routeStepCondition.routeStepConditionFields[%d]", p, k)
-					if cf.FieldKey == "other_variable" {
-						add(FileRoutes, pf+".fieldKey", "other_variable is unsupported")
-					} else if !pf06Contains(model.StepConditionFieldKeys, cf.FieldKey) {
+					if cf.FieldKey != "other_variable" && !pf06Contains(model.StepConditionFieldKeys, cf.FieldKey) {
 						add(FileRoutes, pf+".fieldKey", "invalid or unsupported field key")
 					}
 					if !pf06OneOf(cf.Symbol, "equal", "not_equal", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal", "include", "exclude", "is_empty", "is_not_empty", "descendants_or_equal", "not_descendants_or_equal") {
