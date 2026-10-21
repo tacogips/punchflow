@@ -55,6 +55,11 @@ func TestDeleteFolderRemovesDescendantsAndRetiresDefinitions(t *testing.T) {
 	child := createFolder(t, env, map[string]any{"name": "Child", "parentFolderId": parent["id"]})
 	grandchild := createFolder(t, env, map[string]any{"name": "Grandchild", "parentFolderId": child["id"]})
 	sibling := createFolder(t, env, map[string]any{"name": "Sibling"})
+	roleResponse := env.Do(t, testutil.Admin, http.MethodPost, "/v1/roles", map[string]any{"name": "Scoped folder role", "permissionList": []any{map[string]any{"permission": "workflow", "restricted": true, "folderIds": []string{parent["id"].(string)}}}})
+	if roleResponse.Status != http.StatusOK {
+		t.Fatalf("create folder-scoped role=%d %s", roleResponse.Status, roleResponse.Body)
+	}
+	role := decodeObject(t, roleResponse)
 
 	// A ticket exists for the workflow before its folder is deleted.
 	ticketID := pf22CreateTicket(t, env, testutil.Employee, "in_progress", 5000)
@@ -78,6 +83,9 @@ func TestDeleteFolderRemovesDescendantsAndRetiresDefinitions(t *testing.T) {
 	}
 	if !folderExists(t, env, sibling["id"].(string)) {
 		t.Error("an unrelated folder was deleted")
+	}
+	if response := env.Do(t, testutil.Admin, http.MethodGet, "/v1/roles/"+role["id"].(string), nil); response.Status != http.StatusOK {
+		t.Fatalf("get role after scoped folder deletion=%d %s", response.Status, response.Body)
 	}
 
 	// Workflows and routes of the deleted tree are gone from listings...

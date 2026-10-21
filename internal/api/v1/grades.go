@@ -128,6 +128,9 @@ func (a *API) deleteGrade(w http.ResponseWriter, r *http.Request) {
 		if used {
 			return kferr.ValidationFailed(map[string][]string{"gradeId": {"is used by a membership"}})
 		}
+		if err := store.RemoveGradeDefinitionReferences(r.Context(), tx, grade.Code, a.d.Clock.Now()); err != nil {
+			return err
+		}
 		if err := store.GradeDelete(r.Context(), tx, id); err != nil {
 			return err
 		}
@@ -199,6 +202,15 @@ func (a *API) updateGrade(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.FromContext(r.Context())
 	now := a.d.Clock.Now()
 	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		if patch.Code != nil {
+			current, err := store.GetGrade(r.Context(), tx, id)
+			if err != nil {
+				return err
+			}
+			if err := store.ReconcileDefinitionCodeChange(r.Context(), tx, "grade", current.Code, *patch.Code, now); err != nil {
+				return err
+			}
+		}
 		if err := store.GradeUpdate(r.Context(), tx, id, patch, store.Millis(now)); err != nil {
 			return err
 		}

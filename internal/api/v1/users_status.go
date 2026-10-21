@@ -366,6 +366,15 @@ func (a *API) updateUser(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.FromContext(r.Context())
 	now := a.d.Clock.Now()
 	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		if patch.Code != nil {
+			current, err := store.GetUser(r.Context(), tx, id)
+			if err != nil {
+				return err
+			}
+			if err := store.ReconcileDefinitionCodeChange(r.Context(), tx, "user", current.Code, *patch.Code, now); err != nil {
+				return err
+			}
+		}
 		if err := store.UserUpdate(r.Context(), tx, id, patch, store.Millis(now)); err != nil {
 			return err
 		}

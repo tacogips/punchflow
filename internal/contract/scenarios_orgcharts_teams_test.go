@@ -147,7 +147,7 @@ func TestContractLiveOrgChartsTeams(t *testing.T) {
 				path := rootPath + "/memberships/" + env.UserID(t, "sales-rep")
 				t.Run("error_missing_required_fields", func(t *testing.T) {
 					response := env.Do(t, testutil.Admin, http.MethodPatch, path, map[string]any{})
-					pf26dCheckError(t, compiler, schemas, response, http.StatusUnprocessableEntity, "validation_failed")
+					pf26dCheckError(t, compiler, schemas, response, http.StatusBadRequest, "invalid_parameter")
 				})
 				pf26dCheck(t, spec, compiler, schemas, operation, env.Do(t, testutil.Admin, http.MethodPatch, path, map[string]any{"leader": true, "gradeIds": []string{gradeID}}))
 			case "deleteTeamMembers":

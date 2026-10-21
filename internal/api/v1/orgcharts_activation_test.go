@@ -3,6 +3,7 @@ package v1_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,6 +171,9 @@ func TestActivateOrganizationChartRemapsTicketTeamViewersByCode(t *testing.T) {
 	if err := store.TicketQueryInsertViewer(ctx, env.DB.Q(), model.TicketViewer{ID: store.NewID(), TicketID: ticketID, TeamID: &oldTeamRef}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO roles(id,name,editable,permission_list,created_at,updated_at) VALUES('mapped-chart-role','Mapped role',1,?, ?, ?)`, `[{"permission":"team","restricted":true,"teamIds":["`+oldTeam+`"]}]`, store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
 	response := env.Do(t, testutil.Admin, http.MethodPost, "/v1/organizationCharts/"+activationNextChart+"/activate", nil)
 	if response.Status != http.StatusOK {
 		t.Fatalf("activate chart: status=%d body=%s", response.Status, response.Body)
@@ -178,8 +182,67 @@ func TestActivateOrganizationChartRemapsTicketTeamViewersByCode(t *testing.T) {
 	if err != nil || len(viewers) != 1 || viewers[0].TeamID == nil || *viewers[0].TeamID != newTeamID {
 		t.Fatalf("ticket viewers=%+v, err=%v; want new team %s", viewers, err, newTeamID)
 	}
+	var roleTargets string
+	if err := env.DB.Q().QueryRowContext(ctx, `SELECT permission_list FROM roles WHERE id='mapped-chart-role'`).Scan(&roleTargets); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(roleTargets, newTeamID) || strings.Contains(roleTargets, oldTeam) {
+		t.Fatalf("role team targets after chart activation=%s", roleTargets)
+	}
 	service := engine.New(env.Clock)
 	if err := service.CanView(ctx, env.DB.Q(), engine.Actor{UserID: userID}, ticketID); err != nil {
 		t.Fatalf("member of mapped team cannot view ticket: %v", err)
+	}
+}
+
+func TestActivateOrganizationChartReconcilesMissingTeams(t *testing.T) {
+	env := testutil.New(t)
+	ctx := context.Background()
+	oldMissing := store.NewID()
+	now := env.Clock.Now()
+	if err := store.TeamInsert(ctx, env.DB.Q(), model.Team{ID: oldMissing, OrganizationChartID: activationCurrentChart, Code: "chart-only-old", Name: "Old Only", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	workflow, err := store.GetWorkflowByCode(ctx, env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticketID := store.NewID()
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO tickets(id,workflow_id,status,created_at,updated_at) VALUES(?,?,?,?,?)`, ticketID, workflow.ID, model.TicketStatusInProgress, store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
+	missingRef := oldMissing
+	if err := store.TicketQueryInsertViewer(ctx, env.DB.Q(), model.TicketViewer{ID: store.NewID(), TicketID: ticketID, TeamID: &missingRef}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO routes(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('chart-route','chart-route','visible',?,'{"steps":[{"stepType":"team","targets":[{"teamCode":"chart-only-old"}]}]}',?,?)`, workflow.FolderID, store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO workflows(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('chart-workflow','chart-workflow','visible',?,'{"routeCode":"chart-route"}',?,?)`, workflow.FolderID, store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO roles(id,name,editable,permission_list,created_at,updated_at) VALUES('chart-role','Chart role',1,?, ?, ?)`, `[ {"permission":"team","restricted":true,"teamIds":["`+oldMissing+`"]} ]`, store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/v1/organizationCharts/"+activationNextChart+"/activate", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("activate: status=%d body=%s", response.Status, response.Body)
+	}
+	viewers, err := store.TicketViewers(ctx, env.DB.Q(), ticketID)
+	if err != nil || len(viewers) != 0 {
+		t.Fatalf("unmapped viewers=%+v err=%v, want none", viewers, err)
+	}
+	var routeStatus, workflowStatus, roleTargets string
+	if err := env.DB.Q().QueryRowContext(ctx, `SELECT status FROM routes WHERE id='chart-route'`).Scan(&routeStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.DB.Q().QueryRowContext(ctx, `SELECT status FROM workflows WHERE id='chart-workflow'`).Scan(&workflowStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.DB.Q().QueryRowContext(ctx, `SELECT permission_list FROM roles WHERE id='chart-role'`).Scan(&roleTargets); err != nil {
+		t.Fatal(err)
+	}
+	if routeStatus != model.RouteStatusError || workflowStatus != model.WorkflowStatusInvisible || strings.Contains(roleTargets, oldMissing) {
+		t.Fatalf("route=%s workflow=%s role=%s", routeStatus, workflowStatus, roleTargets)
 	}
 }

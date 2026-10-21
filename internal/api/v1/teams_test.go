@@ -140,3 +140,38 @@ func TestTeamMembershipLeaderAndPaginationRules(t *testing.T) {
 		t.Fatalf("update member status=%d body=%s", got.Status, got.Body)
 	}
 }
+
+func TestTeamMembershipRequiredFieldsAndNullGradeIDs(t *testing.T) {
+	env := testutil.New(t)
+	base := "/v1/organizationCharts/" + pf19Chart + "/teams/finance/memberships"
+	adminID := env.UserID(t, "admin")
+	for name, body := range map[string]any{
+		"missing create leader": map[string]any{"users": []any{map[string]any{"id": adminID}}},
+		"null create gradeIds":  map[string]any{"users": []any{map[string]any{"id": adminID, "leader": false, "gradeIds": nil}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			testutil.AssertError(t, env.Do(t, testutil.Admin, http.MethodPost, base, body), http.StatusBadRequest, "invalid_parameter")
+		})
+	}
+	for name, body := range map[string]any{
+		"missing update leader":   map[string]any{"gradeIds": []string{"00000000-0000-4000-8000-000000000006"}},
+		"missing update gradeIds": map[string]any{"leader": true},
+		"null update gradeIds":    map[string]any{"leader": true, "gradeIds": nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			testutil.AssertError(t, env.Do(t, testutil.Admin, http.MethodPatch, base+"/accountant", body), http.StatusBadRequest, "invalid_parameter")
+		})
+	}
+}
+
+func TestTeamCodeRenamePreservesFixtureRouteReferences(t *testing.T) {
+	env := testutil.New(t)
+	updated := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/organizationCharts/"+pf19Chart+"/teams/finance", map[string]any{"code": "finance-renamed"})
+	if updated.Status != http.StatusOK {
+		t.Fatalf("rename team status=%d body=%s", updated.Status, updated.Body)
+	}
+	route := env.Do(t, testutil.Admin, http.MethodGet, "/v1/routes/expense-standard", nil)
+	if route.Status != http.StatusOK || !strings.Contains(string(route.Body), "finance-renamed") {
+		t.Fatalf("route after team code rename status=%d body=%s", route.Status, route.Body)
+	}
+}

@@ -109,6 +109,13 @@ func CreateGeneralMaster(ctx context.Context, d *DB, x model.GeneralMaster, fiel
 }
 func UpdateGeneralMaster(ctx context.Context, d *DB, x model.GeneralMaster, fields *[]model.GeneralMasterField) error {
 	return d.WithTx(ctx, func(tx *Tx) error {
+		var oldCode string
+		if err := tx.QueryRowContext(ctx, `SELECT code FROM general_masters WHERE id=?`, x.ID).Scan(&oldCode); err != nil {
+			return err
+		}
+		if err := ReconcileDefinitionCodeChange(ctx, tx, "master", oldCode, x.Code, x.UpdatedAt); err != nil {
+			return err
+		}
 		res, err := tx.ExecContext(ctx, `UPDATE general_masters SET code=?,name=?,description=?,default_sort_by=?,initial_display_code=?,initial_display_created_at=?,initial_display_description=?,updated_at=? WHERE id=?`, x.Code, x.Name, x.Description, x.DefaultSortBy, x.InitialDisplayCode, x.InitialDisplayCreatedAt, x.InitialDisplayDescription, Millis(x.UpdatedAt), x.ID)
 		if err != nil {
 			return err
@@ -265,6 +272,13 @@ func CreateGeneralMasterItem(ctx context.Context, q Querier, x model.GeneralMast
 	return err
 }
 func UpdateGeneralMasterItem(ctx context.Context, q Querier, x model.GeneralMasterItem) error {
+	var oldCode string
+	if err := q.QueryRowContext(ctx, `SELECT code FROM general_master_items WHERE id=? AND general_master_id=?`, x.ID, x.GeneralMasterID).Scan(&oldCode); err != nil {
+		return err
+	}
+	if err := ReconcileDefinitionCodeChange(ctx, q, "master_item", oldCode, x.Code, x.UpdatedAt); err != nil {
+		return err
+	}
 	inputs, err := json.Marshal(x.Inputs)
 	if err != nil {
 		return err

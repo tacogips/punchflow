@@ -37,6 +37,13 @@ func TestGeneralMasterPermissionsAndValidation(t *testing.T) {
 	var master map[string]any
 	created.JSON(t, &master)
 	id := master["id"].(string)
+	roleResponse := env.Do(t, testutil.Admin, http.MethodPost, "/v1/roles", map[string]any{"name": "Scoped master role", "permissionList": []any{map[string]any{"permission": "master", "restricted": true, "generalMasterIds": []string{id}, "teamIds": []string{}, "folderIds": []string{}}}})
+	if roleResponse.Status != http.StatusOK {
+		t.Fatalf("create scoped role=%d %s", roleResponse.Status, roleResponse.Body)
+	}
+	var scopedRole map[string]any
+	roleResponse.JSON(t, &scopedRole)
+	roleID := scopedRole["id"].(string)
 	if fetched := env.Do(t, testutil.Admin, http.MethodGet, "/v1/generalMasters/"+id, nil); fetched.Status != http.StatusOK {
 		t.Fatalf("get master=%d %s", fetched.Status, fetched.Body)
 	}
@@ -51,6 +58,9 @@ func TestGeneralMasterPermissionsAndValidation(t *testing.T) {
 	deleted := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/generalMasters/"+id, nil)
 	if deleted.Status != http.StatusOK {
 		t.Fatalf("delete master=%d %s", deleted.Status, deleted.Body)
+	}
+	if role := env.Do(t, testutil.Admin, http.MethodGet, "/v1/roles/"+roleID, nil); role.Status != http.StatusOK {
+		t.Fatalf("get role after scoped master deletion=%d %s", role.Status, role.Body)
 	}
 	var remaining int
 	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM general_master_items WHERE general_master_id=?`, id).Scan(&remaining); err != nil {

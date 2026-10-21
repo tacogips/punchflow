@@ -150,6 +150,9 @@ func (a *API) deleteFolder(w http.ResponseWriter, r *http.Request) {
 				return e
 			}
 		}
+		if e = store.RemoveFoldersFromRoleTargets(r.Context(), tx, tree, now); e != nil {
+			return e
+		}
 		_, e = store.DeleteFolderTree(r.Context(), tx, id, now)
 		return e
 	})

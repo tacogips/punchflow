@@ -278,7 +278,13 @@ func (a *API) deleteGeneralMaster(w http.ResponseWriter, r *http.Request) {
 	if !a.guardMaster(w, r, id, true) {
 		return
 	}
-	if e = store.DeleteGeneralMaster(r.Context(), a.d.DB.Q(), id); e != nil {
+	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		if err := store.RemoveGeneralMasterFromRoleTargets(r.Context(), tx, id, a.d.Clock.Now()); err != nil {
+			return err
+		}
+		return store.DeleteGeneralMaster(r.Context(), tx, id)
+	})
+	if e != nil {
 		kferr.Write(w, e)
 		return
 	}
@@ -483,7 +489,8 @@ func (a *API) updateGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	x.UpdatedAt = time.Now().UTC()
-	if e = store.UpdateGeneralMasterItem(r.Context(), a.d.DB.Q(), x); e != nil {
+	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error { return store.UpdateGeneralMasterItem(r.Context(), tx, x) })
+	if e != nil {
 		if pf20IsUniqueViolation(e) {
 			kferr.Write(w, kferr.ValidationFailed(map[string][]string{"code": {"has already been taken"}}))
 		} else {

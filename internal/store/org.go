@@ -72,6 +72,13 @@ func OrgChartActivate(ctx context.Context, q Querier, id string, at time.Time) e
 	if current != "" && current != id {
 		// Ticket-level team viewers follow a matching team code into the new
 		// chart. Historical applicant team fields are deliberately untouched.
+		if _, err = q.ExecContext(ctx, `DELETE FROM ticket_viewers WHERE team_id IN (
+			SELECT old_team.id FROM teams old_team WHERE old_team.organization_chart_id=? AND NOT EXISTS (
+				SELECT 1 FROM teams new_team WHERE new_team.organization_chart_id=? AND new_team.code=old_team.code
+			)
+		)`, current, id); err != nil {
+			return fmt.Errorf("store: remove unmapped ticket team viewers: %w", err)
+		}
 		if _, err = q.ExecContext(ctx, `UPDATE ticket_viewers SET team_id=(
 			SELECT new_team.id FROM teams old_team
 			JOIN teams new_team ON new_team.code=old_team.code AND new_team.organization_chart_id=?
@@ -79,13 +86,36 @@ func OrgChartActivate(ctx context.Context, q Querier, id string, at time.Time) e
 		) WHERE team_id IN (SELECT id FROM teams WHERE organization_chart_id=?)`, id, current); err != nil {
 			return fmt.Errorf("store: remap ticket team viewers: %w", err)
 		}
-		if _, err = q.ExecContext(ctx, `DELETE FROM ticket_viewers WHERE team_id IN (
-			SELECT old_team.id FROM teams old_team
-			WHERE old_team.organization_chart_id=? AND NOT EXISTS (
-				SELECT 1 FROM teams new_team WHERE new_team.organization_chart_id=? AND new_team.code=old_team.code
-			)
-		)`, current, id); err != nil {
-			return fmt.Errorf("store: remove unmapped ticket team viewers: %w", err)
+		if err := ReconcileRoleTeamTargets(ctx, q, current, id, at); err != nil {
+			return fmt.Errorf("store: reconcile role team targets: %w", err)
+		}
+		oldTeams, err := q.QueryContext(ctx, `SELECT old_team.code FROM teams old_team WHERE old_team.organization_chart_id=? AND NOT EXISTS (SELECT 1 FROM teams new_team WHERE new_team.organization_chart_id=? AND new_team.code=old_team.code) ORDER BY old_team.code`, current, id)
+		if err != nil {
+			return fmt.Errorf("store: list teams missing from new chart: %w", err)
+		}
+		var missing []string
+		for oldTeams.Next() {
+			var code string
+			if err := oldTeams.Scan(&code); err != nil {
+				_ = oldTeams.Close()
+				return err
+			}
+			missing = append(missing, code)
+		}
+		if err := oldTeams.Err(); err != nil {
+			_ = oldTeams.Close()
+			return err
+		}
+		if err := oldTeams.Close(); err != nil {
+			return err
+		}
+		for _, code := range missing {
+			if err := InvalidateRoutesReferencing(ctx, q, code, false, at); err != nil {
+				return fmt.Errorf("store: reconcile routes for missing team %s: %w", code, err)
+			}
+			if err := RemoveTeamDefinitionReferences(ctx, q, code, at); err != nil {
+				return fmt.Errorf("store: remove settings for missing team %s: %w", code, err)
+			}
 		}
 	}
 	if _, e := q.ExecContext(ctx, "UPDATE organization_charts SET current=0,updated_at=?", Millis(at)); e != nil {
