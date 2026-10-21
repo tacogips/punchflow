@@ -2,6 +2,7 @@ package present
 
 import (
 	"context"
+	"errors"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
@@ -138,7 +139,14 @@ func OrganizationChart(ctx context.Context, q store.Querier, id string) (Organiz
 	if e != nil {
 		return nil, e
 	}
-	return OrganizationChartJSON{"id": x.ID, "name": x.Name, "current": x.Current, "teamsCount": tc, "membershipsCount": mc, "createdAt": pf08Time(x.CreatedAt), "updatedAt": pf08Time(x.UpdatedAt), "activationPlan": nil}, nil
+	var plan any
+	switch p, e := store.OrgChartActivationPlanByChart(ctx, q, id); {
+	case e == nil:
+		plan = map[string]any{"id": p.ID, "dueOn": p.DueOn, "createdAt": pf08Time(p.CreatedAt), "updatedAt": pf08Time(p.UpdatedAt)}
+	case !errors.Is(e, store.ErrNotFound):
+		return nil, e
+	}
+	return OrganizationChartJSON{"id": x.ID, "name": x.Name, "current": x.Current, "teamsCount": tc, "membershipsCount": mc, "createdAt": pf08Time(x.CreatedAt), "updatedAt": pf08Time(x.UpdatedAt), "activationPlan": plan}, nil
 }
 func OrganizationChartDetail(ctx context.Context, q store.Querier, id string) (OrganizationChartJSON, error) {
 	return OrganizationChart(ctx, q, id)

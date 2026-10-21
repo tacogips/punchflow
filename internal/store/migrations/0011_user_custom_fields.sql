@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS user_custom_fields (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, field_type TEXT NOT NULL, options TEXT NOT NULL DEFAULT '[]', visible_to_everyone INTEGER NOT NULL DEFAULT 0, field_order INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);

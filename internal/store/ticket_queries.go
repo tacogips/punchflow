@@ -239,15 +239,20 @@ func TicketQueryDeleteViewer(ctx context.Context, q Querier, ticketID, viewerID 
 	return nil
 }
 
-// TicketQueryViewers returns a page of viewer IDs in the API's stable order.
-func TicketQueryViewers(ctx context.Context, q Querier, ticketID string, offset, limit int, sortByCreatedAtDesc bool) ([]string, int, error) {
+// TicketQueryViewers returns a page of viewer IDs. When byCreatedAt is false
+// the default order (team name, then user email) applies; otherwise viewers are
+// ordered by creation time ascending or, when desc is set, descending.
+func TicketQueryViewers(ctx context.Context, q Querier, ticketID string, offset, limit int, byCreatedAt, desc bool) ([]string, int, error) {
 	var total int
 	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM ticket_viewers WHERE ticket_id=?`, ticketID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("store: count ticket viewers: %w", err)
 	}
 	order := `coalesce(tm.name, u.email), tv.id`
-	if sortByCreatedAtDesc {
-		order = `tv.rowid DESC`
+	if byCreatedAt {
+		order = `tv.rowid ASC`
+		if desc {
+			order = `tv.rowid DESC`
+		}
 	}
 	rows, err := q.QueryContext(ctx, `SELECT tv.id FROM ticket_viewers tv LEFT JOIN teams tm ON tm.id=tv.team_id LEFT JOIN users u ON u.id=tv.user_id WHERE tv.ticket_id=? ORDER BY `+order+` LIMIT ? OFFSET ?`, ticketID, limit, offset)
 	if err != nil {

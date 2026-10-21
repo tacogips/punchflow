@@ -14,20 +14,21 @@ import (
 
 // Set is one complete input collection of fixture files.
 type Set struct {
-	Tenant          TenantFile
-	Grades          []GradeFixture
-	Users           []UserFixture
-	OrgCharts       []OrgChartFixture
-	Roles           []RoleFixture
-	Categories      []CategoryFixture
-	Folders         []FolderFixture
-	GeneralMasters  []GeneralMasterFixture
-	Routes          []model.RouteDef
-	Workflows       []model.WorkflowDef
-	ProxyApplicants []ProxyFixture
-	ProxyApprovers  []ProxyFixture
-	Tokens          []TokenFixture
-	Webhooks        []WebhookFixture
+	Tenant           TenantFile
+	Grades           []GradeFixture
+	Users            []UserFixture
+	UserCustomFields []UserCustomFieldFixture
+	OrgCharts        []OrgChartFixture
+	Roles            []RoleFixture
+	Categories       []CategoryFixture
+	Folders          []FolderFixture
+	GeneralMasters   []GeneralMasterFixture
+	Routes           []model.RouteDef
+	Workflows        []model.WorkflowDef
+	ProxyApplicants  []ProxyFixture
+	ProxyApprovers   []ProxyFixture
+	Tokens           []TokenFixture
+	Webhooks         []WebhookFixture
 }
 
 // Problem describes one invalid value in a fixture file.
@@ -54,7 +55,8 @@ func Parse(fsys fs.FS) (*Set, error) {
 		req  bool
 	}{
 		{FileTenant, &out.Tenant, true}, {FileGrades, &out.Grades, true},
-		{FileUsers, &out.Users, true}, {FileOrganizationCharts, &out.OrgCharts, true},
+		{FileUsers, &out.Users, true}, {FileUserCustomFields, &out.UserCustomFields, false},
+		{FileOrganizationCharts, &out.OrgCharts, true},
 		{FileRoles, &out.Roles, true}, {FileCategories, &out.Categories, false},
 		{FileFolders, &out.Folders, true}, {FileGeneralMasters, &out.GeneralMasters, false},
 		{FileRoutes, &out.Routes, false}, {FileWorkflows, &out.Workflows, false},

@@ -71,7 +71,7 @@ func (a *API) pf22Action(w http.ResponseWriter, r *http.Request, action string, 
 	}
 	p, _ := auth.FromContext(r.Context())
 	id := r.PathValue("ticketId")
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := actorFor(p)
 	var out present.TicketDetailJSON
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		events, e := mutate(r.Context(), tx, actor, id)

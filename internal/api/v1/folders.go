@@ -74,18 +74,26 @@ func (a *API) createFolder(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("Invalid code"))
 		return
 	}
+	// An omitted or null parentFolderId places the folder directly under the root folder.
+	var parent string
 	if b.Parent == nil {
-		kferr.Write(w, kferr.InvalidParameter("parentFolderId is required"))
-		return
-	}
-	parent, err := store.ResolveID(r.Context(), a.d.DB.Q(), "folders", *b.Parent)
-	if err != nil {
-		kferr.Write(w, kferr.ResourceNotFound())
-		return
+		root, err := store.RootFolderID(r.Context(), a.d.DB.Q())
+		if err != nil {
+			kferr.Write(w, kferr.Internal())
+			return
+		}
+		parent = root
+	} else {
+		resolved, err := store.ResolveID(r.Context(), a.d.DB.Q(), "folders", *b.Parent)
+		if err != nil {
+			kferr.Write(w, kferr.ResourceNotFound())
+			return
+		}
+		parent = resolved
 	}
 	now := time.Now().UTC()
 	x := model.Folder{ID: store.NewID(), Code: b.Code, Name: b.Name, Description: b.Description, ParentID: &parent, Editable: true, CreatedAt: now, UpdatedAt: now}
-	if err = store.CreateFolder(r.Context(), a.d.DB.Q(), x); err != nil {
+	if err := store.CreateFolder(r.Context(), a.d.DB.Q(), x); err != nil {
 		if pf20IsUniqueViolation(err) {
 			kferr.Write(w, kferr.ValidationFailed(map[string][]string{"code": {"has already been taken"}}))
 		} else {
@@ -119,21 +127,33 @@ func (a *API) deleteFolder(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotEditable())
 		return
 	}
-	children, err := store.FolderHasChildren(r.Context(), a.d.DB.Q(), id)
+	p := principalOf(r)
+	now := a.d.Clock.Now()
+	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		tree, e := store.FolderSubtreeIDs(r.Context(), tx, []string{id})
+		if e != nil {
+			return e
+		}
+		// Deleting a folder also retires the workflows and routes under it, which
+		// needs the matching permission for each affected folder.
+		workflowFolders, routeFolders, e := store.FolderTreeDefinitionFolders(r.Context(), tx, tree)
+		if e != nil {
+			return e
+		}
+		for _, folder := range workflowFolders {
+			if e = requireTarget(p, folder, model.PermissionWorkflow); e != nil {
+				return e
+			}
+		}
+		for _, folder := range routeFolders {
+			if e = requireTarget(p, folder, model.PermissionRoute); e != nil {
+				return e
+			}
+		}
+		_, e = store.DeleteFolderTree(r.Context(), tx, id, now)
+		return e
+	})
 	if err != nil {
-		kferr.Write(w, err)
-		return
-	}
-	used, err := store.FolderHasDefinitions(r.Context(), a.d.DB.Q(), id)
-	if err != nil {
-		kferr.Write(w, err)
-		return
-	}
-	if children || used {
-		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"folderId": {"contains child folders, workflows, or routes"}}))
-		return
-	}
-	if err = store.DeleteFolder(r.Context(), a.d.DB.Q(), id); err != nil {
 		kferr.Write(w, err)
 		return
 	}
@@ -202,7 +222,12 @@ func (a *API) updateFolder(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, ok := b["parentFolderId"]; ok {
 		if string(raw) == "null" {
-			x.ParentID = nil
+			root, e := store.RootFolderID(r.Context(), a.d.DB.Q())
+			if e != nil {
+				kferr.Write(w, kferr.Internal())
+				return
+			}
+			x.ParentID = &root
 		} else {
 			var v string
 			if err = json.Unmarshal(raw, &v); err != nil {

@@ -22,6 +22,16 @@ type pf19ProxyBody struct {
 	WorkflowIDs []string `json:"workflowIds"`
 }
 
+// pf19ProxyPatch is the PATCH body; startsOn and endsOn keep absent, null and
+// concrete values apart so null can clear a bound.
+type pf19ProxyPatch struct {
+	UserID      string           `json:"userId"`
+	ProxyUserID string           `json:"proxyUserId"`
+	StartsOn    nullable[string] `json:"startsOn"`
+	EndsOn      nullable[string] `json:"endsOn"`
+	WorkflowIDs []string         `json:"workflowIds"`
+}
+
 func (a *API) listProxyApplicants(w http.ResponseWriter, r *http.Request) {
 	a.pf19ListProxies(w, r, true)
 }
@@ -189,7 +199,7 @@ func (a *API) pf19UpdateProxy(w http.ResponseWriter, r *http.Request, applicant 
 		kferr.Write(w, err)
 		return
 	}
-	var b pf19ProxyBody
+	var b pf19ProxyPatch
 	if err = httpx.DecodeJSON(r, &b); err != nil {
 		kferr.Write(w, err)
 		return
@@ -207,12 +217,8 @@ func (a *API) pf19UpdateProxy(w http.ResponseWriter, r *http.Request, applicant 
 			if b.ProxyUserID != "" {
 				cur.ProxyUserID = b.ProxyUserID
 			}
-			if b.StartsOn != nil {
-				cur.StartsOn = b.StartsOn
-			}
-			if b.EndsOn != nil {
-				cur.EndsOn = b.EndsOn
-			}
+			b.StartsOn.applyTo(&cur.StartsOn)
+			b.EndsOn.applyTo(&cur.EndsOn)
 			if b.WorkflowIDs != nil {
 				cur.WorkflowIDs = b.WorkflowIDs
 			}
@@ -240,12 +246,8 @@ func (a *API) pf19UpdateProxy(w http.ResponseWriter, r *http.Request, applicant 
 			if b.ProxyUserID != "" {
 				cur.ProxyUserID = b.ProxyUserID
 			}
-			if b.StartsOn != nil {
-				cur.StartsOn = b.StartsOn
-			}
-			if b.EndsOn != nil {
-				cur.EndsOn = b.EndsOn
-			}
+			b.StartsOn.applyTo(&cur.StartsOn)
+			b.EndsOn.applyTo(&cur.EndsOn)
 			if b.WorkflowIDs != nil {
 				cur.WorkflowIDs = b.WorkflowIDs
 			}

@@ -7,6 +7,7 @@ const (
 	FileTenant             = "tenant.json"
 	FileGrades             = "grades.json"
 	FileUsers              = "users.json"
+	FileUserCustomFields   = "user-custom-fields.json"
 	FileOrganizationCharts = "organization-charts.json"
 	FileRoles              = "roles.json"
 	FileCategories         = "categories.json"
@@ -41,6 +42,17 @@ type UserFixture struct {
 	Locale       string         `json:"locale"`
 	UserType     string         `json:"userType"`
 	CustomFields map[string]any `json:"customFields,omitempty"`
+}
+
+// UserCustomFieldFixture defines one user custom field. The array order of the
+// file is the display order.
+type UserCustomFieldFixture struct {
+	ID                string   `json:"id"`
+	Code              string   `json:"code"`
+	Name              string   `json:"name"`
+	FieldType         string   `json:"fieldType"`
+	Options           []string `json:"options,omitempty"`
+	VisibleToEveryone bool     `json:"visibleToEveryone"`
 }
 type OrgChartFixture struct {
 	ID      string        `json:"id"`

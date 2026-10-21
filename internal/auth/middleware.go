@@ -163,13 +163,23 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		permissions, err := store.UserPermissions(ctx, q, user.ID)
+		// Lazily apply a scheduled organization chart activation that has come due.
+		if _, err = store.ApplyDueOrgChartActivation(ctx, a.db, kftime.FormatDate(now), now); err != nil {
+			kferr.Write(w, err)
+			return
+		}
+		grants, err := store.UserGrants(ctx, q, user.ID)
 		if err != nil {
 			kferr.Write(w, err)
 			return
 		}
+		permissions := make(map[string]bool, len(grants))
+		for permission := range grants {
+			permissions[permission] = true
+		}
 		principal.User = user
 		principal.Permissions = permissions
+		principal.Grants = grants
 		next.ServeHTTP(w, r.WithContext(WithPrincipal(ctx, &principal)))
 	})
 }

@@ -4,6 +4,7 @@ package present
 import (
 	"encoding/json"
 	"punchflow/internal/kftime"
+	"punchflow/internal/model"
 	"time"
 )
 
@@ -34,6 +35,11 @@ type UserOpts struct {
 	LastUsedOn   bool
 	CustomFields bool
 	UserType     bool
+	// AllCustomFields includes custom fields that are not visible to everyone;
+	// set it for callers holding the user-management permission.
+	AllCustomFields bool
+	// CustomFieldDefs are loaded on demand by User and Users when CustomFields is set.
+	CustomFieldDefs []model.UserCustomField
 }
 
 func pf08Time(t time.Time) string { return kftime.Format(t) }

@@ -4,17 +4,20 @@ import (
 	"context"
 	"fmt"
 	"punchflow/internal/model"
+	"strings"
 )
 
-func RouteList(ctx context.Context, q Querier, offset, limit int, status, folderID, sortBy string, desc bool) ([]model.Route, int, error) {
-	return pf20ListDefinitionIDs(ctx, q, "routes", offset, limit, status, folderID, sortBy, desc)
+func RouteList(ctx context.Context, q Querier, offset, limit int, statuses []string, folderID, sortBy string, desc bool) ([]model.Route, int, error) {
+	return pf20ListDefinitionIDs(ctx, q, "routes", offset, limit, statuses, folderID, sortBy, desc)
 }
-func WorkflowList(ctx context.Context, q Querier, offset, limit int, status, folderID string, categoryCode, sortBy string, desc bool) ([]model.Workflow, int, error) {
+func WorkflowList(ctx context.Context, q Querier, offset, limit int, statuses []string, folderID string, categoryCode, sortBy string, desc bool) ([]model.Workflow, int, error) {
 	where := ` WHERE status!='deleted'`
 	args := []any{}
-	if status != "" {
-		where += ` AND status=?`
-		args = append(args, status)
+	if len(statuses) > 0 {
+		where += ` AND status IN (` + strings.TrimSuffix(strings.Repeat("?,", len(statuses)), ",") + `)`
+		for _, status := range statuses {
+			args = append(args, status)
+		}
 	}
 	if folderID != "" {
 		where += ` AND folder_id=?`
@@ -75,15 +78,17 @@ func WorkflowList(ctx context.Context, q Querier, offset, limit int, status, fol
 	}
 	return all[start:end], total, nil
 }
-func pf20ListDefinitionIDs(ctx context.Context, q Querier, table string, offset, limit int, status, folderID, sortBy string, desc bool) ([]model.Route, int, error) {
+func pf20ListDefinitionIDs(ctx context.Context, q Querier, table string, offset, limit int, statuses []string, folderID, sortBy string, desc bool) ([]model.Route, int, error) {
 	if table != "routes" && table != "workflows" {
 		return nil, 0, fmt.Errorf("store: invalid definition table")
 	}
 	where := ` WHERE status!='deleted'`
 	args := []any{}
-	if status != "" {
-		where += ` AND status=?`
-		args = append(args, status)
+	if len(statuses) > 0 {
+		where += ` AND status IN (` + strings.TrimSuffix(strings.Repeat("?,", len(statuses)), ",") + `)`
+		for _, status := range statuses {
+			args = append(args, status)
+		}
 	}
 	if folderID != "" {
 		where += ` AND folder_id=?`

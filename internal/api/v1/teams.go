@@ -93,7 +93,7 @@ func (a *API) listTeams(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
-	xs, n, e := store.TeamList(r.Context(), a.d.DB.Q(), chart, parent, page.Offset(), page.PerPage)
+	xs, n, e := store.TeamList(r.Context(), a.d.DB.Q(), chart, parent, page.Offset(), page.PerPage, teamListFilter(principalOf(r)))
 	if e != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -144,6 +144,10 @@ func (a *API) createTeam(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		x.ParentID = &pid
+	}
+	if e = requireTeamParent(principalOf(r), x.ParentID); e != nil {
+		kferr.Write(w, e)
+		return
 	}
 	if b.ApproveOnly != nil {
 		x.ApproveOnly = *b.ApproveOnly
@@ -197,6 +201,9 @@ func (a *API) getTeam(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
+	if !a.guardTeam(w, r, id) {
+		return
+	}
 	out, e := present.TeamDetail(r.Context(), a.d.DB.Q(), id)
 	if e != nil {
 		kferr.Write(w, kferr.Internal())
@@ -217,6 +224,9 @@ func (a *API) updateTeam(w http.ResponseWriter, r *http.Request) {
 	id, e := a.pf19TeamID(r, a.d.DB.Q(), chart)
 	if e != nil {
 		kferr.Write(w, e)
+		return
+	}
+	if !a.guardTeam(w, r, id) {
 		return
 	}
 	var b pf19TeamBody
@@ -251,6 +261,12 @@ func (a *API) updateTeam(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			x.ParentID = &pid
+		}
+	}
+	if b.ParentID != nil {
+		if e = requireTeamParent(principalOf(r), x.ParentID); e != nil {
+			kferr.Write(w, e)
+			return
 		}
 	}
 	x.UpdatedAt = time.Now()
@@ -310,6 +326,9 @@ func (a *API) deleteTeam(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
+	if !a.guardTeam(w, r, id) {
+		return
+	}
 	has, e := store.TeamHasChild(r.Context(), a.d.DB.Q(), id)
 	if e != nil {
 		kferr.Write(w, kferr.Internal())
@@ -347,6 +366,9 @@ func (a *API) listTeamMembers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
+	if !a.guardTeam(w, r, id) {
+		return
+	}
 	page, e := httpx.ParsePage(r)
 	if e != nil {
 		kferr.Write(w, e)
@@ -378,6 +400,9 @@ func (a *API) createTeamMembers(w http.ResponseWriter, r *http.Request) {
 	id, e := a.pf19TeamID(r, a.d.DB.Q(), chart)
 	if e != nil {
 		kferr.Write(w, e)
+		return
+	}
+	if !a.guardTeam(w, r, id) {
 		return
 	}
 	var b pf19MembersBody
@@ -463,6 +488,9 @@ func (a *API) deleteTeamMembers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
+	if !a.guardTeam(w, r, id) {
+		return
+	}
 	var b pf19MembersBody
 	if e = httpx.DecodeJSON(r, &b); e != nil {
 		kferr.Write(w, e)
@@ -526,6 +554,9 @@ func (a *API) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 	id, e := a.pf19TeamID(r, a.d.DB.Q(), chart)
 	if e != nil {
 		kferr.Write(w, e)
+		return
+	}
+	if !a.guardTeam(w, r, id) {
 		return
 	}
 	uid, e := store.ResolveID(r.Context(), a.d.DB.Q(), "users", r.PathValue("userId"))

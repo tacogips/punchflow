@@ -35,7 +35,7 @@ func Validate(s *Set) error {
 		file  string
 		value any
 	}{
-		{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileOrganizationCharts, s.OrgCharts},
+		{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileUserCustomFields, s.UserCustomFields}, {FileOrganizationCharts, s.OrgCharts},
 		{FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters},
 		{FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants},
 		{FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks},
@@ -91,9 +91,35 @@ func Validate(s *Set) error {
 		gradeEntries = append(gradeEntries, pf06CodePath{x.Code, fmt.Sprintf("[%d].code", i)})
 	}
 	checkUnique(FileGrades, gradeEntries)
+	customDefs := map[string]model.UserCustomField{}
+	customEntries := make([]pf06CodePath, 0, len(s.UserCustomFields))
+	for i, x := range s.UserCustomFields {
+		customEntries = append(customEntries, pf06CodePath{x.Code, fmt.Sprintf("[%d].code", i)})
+		def := model.UserCustomField{ID: x.ID, Code: x.Code, Name: x.Name, FieldType: x.FieldType, Options: x.Options, VisibleToEveryone: x.VisibleToEveryone}
+		customDefs[x.Code] = def
+		if strings.TrimSpace(x.Name) == "" {
+			add(FileUserCustomFields, fmt.Sprintf("[%d].name", i), "name is required")
+		}
+		if !pf06Contains(model.UserCustomFieldTypes, x.FieldType) {
+			add(FileUserCustomFields, fmt.Sprintf("[%d].fieldType", i), "invalid user custom field type")
+		}
+		if (x.FieldType == model.UserCustomFieldTypeCheckbox || x.FieldType == model.UserCustomFieldTypePullDown) && len(x.Options) == 0 {
+			add(FileUserCustomFields, fmt.Sprintf("[%d].options", i), "options are required for checkbox and pullDown fields")
+		}
+	}
+	checkUnique(FileUserCustomFields, customEntries)
 	userEntries := make([]pf06CodePath, 0, len(s.Users))
 	for i, x := range s.Users {
 		userEntries = append(userEntries, pf06CodePath{x.Code, fmt.Sprintf("[%d].code", i)})
+		for code, value := range x.CustomFields {
+			path := fmt.Sprintf("[%d].customFields.%s", i, code)
+			def, ok := customDefs[code]
+			if !ok {
+				add(FileUsers, path, "unknown user custom field code")
+			} else if _, err := def.NormalizeValue(value); err != nil {
+				add(FileUsers, path, err.Error())
+			}
+		}
 		if !pf06Contains(model.UserStatuses, x.Status) {
 			add(FileUsers, fmt.Sprintf("[%d].status", i), "invalid user status")
 		}

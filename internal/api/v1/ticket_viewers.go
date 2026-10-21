@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"punchflow/internal/auth"
-	"punchflow/internal/engine"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
@@ -26,7 +25,7 @@ func (a *API) listTicketLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := auth.FromContext(r.Context())
 	ticketID := r.PathValue("ticketId")
-	if err = a.d.Engine.CanView(r.Context(), a.d.DB.Q(), engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID); err != nil {
+	if err = a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actorFor(p), ticketID); err != nil {
 		kferr.Write(w, err)
 		return
 	}
@@ -53,18 +52,15 @@ func (a *API) listViewers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
+	// Unsupported sort fields are ignored and the default order applies.
 	sort := httpx.ParseSort(r, "createdAt")
-	if raw := r.URL.Query().Get("sortBy"); raw != "" && sort.Field == "" {
-		kferr.Write(w, kferr.InvalidParameter("Invalid sortBy"))
-		return
-	}
 	p, _ := auth.FromContext(r.Context())
 	ticketID := r.PathValue("ticketId")
-	if err = a.d.Engine.CanView(r.Context(), a.d.DB.Q(), engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID); err != nil {
+	if err = a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actorFor(p), ticketID); err != nil {
 		kferr.Write(w, err)
 		return
 	}
-	ids, total, err := store.TicketQueryViewers(r.Context(), a.d.DB.Q(), ticketID, page.Offset(), page.PerPage, sort.Desc)
+	ids, total, err := store.TicketQueryViewers(r.Context(), a.d.DB.Q(), ticketID, page.Offset(), page.PerPage, sort.Set, sort.Desc)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -121,7 +117,7 @@ func (a *API) createViewer(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := auth.FromContext(r.Context())
 	ticketID := r.PathValue("ticketId")
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := actorFor(p)
 	if err = a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actor, ticketID); err != nil {
 		kferr.Write(w, err)
 		return
@@ -194,7 +190,7 @@ func (a *API) deleteViewer(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := auth.FromContext(r.Context())
 	ticketID, viewerID := r.PathValue("ticketId"), r.PathValue("viewerId")
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := actorFor(p)
 	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actor, ticketID); err != nil {
 		kferr.Write(w, err)
 		return

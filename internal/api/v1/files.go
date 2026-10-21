@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"punchflow/internal/auth"
-	"punchflow/internal/engine"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
@@ -99,7 +98,7 @@ func (a *API) getFile(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := actorFor(p)
 	visible := false
 	for _, ticketID := range ticketIDs {
 		if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actor, ticketID); err == nil {

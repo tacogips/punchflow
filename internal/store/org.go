@@ -10,8 +10,18 @@ import (
 	"punchflow/internal/model"
 )
 
-func OrgChartList(ctx context.Context, q Querier, offset, limit int) ([]model.OrganizationChart, int, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id FROM organization_charts ORDER BY created_at,id LIMIT ? OFFSET ?", limit, offset)
+// OrgChartList returns a page of organization charts. sortField is "createdAt"
+// (the default) or "name"; ties are broken by creation time and ID.
+func OrgChartList(ctx context.Context, q Querier, offset, limit int, sortField string, desc bool) ([]model.OrganizationChart, int, error) {
+	column := "created_at"
+	if sortField == "name" {
+		column = "name"
+	}
+	direction := "ASC"
+	if desc {
+		direction = "DESC"
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id FROM organization_charts ORDER BY "+column+" "+direction+",created_at ASC,id ASC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list org charts: %w", err)
 	}
@@ -60,7 +70,11 @@ func OrgChartActivate(ctx context.Context, q Querier, id string, at time.Time) e
 	res, e := q.ExecContext(ctx, "UPDATE organization_charts SET current=1,updated_at=? WHERE id=?", Millis(at), id)
 	return pf19RowsAffected(res, e)
 }
-func TeamList(ctx context.Context, q Querier, chartID string, parentID *string, offset, limit int) ([]model.Team, int, error) {
+
+// TeamList returns a page of teams of the chart under parentID (root teams when
+// nil), optionally limited to the teams admitted by filter.
+func TeamList(ctx context.Context, q Querier, chartID string, parentID *string, offset, limit int, filter IDFilter) ([]model.Team, int, error) {
+	scope, scopeArgs := filter.clause("id")
 	query := `SELECT id FROM teams WHERE organization_chart_id=? AND `
 	args := []any{chartID}
 	if parentID == nil {
@@ -69,7 +83,8 @@ func TeamList(ctx context.Context, q Querier, chartID string, parentID *string, 
 		query += "parent_id=?"
 		args = append(args, *parentID)
 	}
-	query += " ORDER BY code,id LIMIT ? OFFSET ?"
+	query += scope + " ORDER BY code,id LIMIT ? OFFSET ?"
+	args = append(args, scopeArgs...)
 	args = append(args, limit, offset)
 	rows, e := q.QueryContext(ctx, query, args...)
 	if e != nil {
@@ -103,6 +118,8 @@ func TeamList(ctx context.Context, q Querier, chartID string, parentID *string, 
 		countQuery += "parent_id=?"
 		countArgs = append(countArgs, *parentID)
 	}
+	countQuery += scope
+	countArgs = append(countArgs, scopeArgs...)
 	n, er := pf08Count(ctx, q, countQuery, countArgs...)
 	return out, n, er
 }

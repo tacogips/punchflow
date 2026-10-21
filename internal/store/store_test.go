@@ -7,11 +7,34 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"punchflow/internal/model"
 )
+
+// embeddedMigrations returns the number of embedded migration files and the
+// highest migration version, which every opened database must have applied.
+func embeddedMigrations(t *testing.T) (count, latest int) {
+	t.Helper()
+	entries, err := migrationFiles.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		version, convErr := strconv.Atoi(strings.SplitN(entry.Name(), "_", 2)[0])
+		if convErr != nil {
+			t.Fatalf("invalid migration name %q: %v", entry.Name(), convErr)
+		}
+		count++
+		if version > latest {
+			latest = version
+		}
+	}
+	return count, latest
+}
 
 func openTestDB(t *testing.T) *DB {
 	t.Helper()
@@ -68,7 +91,8 @@ func TestOpenMigratesAllTablesAndReopenIsIdempotent(t *testing.T) {
 		t.Fatalf("general_master_items.input_ids default=%v; want '{}'", inputIDsDefault)
 	}
 	var version int
-	if err := db.Q().QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 1 {
+	wantCount, wantLatest := embeddedMigrations(t)
+	if err := db.Q().QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != wantLatest {
 		t.Fatalf("migration version=%d err=%v", version, err)
 	}
 	var fk int
@@ -90,7 +114,7 @@ func TestOpenMigratesAllTablesAndReopenIsIdempotent(t *testing.T) {
 	if err = again.migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err = again.Q().QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&version); err != nil || version != 1 {
+	if err = again.Q().QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&version); err != nil || version != wantCount {
 		t.Fatalf("migration rows=%d err=%v", version, err)
 	}
 }
@@ -116,10 +140,11 @@ func TestOpenRelativePath(t *testing.T) {
 	defer func() { _ = check.Close() }()
 	var version, fk, migrations int
 	var journal string
-	if err = check.Q().QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 1 {
+	wantCount, wantLatest := embeddedMigrations(t)
+	if err = check.Q().QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != wantLatest {
 		t.Fatalf("migration version=%d err=%v", version, err)
 	}
-	if err = check.Q().QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&migrations); err != nil || migrations != 1 {
+	if err = check.Q().QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&migrations); err != nil || migrations != wantCount {
 		t.Fatalf("migration rows=%d err=%v", migrations, err)
 	}
 	if err = check.Q().QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
@@ -148,7 +173,8 @@ func TestOpenMemoryPath(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 	var version int
-	if err := db.Q().QueryRowContext(context.Background(), "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 1 {
+	_, wantLatest := embeddedMigrations(t)
+	if err := db.Q().QueryRowContext(context.Background(), "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != wantLatest {
 		t.Fatalf("memory migration version=%d err=%v", version, err)
 	}
 }
@@ -243,7 +269,8 @@ func TestTruncateAllRetainsMigrationAndSecrets(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if users != 0 || migrations != 1 || secrets != 1 {
+	wantCount, _ := embeddedMigrations(t)
+	if users != 0 || migrations != wantCount || secrets != 1 {
 		t.Fatalf("users=%d migrations=%d secrets=%d", users, migrations, secrets)
 	}
 }

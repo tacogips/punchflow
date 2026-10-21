@@ -9,6 +9,16 @@ type OrganizationChart struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// OrgChartActivationPlan is a scheduled future activation of an organization
+// chart. DueOn is the JST calendar date (YYYY-MM-DD) on which it takes effect.
+type OrgChartActivationPlan struct {
+	ID                  string    `json:"id"`
+	OrganizationChartID string    `json:"organizationChartId"`
+	DueOn               string    `json:"dueOn"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+}
 type Team struct {
 	ID                  string    `json:"id"`
 	OrganizationChartID string    `json:"organizationChartId"`

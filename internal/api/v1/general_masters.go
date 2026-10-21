@@ -45,8 +45,8 @@ type pf20ItemBody struct {
 	Code        *string          `json:"code"`
 	Name        *string          `json:"name"`
 	Description *string          `json:"description"`
-	StartsOn    *string          `json:"startsOn"`
-	EndsOn      *string          `json:"endsOn"`
+	StartsOn    nullable[string] `json:"startsOn"`
+	EndsOn      nullable[string] `json:"endsOn"`
 	Inputs      *[]pf20InputBody `json:"inputs"`
 }
 
@@ -65,7 +65,7 @@ func (a *API) listGeneralMasters(w http.ResponseWriter, r *http.Request) {
 	if by == "" {
 		by = "name"
 	}
-	xs, total, e := store.GeneralMasterList(r.Context(), a.d.DB.Q(), p.Offset(), p.PerPage, by, s.Desc)
+	xs, total, e := store.GeneralMasterList(r.Context(), a.d.DB.Q(), p.Offset(), p.PerPage, by, s.Desc, masterListFilter(principalOf(r)))
 	if e != nil {
 		kferr.Write(w, e)
 		return
@@ -84,6 +84,10 @@ func (a *API) listGeneralMasters(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) createGeneralMaster(w http.ResponseWriter, r *http.Request) {
 	if e := auth.Require(r, model.PermissionMaster); e != nil {
+		kferr.Write(w, e)
+		return
+	}
+	if e := requireUnrestricted(principalOf(r), model.PermissionMaster); e != nil {
 		kferr.Write(w, e)
 		return
 	}
@@ -149,6 +153,9 @@ func (a *API) getGeneralMaster(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	if !a.guardMaster(w, r, id, false) {
+		return
+	}
 	j, e := present.GeneralMaster(r.Context(), a.d.DB.Q(), id)
 	if e != nil {
 		kferr.Write(w, e)
@@ -166,12 +173,15 @@ func (a *API) updateGeneralMaster(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	if !a.guardMaster(w, r, id, true) {
+		return
+	}
 	x, e := store.GetGeneralMaster(r.Context(), a.d.DB.Q(), id)
 	if e != nil {
 		kferr.Write(w, e)
 		return
 	}
-	var b pf20MasterBody
+	var b pf20MasterPatch
 	if e = httpx.DecodeJSON(r, &b); e != nil {
 		kferr.Write(w, e)
 		return
@@ -208,7 +218,7 @@ func (a *API) updateGeneralMaster(w http.ResponseWriter, r *http.Request) {
 	x.UpdatedAt = time.Now().UTC()
 	var fs *[]model.GeneralMasterField
 	if b.Fields != nil {
-		converted, e := pf20MasterFields(b.Fields, id, x.UpdatedAt)
+		converted, e := pf20MergeMasterFields(r.Context(), a.d.DB.Q(), id, *b.Fields, x.UpdatedAt)
 		if e != nil {
 			kferr.Write(w, e)
 			return
@@ -240,6 +250,9 @@ func (a *API) deleteGeneralMaster(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	if !a.guardMaster(w, r, id, true) {
+		return
+	}
 	if e = store.DeleteGeneralMaster(r.Context(), a.d.DB.Q(), id); e != nil {
 		kferr.Write(w, e)
 		return
@@ -254,6 +267,9 @@ func (a *API) listGeneralMasterItems(w http.ResponseWriter, r *http.Request) {
 	master, e := store.ResolveID(r.Context(), a.d.DB.Q(), "general_masters", r.PathValue("generalMasterId"))
 	if e != nil {
 		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	if !a.guardMaster(w, r, master, false) {
 		return
 	}
 	p, e := httpx.ParsePage(r)
@@ -301,6 +317,9 @@ func (a *API) createGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	if !a.guardMaster(w, r, master, true) {
+		return
+	}
 	var b pf20ItemBody
 	if e = httpx.DecodeJSON(r, &b); e != nil {
 		kferr.Write(w, e)
@@ -316,8 +335,8 @@ func (a *API) createGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		x.Code = strings.TrimSpace(*b.Code)
 	}
 	x.Description = b.Description
-	x.StartsOn = b.StartsOn
-	x.EndsOn = b.EndsOn
+	x.StartsOn = b.StartsOn.pointer()
+	x.EndsOn = b.EndsOn.pointer()
 	if e = pf20ValidateDateBounds(x.StartsOn, x.EndsOn); e != nil {
 		kferr.Write(w, e)
 		return
@@ -352,6 +371,9 @@ func (a *API) getGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	if !a.guardMaster(w, r, master, false) {
+		return
+	}
 	raw := r.PathValue("itemId")
 	item, e := pf20ResolveItem(r.Context(), a.d.DB.Q(), master, raw)
 	if e != nil {
@@ -373,6 +395,9 @@ func (a *API) updateGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 	master, e := store.ResolveID(r.Context(), a.d.DB.Q(), "general_masters", r.PathValue("generalMasterId"))
 	if e != nil {
 		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	if !a.guardMaster(w, r, master, true) {
 		return
 	}
 	id, e := pf20ResolveItem(r.Context(), a.d.DB.Q(), master, r.PathValue("itemId"))
@@ -403,12 +428,8 @@ func (a *API) updateGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 	if b.Description != nil {
 		x.Description = b.Description
 	}
-	if b.StartsOn != nil {
-		x.StartsOn = b.StartsOn
-	}
-	if b.EndsOn != nil {
-		x.EndsOn = b.EndsOn
-	}
+	b.StartsOn.applyTo(&x.StartsOn)
+	b.EndsOn.applyTo(&x.EndsOn)
 	if e = pf20ValidateDateBounds(x.StartsOn, x.EndsOn); e != nil {
 		kferr.Write(w, e)
 		return
@@ -444,6 +465,9 @@ func (a *API) deleteGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 	master, e := store.ResolveID(r.Context(), a.d.DB.Q(), "general_masters", r.PathValue("generalMasterId"))
 	if e != nil {
 		kferr.Write(w, kferr.ResourceNotFound())
+		return
+	}
+	if !a.guardMaster(w, r, master, true) {
 		return
 	}
 	id, e := pf20ResolveItem(r.Context(), a.d.DB.Q(), master, r.PathValue("itemId"))

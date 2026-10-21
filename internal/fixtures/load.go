@@ -112,6 +112,18 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 			return counts, err
 		}
 	}
+	for i, f := range s.UserCustomFields {
+		options, e := jsonValue(f.Options)
+		if e != nil {
+			return counts, e
+		}
+		if f.Options == nil {
+			options = "[]"
+		}
+		if err = insert("user_custom_fields", "INSERT INTO user_custom_fields(id,code,name,field_type,options,visible_to_everyone,field_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", f.ID, f.Code, f.Name, f.FieldType, options, f.VisibleToEveryone, i, ms, ms); err != nil {
+			return counts, err
+		}
+	}
 	userIDs := map[string]string{}
 	for _, u := range s.Users {
 		custom, e := jsonValue(u.CustomFields)

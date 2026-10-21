@@ -67,7 +67,7 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.Internal())
 		return
 	}
-	items, err := present.Users(r.Context(), a.d.DB.Q(), ids, present.UserOpts{LastUsedOn: true, CustomFields: true})
+	items, err := present.Users(r.Context(), a.d.DB.Q(), ids, present.UserOpts{LastUsedOn: true, CustomFields: true, AllCustomFields: true})
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -121,13 +121,10 @@ func (a *API) createUser(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.DomainNotAllowed())
 		return
 	}
-	custom := map[string]any{}
-	for _, field := range body.CustomFields {
-		if field.Code == "" {
-			kferr.Write(w, kferr.InvalidParameter("Invalid customFields"))
-			return
-		}
-		custom[field.Code] = field.Value
+	custom, err := pf18ApplyCustomFields(r.Context(), a.d.DB.Q(), nil, body.CustomFields)
+	if err != nil {
+		kferr.Write(w, err)
+		return
 	}
 	now := a.d.Clock.Now()
 	user := model.User{ID: store.NewID(), Code: body.Code, Email: body.Email, FirstName: body.FirstName, LastName: body.LastName, EmployeeID: body.EmployeeID, Status: model.UserStatusInvited, Locale: "en", UserType: body.UserType, CustomFields: custom, CreatedAt: now, UpdatedAt: now}
@@ -173,7 +170,7 @@ func (a *API) createUser(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), user.ID)
+	out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), user.ID, true)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -206,6 +203,7 @@ func (a *API) pf18TransitionUser(w http.ResponseWriter, r *http.Request, action 
 	}
 	p, _ := auth.FromContext(r.Context())
 	now := a.d.Clock.Now()
+	hasEvents := false
 	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		u, err := store.GetUser(r.Context(), tx, id)
 		if err != nil {
@@ -241,14 +239,29 @@ func (a *API) pf18TransitionUser(w http.ResponseWriter, r *http.Request, action 
 		if err := store.UserSetStatus(r.Context(), tx, id, status, deactivated, store.Millis(now)); err != nil {
 			return err
 		}
+		if action == "delete" {
+			// Deletion (unlike suspension) archives the user's open tickets and
+			// drops their outstanding approver assignments.
+			events, err := a.d.Engine.CleanupDeletedUser(r.Context(), tx, actorFor(p), id)
+			if err != nil {
+				return err
+			}
+			if err = a.d.Events.Enqueue(r.Context(), tx, events); err != nil {
+				return err
+			}
+			hasEvents = len(events) > 0
+		}
 		return pf18Audit(r, tx, p.User.ID, audit, id, []string{"status"})
 	})
 	if err != nil {
 		kferr.Write(w, err)
 		return
 	}
+	if hasEvents {
+		a.d.Events.Notify()
+	}
 	if action == "suspend" || action == "delete" || action == "reactivate" || action == "reinvite" {
-		out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), id)
+		out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), id, true)
 		if err != nil {
 			kferr.Write(w, kferr.Internal())
 			return
@@ -301,13 +314,16 @@ func (a *API) updateUser(w http.ResponseWriter, r *http.Request) {
 			kferr.Write(w, kferr.InvalidParameter("Invalid customFields"))
 			return
 		}
-		patch.CustomFields = map[string]any{}
-		for _, f := range list {
-			if f.Code == "" {
-				kferr.Write(w, kferr.InvalidParameter("Invalid customFields"))
-				return
-			}
-			patch.CustomFields[f.Code] = f.Value
+		current, e := store.GetUser(r.Context(), a.d.DB.Q(), id)
+		if e != nil {
+			kferr.Write(w, kferr.ResourceNotFound())
+			return
+		}
+		// Entries are merged over the stored values; a null value clears a field.
+		patch.CustomFields, e = pf18ApplyCustomFields(r.Context(), a.d.DB.Q(), current.CustomFields, list)
+		if e != nil {
+			kferr.Write(w, e)
+			return
 		}
 		fields = append(fields, "customFields")
 	}
@@ -360,7 +376,7 @@ func (a *API) updateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), id)
+	out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), id, true)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -387,7 +403,7 @@ func (a *API) lookupUserByEmail(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), u.ID)
+	out, err := pf18UserDetail(r.Context(), a.d.DB.Q(), u.ID, true)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -440,6 +456,9 @@ func (a *API) listUserTeams(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if submittable && team.ApproveOnly {
+			continue
+		}
+		if !principalOf(r).Allows(model.PermissionTeam, id) {
 			continue
 		}
 		item, err := present.Team(r.Context(), a.d.DB.Q(), id)
@@ -500,8 +519,10 @@ func (a *API) listUserRoles(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, items)
 }
 
-func pf18UserDetail(ctx context.Context, q store.Querier, id string) (present.UserDetailJSON, error) {
-	out, err := present.UserDetail(ctx, q, id, present.UserOpts{LastUsedOn: true, CustomFields: true, UserType: true})
+// pf18UserDetail renders a user. includeHiddenFields adds the custom fields that
+// are not visible to everyone, which callers with the user permission may see.
+func pf18UserDetail(ctx context.Context, q store.Querier, id string, includeHiddenFields bool) (present.UserDetailJSON, error) {
+	out, err := present.UserDetail(ctx, q, id, present.UserOpts{LastUsedOn: true, CustomFields: true, UserType: true, AllCustomFields: includeHiddenFields})
 	if err != nil {
 		return nil, err
 	}

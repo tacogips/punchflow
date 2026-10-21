@@ -44,6 +44,13 @@ func Export(ctx context.Context, q store.Querier) (map[string][]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
+	defs, err := store.UserCustomFieldList(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range defs {
+		s.UserCustomFields = append(s.UserCustomFields, UserCustomFieldFixture{ID: d.ID, Code: d.Code, Name: d.Name, FieldType: d.FieldType, Options: d.Options, VisibleToEveryone: d.VisibleToEveryone})
+	}
 	userByID := map[string]string{}
 	if err = pf06Query(ctx, q, "SELECT id,code,email,first_name,last_name,employee_id,status,locale,user_type,custom_fields FROM users ORDER BY code", func(r *sql.Rows) error {
 		var x UserFixture
@@ -439,6 +446,9 @@ func pf06EncodeSet(s *Set) (map[string][]byte, error) {
 	if s.Categories == nil {
 		s.Categories = []CategoryFixture{}
 	}
+	if s.UserCustomFields == nil {
+		s.UserCustomFields = []UserCustomFieldFixture{}
+	}
 	if s.Folders == nil {
 		s.Folders = []FolderFixture{}
 	}
@@ -466,7 +476,7 @@ func pf06EncodeSet(s *Set) (map[string][]byte, error) {
 	values := []struct {
 		name string
 		v    any
-	}{{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileOrganizationCharts, s.OrgCharts}, {FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters}, {FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants}, {FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks}}
+	}{{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileUserCustomFields, s.UserCustomFields}, {FileOrganizationCharts, s.OrgCharts}, {FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters}, {FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants}, {FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks}}
 	for i := range values {
 		if values[i].v == nil {
 			values[i].v = []any{}

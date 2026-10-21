@@ -17,7 +17,15 @@
     "lastName": "User",
     "status": "activated",
     "locale": "ja",
-    "userType": "normal"
+    "userType": "normal",
+    "customFields": {
+      "cost-center": "CC-100",
+      "hire-date": "2020-04-01",
+      "skills": [
+        "go",
+        "sql"
+      ]
+    }
   },
   {
     "id": "00000000-0000-4000-8000-000000000017",
@@ -117,7 +125,11 @@
     "lastName": "User",
     "status": "activated",
     "locale": "ja",
-    "userType": "normal"
+    "userType": "normal",
+    "customFields": {
+      "cost-center": "CC-200",
+      "employment-type": "part-time"
+    }
   },
   {
     "id": "00000000-0000-4000-8000-000000000018",

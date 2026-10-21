@@ -11,6 +11,10 @@ import (
 type Actor struct {
 	UserID      string
 	Permissions map[string]bool
+	// ReadFolderIDs holds the folders (already expanded to descendants) that a
+	// restricted ticket_read role covers. Permissions[ticket_read] must be false
+	// when this is set; see ticketReadAllowed.
+	ReadFolderIDs map[string]bool
 }
 type Engine struct{ clock kftime.Clock }
 

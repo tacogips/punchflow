@@ -16,7 +16,7 @@ func (a *API) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.New(http.StatusUnauthorized, "unauthorized", "Unauthorized"))
 		return
 	}
-	x, err := pf18UserDetail(r.Context(), a.d.DB.Q(), p.User.ID)
+	x, err := pf18UserDetail(r.Context(), a.d.DB.Q(), p.User.ID, p.Has(model.PermissionUser))
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -33,7 +33,7 @@ func (a *API) getUser(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.New(404, "resource_not_found", "User not found"))
 		return
 	}
-	x, err := pf18UserDetail(r.Context(), a.d.DB.Q(), id)
+	x, err := pf18UserDetail(r.Context(), a.d.DB.Q(), id, true)
 	if err != nil {
 		kferr.Write(w, kferr.New(404, "resource_not_found", "User not found"))
 		return

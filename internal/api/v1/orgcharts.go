@@ -8,6 +8,7 @@ import (
 	"punchflow/internal/auth"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
+	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/present"
 	"punchflow/internal/store"
@@ -27,7 +28,8 @@ func (a *API) listOrganizationCharts(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	xs, n, err := store.OrgChartList(r.Context(), a.d.DB.Q(), page.Offset(), page.PerPage)
+	sort := httpx.ParseSort(r, "createdAt", "name")
+	xs, n, err := store.OrgChartList(r.Context(), a.d.DB.Q(), page.Offset(), page.PerPage, sort.Field, sort.Desc)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -46,6 +48,10 @@ func (a *API) listOrganizationCharts(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) createOrganizationChart(w http.ResponseWriter, r *http.Request) {
 	if err := auth.Require(r, model.PermissionTeam); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	if err := requireUnrestricted(principalOf(r), model.PermissionTeam); err != nil {
 		kferr.Write(w, err)
 		return
 	}
@@ -117,6 +123,10 @@ func (a *API) updateOrganizationChart(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
+	if err := requireUnrestricted(principalOf(r), model.PermissionTeam); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	id := r.PathValue("organizationChartId")
 	if _, err := store.GetOrganizationChart(r.Context(), a.d.DB.Q(), id); err != nil {
 		kferr.Write(w, kferr.ResourceNotFound())
@@ -149,19 +159,65 @@ func (a *API) updateOrganizationChart(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
+
+// pf19ActivateBody is the optional activation request. A missing or null dueOn
+// activates the chart immediately.
+type pf19ActivateBody struct {
+	DueOn nullable[string] `json:"dueOn"`
+}
+
 func (a *API) activateOrganizationChart(w http.ResponseWriter, r *http.Request) {
 	if err := auth.Require(r, model.PermissionTeam); err != nil {
 		kferr.Write(w, err)
 		return
 	}
+	if err := requireUnrestricted(principalOf(r), model.PermissionTeam); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	id := r.PathValue("organizationChartId")
-	if _, err := store.GetOrganizationChart(r.Context(), a.d.DB.Q(), id); err != nil {
+	chart, err := store.GetOrganizationChart(r.Context(), a.d.DB.Q(), id)
+	if err != nil {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
+	var b pf19ActivateBody
+	if err = httpx.DecodeJSON(r, &b); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	now := a.d.Clock.Now()
+	today := kftime.FormatDate(now)
+	dueOn := ""
+	if b.DueOn.Set && !b.DueOn.Null {
+		dueOn = b.DueOn.Value
+		if _, e := time.Parse("2006-01-02", dueOn); e != nil {
+			kferr.Write(w, kferr.InvalidParameter("Invalid dueOn"))
+			return
+		}
+		if dueOn < today {
+			kferr.Write(w, kferr.ValidationFailed(map[string][]string{"dueOn": {"must not be in the past"}}))
+			return
+		}
+	}
+	scheduled := dueOn > today
+	if scheduled && chart.Current {
+		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"base": {"organization chart is already current"}}))
+		return
+	}
 	p, _ := auth.FromContext(r.Context())
-	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
-		if e := store.OrgChartActivate(r.Context(), tx, id, time.Now()); e != nil {
+	err = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		if scheduled {
+			plan := model.OrgChartActivationPlan{ID: store.NewID(), OrganizationChartID: id, DueOn: dueOn, CreatedAt: now, UpdatedAt: now}
+			if e := store.OrgChartActivationPlanReplace(r.Context(), tx, plan); e != nil {
+				return e
+			}
+			return a.pf19ChartAudit(r, tx, p.User.ID, "organizationChart.activation.schedule", id)
+		}
+		if e := store.OrgChartActivate(r.Context(), tx, id, now); e != nil {
+			return e
+		}
+		if e := store.OrgChartActivationPlansClear(r.Context(), tx); e != nil {
 			return e
 		}
 		return a.pf19ChartAudit(r, tx, p.User.ID, "organizationChart.activate", id)
@@ -179,6 +235,10 @@ func (a *API) activateOrganizationChart(w http.ResponseWriter, r *http.Request) 
 }
 func (a *API) deleteOrganizationChart(w http.ResponseWriter, r *http.Request) {
 	if err := auth.Require(r, model.PermissionTeam); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	if err := requireUnrestricted(principalOf(r), model.PermissionTeam); err != nil {
 		kferr.Write(w, err)
 		return
 	}

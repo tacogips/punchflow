@@ -3,7 +3,6 @@ package v1
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"punchflow/internal/auth"
@@ -139,45 +138,27 @@ func (a *API) pf22ListTickets(w http.ResponseWriter, r *http.Request, tasks bool
 			return
 		}
 	}
-	sortBy := q.Get("sortBy")
-	if sortBy != "" {
-		parts := strings.Split(sortBy, "-")
-		filter.SortBy = parts[0]
-		if len(parts) > 2 || (len(parts) == 2 && parts[1] != "asc" && parts[1] != "desc") {
-			kferr.Write(w, kferr.InvalidParameter("Invalid sortBy"))
-			return
-		}
-		if len(parts) == 2 {
-			filter.Desc = parts[1] == "desc"
-		}
-		allowed := []string{"createdAt", "updatedAt"}
-		if tasks {
-			allowed = append(allowed, "openedAt", "assignedToMeAt")
-		}
-		ok := false
-		for _, v := range allowed {
-			if filter.SortBy == v {
-				ok = true
-			}
-		}
-		if !ok {
-			kferr.Write(w, kferr.InvalidParameter("Invalid sortBy"))
-			return
-		}
+	allowedSorts := []string{"createdAt", "updatedAt"}
+	if tasks {
+		allowedSorts = append(allowedSorts, "openedAt", "assignedToMeAt")
+	}
+	// Unsupported sort fields are ignored (default order), per the REST conventions.
+	if sort := httpx.ParseSort(r, allowedSorts...); sort.Set {
+		filter.SortBy, filter.Desc = sort.Field, sort.Desc
 	}
 	if tasks {
 		filter.TaskUserIDs = []string{p.User.ID}
 		filter.TaskProxyUserID = p.User.ID
 		filter.TaskProxyDate = kftime.FormatDate(a.d.Clock.Now())
 	}
-	if !tasks && !p.Has(model.PermissionTicketRead, model.PermissionTicketWrite) {
+	if !tasks && !p.Unrestricted(model.PermissionTicketRead) && !p.Unrestricted(model.PermissionTicketWrite) {
 		candidates, _, e := store.TicketQueryList(r.Context(), a.d.DB.Q(), filter, 0, -1)
 		if e != nil {
 			kferr.Write(w, kferr.Internal())
 			return
 		}
 		visible := make([]string, 0, len(candidates))
-		actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+		actor := actorFor(p)
 		for _, id := range candidates {
 			canViewErr := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actor, id)
 			if canViewErr == nil {
@@ -213,7 +194,7 @@ func (a *API) getTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := auth.FromContext(r.Context())
 	id := r.PathValue("ticketId")
-	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, id); err != nil {
+	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actorFor(p), id); err != nil {
 		kferr.Write(w, err)
 		return
 	}
@@ -236,7 +217,7 @@ func (a *API) createTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := auth.FromContext(r.Context())
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := actorFor(p)
 	var out present.TicketDetailJSON
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		id, events, e := a.d.Engine.Create(r.Context(), tx, actor, input)
@@ -295,7 +276,7 @@ func (a *API) pf22Update(w http.ResponseWriter, r *http.Request, action string, 
 	}
 	p, _ := auth.FromContext(r.Context())
 	id := r.PathValue("ticketId")
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := actorFor(p)
 	var out present.TicketDetailJSON
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		events, e := mutate(r.Context(), tx, actor, id)

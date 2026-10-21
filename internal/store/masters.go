@@ -8,7 +8,10 @@ import (
 	"sort"
 )
 
-func GeneralMasterList(ctx context.Context, q Querier, offset, limit int, sortBy string, desc bool) ([]model.GeneralMaster, int, error) {
+// GeneralMasterList returns a page of general masters, optionally limited to
+// the masters admitted by filter.
+func GeneralMasterList(ctx context.Context, q Querier, offset, limit int, sortBy string, desc bool, filter IDFilter) ([]model.GeneralMaster, int, error) {
+	scope, scopeArgs := filter.clause("id")
 	order := map[string]string{"createdAt": "created_at", "code": "code", "name": "name"}[sortBy]
 	if order == "" {
 		order = "name"
@@ -19,10 +22,10 @@ func GeneralMasterList(ctx context.Context, q Querier, offset, limit int, sortBy
 		order += " ASC"
 	}
 	var total int
-	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM general_masters`).Scan(&total); err != nil {
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM general_masters WHERE 1=1`+scope, scopeArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := q.QueryContext(ctx, `SELECT id FROM general_masters ORDER BY `+order+`,id LIMIT ? OFFSET ?`, limit, offset)
+	rows, err := q.QueryContext(ctx, `SELECT id FROM general_masters WHERE 1=1`+scope+` ORDER BY `+order+`,id LIMIT ? OFFSET ?`, append(append([]any{}, scopeArgs...), limit, offset)...)
 	if err != nil {
 		return nil, 0, err
 	}

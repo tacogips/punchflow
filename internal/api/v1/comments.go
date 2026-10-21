@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"punchflow/internal/auth"
-	"punchflow/internal/engine"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
@@ -19,7 +18,7 @@ func (a *API) listComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ticketID := r.PathValue("ticketId")
-	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID); err != nil {
+	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actorFor(p), ticketID); err != nil {
 		kferr.Write(w, err)
 		return
 	}
@@ -86,7 +85,7 @@ func (a *API) createComment(w http.ResponseWriter, r *http.Request) {
 	var events []model.WebhookEvent
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		var callErr error
-		commentID, events, callErr = a.d.Engine.AddComment(r.Context(), tx, engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID, body.Body, body.Files)
+		commentID, events, callErr = a.d.Engine.AddComment(r.Context(), tx, actorFor(p), ticketID, body.Body, body.Files)
 		if callErr != nil {
 			if apiErr, ok := kferr.As(callErr); ok && apiErr.Code == "invalid_state" && apiErr.Message == "Comments are disabled for this workflow" {
 				return kferr.ValidationFailed(map[string][]string{"base": {apiErr.Message}})
@@ -117,7 +116,7 @@ func (a *API) getComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ticketID, commentID := r.PathValue("ticketId"), r.PathValue("commentId")
-	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID); err != nil {
+	if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actorFor(p), ticketID); err != nil {
 		kferr.Write(w, err)
 		return
 	}
@@ -149,7 +148,7 @@ func (a *API) updateComment(w http.ResponseWriter, r *http.Request) {
 	var events []model.WebhookEvent
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		var callErr error
-		events, callErr = a.d.Engine.EditComment(r.Context(), tx, engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID, commentID, body.Body)
+		events, callErr = a.d.Engine.EditComment(r.Context(), tx, actorFor(p), ticketID, commentID, body.Body)
 		if callErr != nil {
 			return callErr
 		}
@@ -180,7 +179,7 @@ func (a *API) deleteComment(w http.ResponseWriter, r *http.Request) {
 	var events []model.WebhookEvent
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		var callErr error
-		events, callErr = a.d.Engine.DeleteComment(r.Context(), tx, engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, ticketID, commentID)
+		events, callErr = a.d.Engine.DeleteComment(r.Context(), tx, actorFor(p), ticketID, commentID)
 		if callErr != nil {
 			return callErr
 		}

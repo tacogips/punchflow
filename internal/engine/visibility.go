@@ -31,6 +31,9 @@ func (e *Engine) pf14EffectiveVisibility(ctx context.Context, q store.Querier, a
 	if a.Permissions[model.PermissionTicketRead] || a.Permissions[model.PermissionTicketWrite] {
 		return true, nil
 	}
+	if ok, err := ticketReadAllowed(ctx, q, a, t.WorkflowID); err != nil || ok {
+		return ok, err
+	}
 	def, err := store.WorkflowDefByID(ctx, q, t.WorkflowID)
 	if err != nil {
 		return false, err

@@ -23,10 +23,8 @@ func TestFolderCRUDAndRootGuard(t *testing.T) {
 	if root.Status != http.StatusForbidden {
 		t.Fatalf("root update=%d %s", root.Status, root.Body)
 	}
-	used := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/folders/finance", nil)
-	if used.Status != http.StatusUnprocessableEntity {
-		t.Fatalf("used delete=%d %s", used.Status, used.Body)
-	}
+	// Deleting a folder that holds workflows is allowed: it deletes everything below it
+	// (see TestDeleteFolderRemovesDescendantsAndRetiresDefinitions).
 	created := env.Do(t, testutil.Admin, http.MethodPost, "/v1/folders", map[string]any{"name": "Temporary", "parentFolderId": "general"})
 	if created.Status != http.StatusOK {
 		t.Fatalf("create=%d %s", created.Status, created.Body)
