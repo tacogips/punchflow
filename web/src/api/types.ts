@@ -43,3 +43,24 @@ export interface WebhookAttempt { id: string; statusCode?: number | null; create
 export interface WebhookEvent { id: string; eventType: string; attempts: WebhookAttempt[]; [key: string]: unknown }
 export interface TenantSettings { name: string; plan: string; mode: string; [key: string]: unknown }
 export interface FaultRule { id: string; pathPrefix: string; status: number; code: string; [key: string]: unknown }
+export interface Label { id: string; name: string; description: string | null; color: string; createdAt: string; updatedAt: string }
+export interface SubStatus {
+  id: string; code: string; name: string; notes: string | null;
+  allowWithdrawal: boolean; allowRejection: boolean; allowDenial: boolean; createdAt: string; updatedAt: string;
+}
+/** Runtime lifecycle controls the caller may use on a ticket (GET /ui/api/tickets/{id}/controls). */
+export interface TicketControls {
+  cancelApproval: boolean;
+  raise: boolean;
+  raiseTargetStepOrders: number[];
+  addCustomStep: boolean;
+  customStepInsertAfter: number[];
+  removableCustomStepIds: string[];
+}
+export interface CustomStepBody {
+  title: string;
+  actionType: "approve" | "confirm";
+  userIds: string[];
+  instruction?: string;
+  afterStepOrder?: number;
+}

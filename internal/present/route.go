@@ -70,7 +70,11 @@ func RouteDetail(ctx context.Context, q store.Querier, id string) (RouteDetailJS
 			}
 			condition = map[string]any{"id": s.RouteStepCondition.ID, "conditionType": s.RouteStepCondition.ConditionType, "combinationType": s.RouteStepCondition.CombinationType, "routeStepConditionFields": fields}
 		}
-		outSteps = append(outSteps, map[string]any{"id": s.ID, "stepOrder": s.StepOrder, "stepType": s.StepType, "title": s.Title, "actionType": s.ActionType, "instruction": s.Instruction, "requiredApprovalsNumber": s.RequiredApprovalsNumber, "requiredApprovalsPercent": s.RequiredApprovalsPercent, "fallbackType": s.FallbackType, "allowSelfApproval": s.AllowSelfApproval, "managerSelectionType": s.ManagerSelectionType, "allowRaising": s.AllowRaising, "minCustomAssignees": s.MinCustomAssignees, "approverAssignmentInstruction": s.ApproverAssignmentInstruction, "users": users, "code": s.Code, "targets": targets, "routeStepCondition": condition, "subStatus": s.SubStatus})
+		subStatus, err := subStatusByCode(ctx, q, s.SubStatus)
+		if err != nil {
+			return nil, err
+		}
+		outSteps = append(outSteps, map[string]any{"id": s.ID, "stepOrder": s.StepOrder, "stepType": s.StepType, "title": s.Title, "actionType": s.ActionType, "instruction": s.Instruction, "requiredApprovalsNumber": s.RequiredApprovalsNumber, "requiredApprovalsPercent": s.RequiredApprovalsPercent, "fallbackType": s.FallbackType, "allowSelfApproval": s.AllowSelfApproval, "managerSelectionType": s.ManagerSelectionType, "allowRaising": s.AllowRaising, "minCustomAssignees": s.MinCustomAssignees, "approverAssignmentInstruction": s.ApproverAssignmentInstruction, "users": users, "code": s.Code, "targets": targets, "routeStepCondition": condition, "subStatus": subStatus})
 	}
 	out := RouteDetailJSON(base)
 	out["steps"] = outSteps

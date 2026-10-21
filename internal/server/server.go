@@ -14,6 +14,7 @@ import (
 
 	punchflow "punchflow"
 	"punchflow/internal/admin"
+	"punchflow/internal/api/ticketui"
 	v1 "punchflow/internal/api/v1"
 	"punchflow/internal/auth"
 	"punchflow/internal/engine"
@@ -143,6 +144,7 @@ func New(ctx context.Context, cfg Config, clock kftime.Clock) (*Server, error) {
 
 	uiMux := http.NewServeMux()
 	uiapi.New(uiapi.Deps{DB: db, Engine: engineService, V1: apiMux, Clock: clock, BaseURL: cfg.PublicBaseURL}).Register(uiMux)
+	ticketui.New(ticketui.Deps{DB: db, Engine: engineService, Events: events, Clock: clock}).RegisterRoutes(uiMux)
 	uiHandler := httpx.Chain(uiMux,
 		httpx.RequestID,
 		httpx.Recover,

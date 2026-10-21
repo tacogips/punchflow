@@ -131,7 +131,7 @@
         "userCodes": [],
         "targets": [],
         "routeStepCondition": null,
-        "subStatus": null
+        "subStatus": "under-review"
       },
       {
         "id": "b7bd2c08-4f54-44fe-b593-3c83ef7fa1d8",
@@ -146,7 +146,7 @@
         "fallbackType": null,
         "allowSelfApproval": false,
         "managerSelectionType": "closest",
-        "allowRaising": false,
+        "allowRaising": true,
         "minCustomAssignees": null,
         "approverAssignmentInstruction": null,
         "userCodes": [],
@@ -157,7 +157,7 @@
           }
         ],
         "routeStepCondition": null,
-        "subStatus": null
+        "subStatus": "finance-check"
       }
     ]
   },

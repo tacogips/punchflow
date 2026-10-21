@@ -118,7 +118,7 @@ func TicketSlipItems(ctx context.Context, q Querier, id string) ([]model.TicketS
 }
 
 func TicketSteps(ctx context.Context, q Querier, id string) ([]model.TicketStep, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,route_step_id,route_step_code,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,fallback_result,completed_at,created_at,updated_at FROM ticket_steps WHERE ticket_id=? ORDER BY display_order,step_order,id`, id)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,route_step_id,route_step_code,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,fallback_result,completed_at,created_at,updated_at,author_id,instruction FROM ticket_steps WHERE ticket_id=? ORDER BY display_order,step_order,id`, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket steps: %w", err)
 	}
@@ -126,13 +126,14 @@ func TicketSteps(ctx context.Context, q Querier, id string) ([]model.TicketStep,
 	out := []model.TicketStep{}
 	for rows.Next() {
 		var x model.TicketStep
-		var rid, code, title, result sql.NullString
+		var rid, code, title, result, stepAuthor, stepInstruction sql.NullString
 		var skip, fallback int
 		var done sql.NullInt64
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketID, &rid, &code, &x.StepOrder, &x.DisplayOrder, &title, &x.ActionType, &x.RequiredApprovalsNumber, &x.RequiredApprovalsPercent, &x.Status, &skip, &fallback, &result, &done, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketID, &rid, &code, &x.StepOrder, &x.DisplayOrder, &title, &x.ActionType, &x.RequiredApprovalsNumber, &x.RequiredApprovalsPercent, &x.Status, &skip, &fallback, &result, &done, &c, &u, &stepAuthor, &stepInstruction); err != nil {
 			return nil, err
 		}
+		x.AuthorID, x.Instruction = pf15StringPtr(stepAuthor), pf15StringPtr(stepInstruction)
 		x.RouteStepID, x.RouteStepCode, x.Title = pf15StringPtr(rid), pf15StringPtr(code), pf15StringPtr(title)
 		x.Skip, x.Fallback = skip != 0, fallback != 0
 		x.FallbackResult = pf15StringPtr(result)

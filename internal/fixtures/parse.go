@@ -29,6 +29,8 @@ type Set struct {
 	ProxyApprovers   []ProxyFixture
 	Tokens           []TokenFixture
 	Webhooks         []WebhookFixture
+	Labels           []LabelFixture
+	SubStatuses      []SubStatusFixture
 }
 
 // Problem describes one invalid value in a fixture file.
@@ -62,6 +64,7 @@ func Parse(fsys fs.FS) (*Set, error) {
 		{FileRoutes, &out.Routes, false}, {FileWorkflows, &out.Workflows, false},
 		{FileProxyApplicants, &out.ProxyApplicants, false}, {FileProxyApprovers, &out.ProxyApprovers, false},
 		{FileTokens, &out.Tokens, false}, {FileWebhooks, &out.Webhooks, false},
+		{FileLabels, &out.Labels, false}, {FileSubStatuses, &out.SubStatuses, false},
 	}
 	for _, f := range files {
 		data, err := fs.ReadFile(fsys, f.name)

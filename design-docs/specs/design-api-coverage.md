@@ -213,7 +213,7 @@ Added in session 462 to close carried finding CF-01 (`notes.md`). The values com
 | Enum | Values | Source | Excluded (reason) | Go list |
 |---|---|---|---|---|
 | Ticket status | `draft`, `in_progress`, `completed`, `rejected`, `denied`, `archived` | `TicketSummary.status` | `permanently_deleted` (DIV-04) | `TicketStatuses` |
-| Ticket step status | `pending`, `in_progress`, `completed`, `skipped` | `TicketStep.status` | `raised` (DIV-04) | `StepStatuses` |
+| Ticket step status | `pending`, `in_progress`, `completed`, `skipped`, `raised` | `TicketStep.status` | - | `StepStatuses` |
 | Action type | `approve`, `confirm`, `none` | `RouteStep.actionType`, `TicketStep.actionType` | - | `ActionTypes` |
 | Step type | `author`, `manager`, `team`, `user`, `author_customizable`, `assignee_customizable`, `dynamic_team`, `dynamic_user` | `RouteStep.stepType` | - | `StepTypes` |
 | Fallback | `direct_manager`, `higher_manager`, `skip`, `no_fallback`, `higher_team`, or `null` | `RouteStep.fallbackType`, `TicketStep.fallbackResult` | - | `FallbackTypes` |

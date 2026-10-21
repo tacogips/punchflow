@@ -109,7 +109,7 @@ func EngReplaceSlipItems(ctx context.Context, q Querier, ticketID string, values
 	return nil
 }
 func EngTicketSteps(ctx context.Context, q Querier, ticketID string) ([]model.TicketStep, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,route_step_id,route_step_code,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,fallback_result,completed_at,created_at,updated_at FROM ticket_steps WHERE ticket_id=? ORDER BY display_order,id`, ticketID)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,route_step_id,route_step_code,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,fallback_result,completed_at,created_at,updated_at,author_id,instruction FROM ticket_steps WHERE ticket_id=? ORDER BY display_order,id`, ticketID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine steps: %w", err)
 	}
@@ -117,13 +117,14 @@ func EngTicketSteps(ctx context.Context, q Querier, ticketID string) ([]model.Ti
 	out := []model.TicketStep{}
 	for rows.Next() {
 		var x model.TicketStep
-		var rid, code, title, fallback sql.NullString
+		var rid, code, title, fallback, stepAuthor, stepInstruction sql.NullString
 		var skip, fb int
 		var done sql.NullInt64
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketID, &rid, &code, &x.StepOrder, &x.DisplayOrder, &title, &x.ActionType, &x.RequiredApprovalsNumber, &x.RequiredApprovalsPercent, &x.Status, &skip, &fb, &fallback, &done, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketID, &rid, &code, &x.StepOrder, &x.DisplayOrder, &title, &x.ActionType, &x.RequiredApprovalsNumber, &x.RequiredApprovalsPercent, &x.Status, &skip, &fb, &fallback, &done, &c, &u, &stepAuthor, &stepInstruction); err != nil {
 			return nil, err
 		}
+		x.AuthorID, x.Instruction = pf14StringPtr(stepAuthor), pf14StringPtr(stepInstruction)
 		x.RouteStepID = pf14StringPtr(rid)
 		x.RouteStepCode = pf14StringPtr(code)
 		x.Title = pf14StringPtr(title)
@@ -145,7 +146,7 @@ func EngDeleteTicketSteps(ctx context.Context, q Querier, ticketID string) error
 	return nil
 }
 func EngInsertStep(ctx context.Context, q Querier, x model.TicketStep) error {
-	_, err := q.ExecContext(ctx, `INSERT INTO ticket_steps(id,ticket_id,route_step_id,route_step_code,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,fallback_result,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, x.ID, x.TicketID, x.RouteStepID, x.RouteStepCode, x.StepOrder, x.DisplayOrder, x.Title, x.ActionType, x.RequiredApprovalsNumber, x.RequiredApprovalsPercent, x.Status, x.Skip, x.Fallback, x.FallbackResult, NullMillis(x.CompletedAt), Millis(x.CreatedAt), Millis(x.UpdatedAt))
+	_, err := q.ExecContext(ctx, `INSERT INTO ticket_steps(id,ticket_id,route_step_id,route_step_code,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,fallback_result,completed_at,created_at,updated_at,author_id,instruction) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, x.ID, x.TicketID, x.RouteStepID, x.RouteStepCode, x.StepOrder, x.DisplayOrder, x.Title, x.ActionType, x.RequiredApprovalsNumber, x.RequiredApprovalsPercent, x.Status, x.Skip, x.Fallback, x.FallbackResult, NullMillis(x.CompletedAt), Millis(x.CreatedAt), Millis(x.UpdatedAt), x.AuthorID, x.Instruction)
 	if err != nil {
 		return fmt.Errorf("store: insert engine step: %w", err)
 	}

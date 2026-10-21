@@ -12,6 +12,8 @@ const (
 	StepStatusInProgress = "in_progress"
 	StepStatusCompleted  = "completed"
 	StepStatusSkipped    = "skipped"
+	// StepStatusRaised marks a step that was bypassed by raising (PF-19).
+	StepStatusRaised = "raised"
 
 	ActionTypeApprove = "approve"
 	ActionTypeConfirm = "confirm"
@@ -142,7 +144,7 @@ const (
 )
 
 var TicketStatuses = []string{TicketStatusDraft, TicketStatusInProgress, TicketStatusCompleted, TicketStatusRejected, TicketStatusDenied, TicketStatusArchived}
-var StepStatuses = []string{StepStatusPending, StepStatusInProgress, StepStatusCompleted, StepStatusSkipped}
+var StepStatuses = []string{StepStatusPending, StepStatusInProgress, StepStatusCompleted, StepStatusSkipped, StepStatusRaised}
 var ActionTypes = []string{ActionTypeApprove, ActionTypeConfirm, ActionTypeNone}
 var StepTypes = []string{StepTypeAuthor, StepTypeManager, StepTypeTeam, StepTypeUser, StepTypeAuthorCustomizable, StepTypeAssigneeCustomizable, StepTypeDynamicTeam, StepTypeDynamicUser}
 var FallbackTypes = []string{FallbackDirectManager, FallbackHigherManager, FallbackSkip, FallbackNoFallback, FallbackHigherTeam}

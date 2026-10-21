@@ -74,8 +74,14 @@ func Ticket(ctx context.Context, q store.Querier, id string) (TicketJSON, error)
 	out["author"] = author
 	out["authorTeam"] = team
 	out["proxyClientUser"] = proxy
-	out["subStatus"] = nil
-	out["labels"] = []any{}
+	// The sub-status is only meaningful while the ticket is in progress; the
+	// engine clears it on every other transition.
+	if out["subStatus"], err = ticketSubStatus(ctx, q, id); err != nil {
+		return nil, err
+	}
+	if out["labels"], err = ticketLabels(ctx, q, id); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -166,7 +172,14 @@ func ticketStepJSON(ctx context.Context, q store.Querier, ticketID string, detai
 			}
 			assigned = append(assigned, am)
 		}
-		m := map[string]any{"id": step.ID, "routeStepId": nullableString(step.RouteStepID), "title": nullableString(step.Title), "actionType": step.ActionType, "requiredApprovalsNumber": step.RequiredApprovalsNumber, "requiredApprovalsPercent": step.RequiredApprovalsPercent, "stepOrder": step.StepOrder, "skip": step.Skip, "fallback": step.Fallback, "fallbackResult": nullableString(step.FallbackResult), "author": nil, "assignees": assigned, "completed": step.Status == model.StepStatusCompleted, "completedAt": nullableTimeValue(step.CompletedAt), "instruction": nil, "displayOrder": step.DisplayOrder, "status": step.Status}
+		// Only custom steps (no route step) record their author.
+		var stepAuthor any
+		if step.AuthorID != nil {
+			if stepAuthor, err = User(ctx, q, *step.AuthorID, UserOpts{}); err != nil {
+				return nil, err
+			}
+		}
+		m := map[string]any{"id": step.ID, "routeStepId": nullableString(step.RouteStepID), "title": nullableString(step.Title), "actionType": step.ActionType, "requiredApprovalsNumber": step.RequiredApprovalsNumber, "requiredApprovalsPercent": step.RequiredApprovalsPercent, "stepOrder": step.StepOrder, "skip": step.Skip, "fallback": step.Fallback, "fallbackResult": nullableString(step.FallbackResult), "author": stepAuthor, "assignees": assigned, "completed": step.Status == model.StepStatusCompleted, "completedAt": nullableTimeValue(step.CompletedAt), "instruction": nullableString(step.Instruction), "displayOrder": step.DisplayOrder, "status": step.Status}
 		out = append(out, m)
 	}
 	return out, nil

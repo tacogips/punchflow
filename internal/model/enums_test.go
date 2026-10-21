@@ -27,7 +27,7 @@ func TestEnumListsMatchOpenAPI(t *testing.T) {
 		exclude []string
 	}{
 		{"TicketStatuses", TicketStatuses, "TicketSummary", []string{"status"}, []string{"permanently_deleted"}},
-		{"StepStatuses", StepStatuses, "TicketStep", []string{"status"}, []string{"raised"}},
+		{"StepStatuses", StepStatuses, "TicketStep", []string{"status"}, nil},
 		{"ActionTypes", ActionTypes, "RouteStep", []string{"actionType"}, nil},
 		{"StepTypes", StepTypes, "RouteStep", []string{"stepType"}, nil},
 		{"FallbackTypes", FallbackTypes, "RouteStep", []string{"fallbackType"}, nil},

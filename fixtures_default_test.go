@@ -31,6 +31,8 @@ func TestDefaultFixturesStrictDecode(t *testing.T) {
 		{fixturetypes.FileProxyApprovers, func() any { return &[]fixturetypes.ProxyFixture{} }},
 		{fixturetypes.FileTokens, func() any { return &[]fixturetypes.TokenFixture{} }},
 		{fixturetypes.FileWebhooks, func() any { return &[]fixturetypes.WebhookFixture{} }},
+		{fixturetypes.FileLabels, func() any { return &[]fixturetypes.LabelFixture{} }},
+		{fixturetypes.FileSubStatuses, func() any { return &[]fixturetypes.SubStatusFixture{} }},
 	}
 	for _, file := range files {
 		t.Run(file.name, func(t *testing.T) {

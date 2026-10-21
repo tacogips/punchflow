@@ -204,7 +204,10 @@ func pf14Empty(v any) bool {
 	return pf14bEmptyArray(v)
 }
 
-func pf14ValidateApprovalInputs(def model.WorkflowDef, rows []model.TicketInput) error {
+// pf14ValidateApprovalInputs requires the approver-required form fields and the
+// approver-required cells of every detail (slip) row to be filled before an
+// approval. Hidden and calculated detail cells cannot be entered and are exempt.
+func pf14ValidateApprovalInputs(def model.WorkflowDef, rows []model.TicketInput, slips []model.TicketSlipItem) error {
 	inputs := pf14InputsFromRows(def, rows)
 	values := pf14InputValues(def, inputs)
 	for _, section := range def.SectionList {
@@ -213,6 +216,27 @@ func pf14ValidateApprovalInputs(def model.WorkflowDef, rows []model.TicketInput)
 		}
 		for _, field := range section.FormFields {
 			if field.Approver && field.Required && pf14Empty(values[field.Code]) {
+				return kferr.InputRequiredBeforeApprove()
+			}
+		}
+	}
+	sections := map[string]model.WorkflowSection{}
+	for _, section := range def.SectionList {
+		if section.SectionType == model.SectionTypeSlip {
+			sections[section.ID] = section
+		}
+	}
+	for _, row := range slips {
+		section, ok := sections[row.SlipSectionID]
+		if !ok {
+			continue
+		}
+		for _, field := range section.SlipFields {
+			hidden := field.Hidden != nil && *field.Hidden
+			if !field.Approver || !field.Required || hidden || field.FieldType == "calculation" {
+				continue
+			}
+			if cell, _ := slipCell(row, field); pf14Empty(cell) {
 				return kferr.InputRequiredBeforeApprove()
 			}
 		}

@@ -97,7 +97,14 @@ export function availableActions(t: TicketDetail, me: { id: string; permissions:
     actions.push("archive");
   }
   if ((isAuthor && ["draft", "rejected"].includes(status)) || assigned) actions.push("edit");
-  return actions;
+  // A sub-status can forbid withdrawal, sending back and denial; the server
+  // refuses them too, so the buttons are simply not offered.
+  const subStatus = asRecord(ticket.subStatus);
+  const forbidden: TicketAction[] = [];
+  if (subStatus.allowWithdrawal === false) forbidden.push("withdraw");
+  if (subStatus.allowRejection === false) forbidden.push("reject");
+  if (subStatus.allowDenial === false) forbidden.push("deny");
+  return actions.filter((action) => !forbidden.includes(action));
 }
 
 export function sendBackTargets(t: TicketDetail): { to: number; label: string }[] {

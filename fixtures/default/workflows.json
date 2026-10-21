@@ -374,7 +374,7 @@
     "reportFileNameFormat": null,
     "collectEmailOnExternalPublish": false,
     "notifyGuestOnCompletion": false,
-    "allowCustomSteps": false,
+    "allowCustomSteps": true,
     "ticketNumberKey": null,
     "ticketViewers": [],
     "watchers": [],

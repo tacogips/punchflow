@@ -113,6 +113,10 @@ Open `http://localhost:8080`, sign in as `sales-rep@punchflow.test` with passwor
 
 Local e-mail login and the admin fixture reset API are disabled by default. Enable them explicitly with `--enable-local-login` and `--enable-admin-reset` (or `PUNCHFLOW_ENABLE_LOCAL_LOGIN=true` and `PUNCHFLOW_ENABLE_ADMIN_RESET=true`). `--rate-limit N` enables per-IP request limiting on `/v1`; `--rate-limit-secret VALUE` configures the secret that raises the limit. Tenant modes and fault injection can be configured through the dev admin API to exercise error responses.
 
+## Labels, sub-statuses and lifecycle controls
+
+Labels (`labels.json`) and sub-statuses (`sub-statuses.json`, referenced by route steps through `subStatus`) are defined in the fixtures, like kickflow's admin-only settings. Tickets then show `labels` and `subStatus` in `/v1`, filter by `subStatusIds[]`, and a sub-status can forbid withdrawing, sending back or denying. Approval cancellation, raising to a later step and per-ticket custom steps follow the workflow's `approvalCancellable`, the step's `allowRaising` and the workflow's `allowCustomSteps`. kickflow has no public REST endpoints for labels or these controls, so the web UI uses punchflow-only endpoints under `/ui/api/` (see `design-docs/specs/design-approval-engine.md`).
+
 ## CLI, fixtures and inferred behavior
 
 The CLI includes `serve`, `fixtures load`, `fixtures reset`, `fixtures export --out DIR`, `token issue` and `version`. Shared database options include `--data-dir`, `--db` and `--fixtures`; configuration flags have `PUNCHFLOW_...` environment forms. See the full [CLI reference](design-docs/specs/command.md). Default JSON fixtures are in `fixtures/default`; export them with `punchflow fixtures export --out DIR` or restore them with `punchflow fixtures reset`. Some behavior is inferred from public kickflow materials; the inference register is in [notes.md](design-docs/specs/notes.md), and endpoint and event coverage is in the [API coverage matrix](design-docs/specs/design-api-coverage.md).

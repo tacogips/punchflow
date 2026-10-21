@@ -132,7 +132,7 @@ func pf14CheckNextCustomApprovers(ctx context.Context, tx *store.Tx, t model.Tic
 	}
 	nextOrder := 0
 	for _, step := range steps {
-		if step.StepOrder > t.CurrentStep && step.Status != model.StepStatusSkipped && step.Status != model.StepStatusCompleted && (nextOrder == 0 || step.StepOrder < nextOrder) {
+		if step.StepOrder > t.CurrentStep && !pf15StepDone(step) && (nextOrder == 0 || step.StepOrder < nextOrder) {
 			nextOrder = step.StepOrder
 		}
 	}
@@ -143,8 +143,16 @@ func pf14CheckNextCustomApprovers(ctx context.Context, tx *store.Tx, t model.Tic
 	if err != nil {
 		return err
 	}
+	// Ticket step orders can drift from the route when custom steps are
+	// inserted, so the next group is matched to the route by step code.
+	nextCodes := map[string]bool{}
+	for _, step := range steps {
+		if step.StepOrder == nextOrder && step.RouteStepCode != nil {
+			nextCodes[*step.RouteStepCode] = true
+		}
+	}
 	for _, routeStep := range route.Steps {
-		if routeStep.StepOrder != nextOrder || routeStep.StepType != model.StepTypeAssigneeCustomizable {
+		if !nextCodes[routeStep.Code] || routeStep.StepType != model.StepTypeAssigneeCustomizable {
 			continue
 		}
 		approvers, err := store.EngCustomApprovers(ctx, tx, t.ID, routeStep.Code)
@@ -177,7 +185,11 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 	if err != nil {
 		return nil, err
 	}
-	if err = pf14ValidateApprovalInputs(def, inputs); err != nil {
+	slips, err := store.TicketSlipItems(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err = pf14ValidateApprovalInputs(def, inputs, slips); err != nil {
 		return nil, err
 	}
 	if err = pf14CheckNextCustomApprovers(ctx, tx, t); err != nil {
@@ -300,7 +312,7 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 	for {
 		groupDone := true
 		for _, step := range steps {
-			if step.StepOrder == t.CurrentStep && step.Status != model.StepStatusCompleted && step.Status != model.StepStatusSkipped {
+			if step.StepOrder == t.CurrentStep && !pf15StepDone(step) {
 				groupDone = false
 			}
 		}
@@ -309,7 +321,7 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 		}
 		next := 0
 		for _, step := range steps {
-			if step.StepOrder > t.CurrentStep && step.Status != model.StepStatusSkipped && step.Status != model.StepStatusCompleted && (next == 0 || step.StepOrder < next) {
+			if step.StepOrder > t.CurrentStep && !pf15StepDone(step) && (next == 0 || step.StepOrder < next) {
 				next = step.StepOrder
 			}
 		}
@@ -323,7 +335,7 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 		actionable := false
 		for i := range steps {
 			step := &steps[i]
-			if step.StepOrder != next || step.Status == model.StepStatusSkipped || step.Status == model.StepStatusCompleted {
+			if step.StepOrder != next || pf15StepDone(*step) {
 				continue
 			}
 			step.Status = model.StepStatusInProgress
@@ -356,6 +368,9 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 		}
 	}
 	t.UpdatedAt = now
+	if err = e.pf15SyncSubStatus(ctx, tx, t, now); err != nil {
+		return err
+	}
 	return store.EngUpdateTicket(ctx, tx, *t)
 }
 func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id string, to int, comment *string) ([]model.WebhookEvent, error) {
@@ -368,6 +383,9 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 		return nil, err
 	}
 	if err = pf14RequireApproveActor(ctx, tx, a, t, active, e.clock.Now()); err != nil {
+		return nil, err
+	}
+	if err = pf15CheckSubStatusAllows(ctx, tx, id, subStatusActionReject); err != nil {
 		return nil, err
 	}
 	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
@@ -423,6 +441,9 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 		}
 	}
 	t.UpdatedAt = now
+	if err = e.pf15SyncSubStatus(ctx, tx, &t, now); err != nil {
+		return nil, err
+	}
 	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
 		return nil, err
 	}
@@ -452,6 +473,9 @@ func (e *Engine) pf14Deny(ctx context.Context, tx *store.Tx, a Actor, id string,
 	if err = pf14RequireApproveActor(ctx, tx, a, t, active, e.clock.Now()); err != nil {
 		return nil, err
 	}
+	if err = pf15CheckSubStatusAllows(ctx, tx, id, subStatusActionDeny); err != nil {
+		return nil, err
+	}
 	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
 	if err != nil {
 		return nil, err
@@ -464,6 +488,9 @@ func (e *Engine) pf14Deny(ctx context.Context, tx *store.Tx, a Actor, id string,
 	t.DeniedAt = &now
 	t.ClosedAt = &now
 	t.UpdatedAt = now
+	if err = e.pf15SyncSubStatus(ctx, tx, &t, now); err != nil {
+		return nil, err
+	}
 	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
 		return nil, err
 	}
@@ -491,9 +518,15 @@ func (e *Engine) pf14Withdraw(ctx context.Context, tx *store.Tx, a Actor, id str
 	if t.Status != model.TicketStatusInProgress {
 		return nil, kferr.InvalidState("Ticket is not in progress")
 	}
+	if err = pf15CheckSubStatusAllows(ctx, tx, id, subStatusActionWithdraw); err != nil {
+		return nil, err
+	}
 	t.Status = model.TicketStatusRejected
 	t.CurrentStep = 0
 	t.UpdatedAt = e.clock.Now()
+	if err = e.pf15SyncSubStatus(ctx, tx, &t, t.UpdatedAt); err != nil {
+		return nil, err
+	}
 	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
 		return nil, err
 	}
@@ -518,6 +551,9 @@ func (e *Engine) pf14Archive(ctx context.Context, tx *store.Tx, a Actor, id stri
 	t.Status = model.TicketStatusArchived
 	t.ArchivedAt = &now
 	t.UpdatedAt = now
+	if err = e.pf15SyncSubStatus(ctx, tx, &t, now); err != nil {
+		return nil, err
+	}
 	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
 		return nil, err
 	}

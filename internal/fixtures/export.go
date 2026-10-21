@@ -410,6 +410,9 @@ func Export(ctx context.Context, q store.Querier) (map[string][]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
+	if err = exportLabelsAndSubStatuses(ctx, q, s); err != nil {
+		return nil, err
+	}
 	return pf06EncodeSet(s)
 }
 
@@ -473,10 +476,16 @@ func pf06EncodeSet(s *Set) (map[string][]byte, error) {
 	if s.Webhooks == nil {
 		s.Webhooks = []WebhookFixture{}
 	}
+	if s.Labels == nil {
+		s.Labels = []LabelFixture{}
+	}
+	if s.SubStatuses == nil {
+		s.SubStatuses = []SubStatusFixture{}
+	}
 	values := []struct {
 		name string
 		v    any
-	}{{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileUserCustomFields, s.UserCustomFields}, {FileOrganizationCharts, s.OrgCharts}, {FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters}, {FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants}, {FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks}}
+	}{{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileUserCustomFields, s.UserCustomFields}, {FileOrganizationCharts, s.OrgCharts}, {FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters}, {FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants}, {FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks}, {FileLabels, s.Labels}, {FileSubStatuses, s.SubStatuses}}
 	for i := range values {
 		if values[i].v == nil {
 			values[i].v = []any{}

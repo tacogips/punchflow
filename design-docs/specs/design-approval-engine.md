@@ -24,6 +24,14 @@ func (e *Engine) SendBack(ctx context.Context, tx *store.Tx, actor Actor, ticket
 func (e *Engine) Deny(ctx context.Context, tx *store.Tx, actor Actor, ticketID string, comment *string) ([]Event, error)
 func (e *Engine) Withdraw(ctx context.Context, tx *store.Tx, actor Actor, ticketID string) ([]Event, error)
 func (e *Engine) Archive(ctx context.Context, tx *store.Tx, actor Actor, ticketID string) ([]Event, error)
+// Labels and runtime lifecycle controls (PF-15, PF-19); UI API only, see below.
+func (e *Engine) AttachLabel(ctx context.Context, tx *store.Tx, actor Actor, ticketID, labelID string) ([]Event, error)
+func (e *Engine) DetachLabel(ctx context.Context, tx *store.Tx, actor Actor, ticketID, labelID string) ([]Event, error)
+func (e *Engine) CancelApproval(ctx context.Context, tx *store.Tx, actor Actor, ticketID string) ([]Event, error)
+func (e *Engine) Raise(ctx context.Context, tx *store.Tx, actor Actor, ticketID string, to *int) ([]Event, error)
+func (e *Engine) AddCustomStep(ctx context.Context, tx *store.Tx, actor Actor, ticketID string, in CustomStepInput) ([]Event, error)
+func (e *Engine) RemoveCustomStep(ctx context.Context, tx *store.Tx, actor Actor, ticketID, stepID string) ([]Event, error)
+func (e *Engine) Controls(ctx context.Context, q store.Querier, actor Actor, ticketID string) (TicketControls, error)
 ```
 
 Every method first checks the tenant `admin_working` mode (after existence and visibility, INF-41).
@@ -40,7 +48,9 @@ Every method first checks the tenant `admin_working` mode (after existence and v
 | `tickets` | status, currentStep, workflow id/version snapshot, author, authorTeam + `authorTeamSnapshot`, proxy client, title, ticketNumber, timestamps (`openedAt`, `completedAt`, `deniedAt`, `archivedAt`, `closedAt`), `forcedPublicType`, counters |
 | `ticket_inputs` | One row per form field: value JSON plus referenced ids (master items, users, teams, tickets, file signed ids) |
 | `ticket_slip_items` | Slip rows with their inputs JSON |
-| `ticket_steps` | Built route: route step id, stepOrder (group), displayOrder, title, actionType, required number/percent, status, skip, fallback, fallbackResult, completedAt |
+| `ticket_steps` | Built route: route step id, stepOrder (group), displayOrder, title, actionType, required number/percent, status, skip, fallback, fallbackResult, completedAt; custom steps (PF-19) have a null route step id plus `author_id` and `instruction` |
+| `labels`, `sub_statuses` | Fixture-defined definitions (`labels.json`, `sub-statuses.json`); read-only at runtime |
+| `ticket_labels`, `tickets.sub_status_id` | Labels attached to a ticket and the sub-status attached while the ticket is in progress |
 | `ticket_assignees` | Step assignees: user, completed, completedAt, actualApprover, assignedAt (`assignedToMeAt`) |
 | `ticket_custom_approvers` | `approvers[]` per route step code (INF-20) |
 | `ticket_viewers`, `ticket_links`, `comments`, `comment_attachments` | Viewers, related tickets, comments |
@@ -66,7 +76,7 @@ Every method first checks the tenant `admin_working` mode (after existence and v
 | `in_progress`, `completed`, `denied` | Archive | `ticket_write` only | `archived` | `ticket_archived` |
 | any other | any | - | `422 invalid_state` (INF-24) | - |
 
-The `status` values `permanently_deleted` and step status `raised` are never produced (DIV-04). In an `Update`, `status` and other fields are ignored for approvers (Confirmed note 2).
+The `status` value `permanently_deleted` is never produced (DIV-04). Step status `raised` is produced only by Raise (see Runtime lifecycle controls). In an `Update`, `status` and other fields are ignored for approvers (Confirmed note 2).
 
 Counters: `commentsCount` = comments not soft-deleted; `linkedTicketsCount` = rows in `ticket_links`; `logsCount` = audit log rows that reference the ticket (INF-29).
 
@@ -81,7 +91,7 @@ Applies to `inputs` and `slipItems` on Create, Update and UpdateForm.
 3. Typing per `fieldType`: `text`/`text_long` string (min/max length, `regexpFormat`); `number`/`integer` numeric string or number (min/max value, `decimalDigit`); `checkbox` string array within `options`; `pull_down`/`radio_button` one of `options`; `date` `YYYY-MM-DD`; `datetime` `YYYY-MM-DD HH:mm`; `master` -> `generalMasterItemId` of the field's master; `user`/`team`/`ticket` -> existing ids (`ticket` also `allowedTicketStatus`); `file` -> uploaded signed ids; `calculation` -> stored null (INF-21); `button_api`/`button_kintone` -> stored as given, never executed (DIV-03). Type errors -> `422 validation_failed` with `errors.<fieldCode>`.
 4. Required check (only when the ticket is or becomes `in_progress`): every visible section's `required` field (author-side fields on submit) must be non-empty -> `422 validation_failed`. Drafts skip required checks.
 5. Section visibility: a form section with `conditional: true` is visible when its `conditionFields` hold under `combinationType` `all`/`any` (`custom` rejected at fixture load, INF-18). Hidden sections are excluded from required checks and returned with `visible: false`.
-6. Approve-time check: fields with `approver: true` and `required: true` that are empty -> `422 input_required_before_approve`.
+6. Approve-time check: fields with `approver: true` and `required: true` that are empty -> `422 input_required_before_approve`. Detail (slip) cells are checked the same way (INF-69): every stored row of every slip section must have a non-empty value in each `approver: true`, `required: true` cell; hidden and `calculation` cells are exempt.
 7. Title: `titleInputMode` `input` uses request `title` (title on other modes -> `400 invalid_parameter`); `calculate` -> workflow name (INF-21); `none` -> null.
 
 ### Route resolution (on submit and re-submit)
@@ -122,6 +132,29 @@ A resolved non-skipped step with zero assignees fails submit with `422 validatio
 - Before approving a step that is followed by an `assignee_customizable` step with no approvers -> `422 assignment_required_before_approve`.
 - SendBack and Deny are allowed only when the actor holds a row in an `approve` step of the current group (otherwise `403 user_not_assigned`, or `422 invalid_state` when only on `confirm`/`none` steps).
 - SendBack resets: `to: 0` resets all steps to `pending` and clears all assignee completions; `to: N` resets steps with `stepOrder >= N`. Re-submit rebuilds steps from scratch (route re-resolved).
+
+### Labels and sub-status (PF-15)
+
+Definitions come from the fixtures `labels.json` (`id`, `name`, `description`, `color` as six lowercase hex digits) and `sub-statuses.json` (`id`, `code`, `name`, `notes`, `allowWithdrawal`, `allowRejection`, `allowDenial`). A route step references a sub-status by `subStatus: "<code>"`; a workflow with `ticketNumberingTiming: "sub_status_attached"` may name the numbering sub-status in `ticketNumberingSubStatus`. The loader rejects duplicate names/codes, malformed colors and unknown codes, and `fixtures export` round-trips both files. Kickflow has no label or sub-status CRUD in the public API, so neither has one here.
+
+- Attachment (INF-60): after every engine action the sub-status is recomputed from the ticket state by `pf15SyncSubStatus`. While the ticket is `in_progress` it is the sub-status of the first step (by display order) of the group that is currently waiting; a group whose steps configure none clears it. Any other ticket status carries no sub-status (`Ticket.subStatus` is "set only while in processing"). Send back to step N re-applies the sub-status of step N; resubmission applies the first group's.
+- Restrictions (INF-61): withdraw, send back (`reject`, any `to`) and deny are refused with `422 invalid_state` ("... is not allowed while the ticket has the sub-status <name>") when the current sub-status sets the matching `allow*` flag to false. The check sits after the actor checks and before comment validation, and applies to UI and API callers alike. Archive and approve are never restricted.
+- Numbering (INF-68): `sub_status_attached` allocates the number the first time a sub-status is attached (the configured `ticketNumberingSubStatus` when set, any sub-status otherwise). A ticket that never receives such a sub-status is never numbered.
+- Presentation: `Ticket.subStatus` is a `SubStatus` object or null and `Ticket.labels` the attached `Label` objects ordered by name, in `getTicket`, `listTickets`, `TicketWithStep`, `TicketDetail` and webhook payloads. `RouteStep.subStatus` and `TicketNumberingTiming.subStatus` are objects, too. `listTickets` filters by `subStatusIds[]`; kickflow documents no label filter, so none exists.
+- Labels (INF-64): any user who can view a ticket may attach or detach labels through the UI API; a real change emits `ticket_updated`, a repeated attach/detach emits nothing.
+
+### Runtime lifecycle controls (PF-19)
+
+`approvalCancellable`, step `allowRaising` and `allowCustomSteps` drive four engine operations. kickflow documents no REST endpoint for them, so they are exposed only through the punchflow UI API under `/ui/api/` (INF-67), never under `/v1`:
+
+| Operation | UI API | Eligibility | Effect | Event |
+|---|---|---|---|---|
+| `CancelApproval` | `POST /ui/api/tickets/{id}/cancel-approval` | Ticket `in_progress`, workflow `approvalCancellable`, the caller is the actual approver of a step, and no step after it has a completed assignee (INF-62) | The caller's assignee rows of their latest approved group are reopened and that group becomes current; later in-progress or auto-completed steps return to `pending` | `ticket_updated` |
+| `Raise` | `POST /ui/api/tickets/{id}/raise` `{to?}` | Ticket `in_progress`; the caller (or a user they are proxy for) is an incomplete assignee of a later `pending` step that has `allowRaising` and needs action (INF-65) | Unfinished steps from the current group up to the target are marked `raised`; the target group becomes current through the shared advancement routine | `ticket_updated` |
+| `AddCustomStep` | `POST /ui/api/tickets/{id}/custom-steps` `{title, actionType, userIds, instruction?, afterStepOrder?}` | Ticket `in_progress`, workflow `allowCustomSteps`, caller is the applicant or an incomplete assignee of the current group (INF-63) | A new group is inserted after `afterStepOrder` (default: the current group); later groups shift by one; `displayOrder` is renumbered; the step has a null `routeStepId`, `author` = caller, all assignees must act | `ticket_updated` |
+| `RemoveCustomStep` | `DELETE /ui/api/tickets/{id}/custom-steps/{stepId}` | The author of a still `pending` custom step | The step is deleted and the order gap closed | `ticket_updated` |
+
+`GET /ui/api/tickets/{id}/controls` returns the same eligibility as booleans (`cancelApproval`, `raise` + `raiseTargetStepOrders`, `addCustomStep` + `customStepInsertAfter`, `removableCustomStepIds`) so the UI shows only valid buttons. Raised steps count as finished for progression (`pf15StepDone`), and the assignment check before approving matches the next group to route steps by step code because custom steps shift ticket step orders away from route orders. Every UI API mutation writes an audit log (`ticket.label_attach`, `ticket.label_detach`, `ticket.cancel_approval`, `ticket.raise`, `ticket.add_custom_step`, `ticket.remove_custom_step`).
 
 ### Comments with actions
 

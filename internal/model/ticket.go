@@ -48,6 +48,8 @@ type TicketStep struct {
 	RouteStepCode            *string    `json:"routeStepCode"`
 	StepOrder                int        `json:"stepOrder"`
 	DisplayOrder             int        `json:"displayOrder"`
+	AuthorID                 *string    `json:"authorId"`
+	Instruction              *string    `json:"instruction"`
 	Title                    *string    `json:"title"`
 	ActionType               string     `json:"actionType"`
 	RequiredApprovalsNumber  int        `json:"requiredApprovalsNumber"`

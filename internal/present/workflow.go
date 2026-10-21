@@ -90,7 +90,11 @@ func WorkflowDetail(ctx context.Context, q store.Querier, id string) (WorkflowDe
 	out["availableTeams"] = pf08AvailableTeams(ctx, q, d.AvailableTeams)
 	out["watchers"] = pf08Watchers(ctx, q, d.Watchers)
 	out["workflowFilterVisibilities"] = []any{}
-	out["ticketNumberingTiming"] = map[string]any{"id": nil, "timingType": d.TicketNumberingTiming, "subStatus": nil}
+	numberingSubStatus, err := subStatusByCode(ctx, q, d.TicketNumberingSubStatus)
+	if err != nil {
+		return nil, err
+	}
+	out["ticketNumberingTiming"] = map[string]any{"id": nil, "timingType": d.TicketNumberingTiming, "subStatus": numberingSubStatus}
 	out["slackChannel"] = nil
 	out["chatworkRoom"] = nil
 	out["microsoftTeamsChannel"] = nil

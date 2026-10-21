@@ -18,17 +18,14 @@ const (
 	numberingEventCreated   = "created"
 	numberingEventOpened    = "opened"
 	numberingEventCompleted = "completed"
-
-	numberingTimingSubStatusAttached = "sub_status_attached"
+	// numberingEventSubStatusAttached fires when a sub-status is attached (INF-35).
+	numberingEventSubStatusAttached = model.TicketNumberingTimingSubStatusAttached
 )
 
 // pf14NumberingDue reports whether a workflow configured with timing allocates
-// its ticket number at event. An empty timing defaults to "opened", and
-// "sub_status_attached" behaves like "opened" because sub-statuses are not
-// modelled.
+// its ticket number at event. An empty timing defaults to "opened".
 func pf14NumberingDue(timing, event string) bool {
-	switch timing {
-	case "", numberingTimingSubStatusAttached:
+	if timing == "" {
 		timing = numberingEventOpened
 	}
 	return timing == event

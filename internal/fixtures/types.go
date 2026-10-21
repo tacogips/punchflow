@@ -19,6 +19,8 @@ const (
 	FileProxyApprovers     = "proxy-approvers.json"
 	FileTokens             = "tokens.json"
 	FileWebhooks           = "webhooks.json"
+	FileLabels             = "labels.json"
+	FileSubStatuses        = "sub-statuses.json"
 )
 
 type TenantFile struct {
@@ -156,6 +158,25 @@ type WebhookFixture struct {
 	Enabled       bool     `json:"enabled"`
 	WorkflowCodes []string `json:"workflowCodes"`
 	EventTypes    []string `json:"eventTypes"`
+}
+
+// LabelFixture defines a label that viewers may attach to tickets.
+type LabelFixture struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Color       string  `json:"color"`
+}
+
+// SubStatusFixture defines a sub-status that route steps attach to tickets.
+type SubStatusFixture struct {
+	ID              string  `json:"id"`
+	Code            string  `json:"code"`
+	Name            string  `json:"name"`
+	Notes           *string `json:"notes,omitempty"`
+	AllowWithdrawal bool    `json:"allowWithdrawal"`
+	AllowRejection  bool    `json:"allowRejection"`
+	AllowDenial     bool    `json:"allowDenial"`
 }
 type DefinitionsFile struct {
 	Routes    []model.RouteDef    `json:"routes"`

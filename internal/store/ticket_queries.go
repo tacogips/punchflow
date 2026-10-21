@@ -119,7 +119,12 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 		add(clause+")", values...)
 	}
 	if len(filter.SubStatusIDs) > 0 {
-		add("0=1")
+		marks := make([]string, len(filter.SubStatusIDs))
+		values := make([]any, len(filter.SubStatusIDs))
+		for i, id := range filter.SubStatusIDs {
+			marks[i], values[i] = "?", id
+		}
+		add("t.sub_status_id IN ("+strings.Join(marks, ",")+")", values...)
 	}
 	if len(filter.Statuses) > 0 {
 		marks := make([]string, len(filter.Statuses))

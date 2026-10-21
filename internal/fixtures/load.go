@@ -219,6 +219,9 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 			return counts, err
 		}
 	}
+	if err = insertLabelsAndSubStatuses(insert, s, ms); err != nil {
+		return counts, err
+	}
 	folderIDs := map[string]string{}
 	folders := make(map[string]FolderFixture, len(s.Folders))
 	for _, f := range s.Folders {

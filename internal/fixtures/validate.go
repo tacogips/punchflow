@@ -39,6 +39,7 @@ func Validate(s *Set) error {
 		{FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters},
 		{FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants},
 		{FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks},
+		{FileLabels, s.Labels}, {FileSubStatuses, s.SubStatuses},
 	} {
 		pf06WalkIDs(reflect.ValueOf(item.value), item.file, "$", registerID)
 	}
@@ -453,6 +454,7 @@ func Validate(s *Set) error {
 			}
 		}
 	}
+	validateLabelsAndSubStatuses(s, add)
 	if len(ps) > 0 {
 		sortProblems(ps)
 		return &ValidationError{Problems: ps}

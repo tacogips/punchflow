@@ -22,33 +22,36 @@ type Route struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 type WorkflowDef struct {
-	ID                              string            `json:"id"`
-	Code                            string            `json:"code"`
-	Status                          string            `json:"status"`
-	Name                            string            `json:"name"`
-	Description                     string            `json:"description"`
-	Notes                           string            `json:"notes"`
-	FolderCode                      string            `json:"folderCode"`
-	CategoryCodes                   []string          `json:"categoryCodes"`
-	RouteCode                       string            `json:"routeCode"`
-	PublicTicket                    bool              `json:"publicTicket"`
-	VisibleToManager                string            `json:"visibleToManager"`
-	VisibleToTeamMembers            bool              `json:"visibleToTeamMembers"`
-	TitleDescription                *string           `json:"titleDescription"`
-	TicketNumberFormat              *string           `json:"ticketNumberFormat"`
-	Overwritable                    bool              `json:"overwritable"`
-	TitleInputMode                  string            `json:"titleInputMode"`
-	TitleFormula                    *string           `json:"titleFormula"`
-	AllowEditingOfViewers           bool              `json:"allowEditingOfViewers"`
-	CommentingEnabled               bool              `json:"commentingEnabled"`
-	CommentingRequiredOnApproval    bool              `json:"commentingRequiredOnApproval"`
-	CommentingRequiredOnRejection   bool              `json:"commentingRequiredOnRejection"`
-	CommentingRequiredOnDenial      bool              `json:"commentingRequiredOnDenial"`
-	AvailableToEveryone             bool              `json:"availableToEveryone"`
-	AvailableTeams                  []WorkflowTeam    `json:"availableTeams"`
-	SectionList                     []WorkflowSection `json:"sectionList"`
-	RouteConditions                 []RouteCondition  `json:"routeConditions"`
-	TicketNumberingTiming           string            `json:"ticketNumberingTiming"`
+	ID                            string            `json:"id"`
+	Code                          string            `json:"code"`
+	Status                        string            `json:"status"`
+	Name                          string            `json:"name"`
+	Description                   string            `json:"description"`
+	Notes                         string            `json:"notes"`
+	FolderCode                    string            `json:"folderCode"`
+	CategoryCodes                 []string          `json:"categoryCodes"`
+	RouteCode                     string            `json:"routeCode"`
+	PublicTicket                  bool              `json:"publicTicket"`
+	VisibleToManager              string            `json:"visibleToManager"`
+	VisibleToTeamMembers          bool              `json:"visibleToTeamMembers"`
+	TitleDescription              *string           `json:"titleDescription"`
+	TicketNumberFormat            *string           `json:"ticketNumberFormat"`
+	Overwritable                  bool              `json:"overwritable"`
+	TitleInputMode                string            `json:"titleInputMode"`
+	TitleFormula                  *string           `json:"titleFormula"`
+	AllowEditingOfViewers         bool              `json:"allowEditingOfViewers"`
+	CommentingEnabled             bool              `json:"commentingEnabled"`
+	CommentingRequiredOnApproval  bool              `json:"commentingRequiredOnApproval"`
+	CommentingRequiredOnRejection bool              `json:"commentingRequiredOnRejection"`
+	CommentingRequiredOnDenial    bool              `json:"commentingRequiredOnDenial"`
+	AvailableToEveryone           bool              `json:"availableToEveryone"`
+	AvailableTeams                []WorkflowTeam    `json:"availableTeams"`
+	SectionList                   []WorkflowSection `json:"sectionList"`
+	RouteConditions               []RouteCondition  `json:"routeConditions"`
+	TicketNumberingTiming         string            `json:"ticketNumberingTiming"`
+	// TicketNumberingSubStatus is the code of the sub-status that triggers
+	// numbering when TicketNumberingTiming is sub_status_attached.
+	TicketNumberingSubStatus        *string           `json:"ticketNumberingSubStatus,omitempty"`
 	ReportFormats                   []string          `json:"reportFormats"`
 	HiddenOnWorkflowFilterForTicket bool              `json:"hiddenOnWorkflowFilterForTicket"`
 	HiddenOnWorkflowSelectionScreen bool              `json:"hiddenOnWorkflowSelectionScreen"`

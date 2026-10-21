@@ -63,6 +63,16 @@ describe("ticket view rules", () => {
     expect(actions).toContain("approve"); expect(actions).not.toContain("reject"); expect(actions).not.toContain("deny");
   });
 
+  test("sub-status restrictions hide the actions they forbid", () => {
+    const restricted = (flags: Record<string, boolean>) => ticket({ author: user, subStatus: { allowWithdrawal: true, allowRejection: true, allowDenial: true, ...flags } });
+    expect(availableActions(restricted({ allowWithdrawal: false }), { id: "u1", permissions: [] })).not.toContain("withdraw");
+    const approver = availableActions(restricted({ allowRejection: false }), { id: "u1", permissions: [] });
+    expect(approver).toContain("approve"); expect(approver).toContain("deny"); expect(approver).not.toContain("reject");
+    const noDenial = availableActions(restricted({ allowDenial: false }), { id: "u1", permissions: [] });
+    expect(noDenial).toContain("reject"); expect(noDenial).not.toContain("deny");
+    expect(availableActions(restricted({}), { id: "u1", permissions: [] })).toEqual(["approve", "reject", "deny", "withdraw", "edit"]);
+  });
+
   test("send back targets the applicant and earlier steps", () => {
     expect(sendBackTargets(ticket({ currentStep: 3 }))).toEqual([
       { to: 0, label: "Applicant" }, { to: 1, label: "Step 1" }, { to: 2, label: "Step 2" },
