@@ -91,6 +91,7 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 			r.metadata["authorTeam"] = string(n.opts.AuthorTeamJSON)
 		}
 	}
+	visibilityFormVals := map[string]any{}
 	for i := range inputs {
 		if f, ok := n.idx.fieldByID[inputs[i].FormFieldID]; ok {
 			// Calculations run with the editing actor's view. Restricted values
@@ -103,17 +104,39 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 			} else {
 				r.formVals[f.Code] = calcTypedValue(f.FieldType, n.calcReferenceValue(f.FieldType, inputs[i].RefIDs, inputs[i].Value))
 			}
+			if f.FieldType == "master" || f.FieldType == "user" || f.FieldType == "team" || f.FieldType == "ticket" {
+				// Formula references are serialized as JSON records for formula
+				// evaluation. Conditions compare selected IDs with resolved resource
+				// thresholds, so retain a separate raw value for visibility checks.
+				visibilityValue := inputs[i].Value
+				if len(inputs[i].RefIDs) == 1 {
+					visibilityValue = inputs[i].RefIDs[0]
+				} else if len(inputs[i].RefIDs) > 1 {
+					visibilityValue = inputs[i].RefIDs
+				}
+				visibilityFormVals[f.Code] = visibilityValue
+			} else {
+				visibilityFormVals[f.Code] = r.formVals[f.Code]
+			}
 		}
 	}
-	visibilityValues := make(map[string]any, len(r.formVals)*2)
-	for code, value := range r.formVals {
+	visibilityValues := make(map[string]any, len(visibilityFormVals)*2)
+	for code, value := range visibilityFormVals {
 		visibilityValues[code] = value
 		if field, ok := n.idx.fieldByCode[code]; ok {
 			visibilityValues[field.ID] = value
 		}
 	}
 	for _, section := range n.def.SectionList {
-		if section.SectionType == model.SectionTypeForm && !n.opts.Blocked[section.ID] && !pf14SectionVisible(section, visibilityValues) {
+		if section.SectionType != model.SectionTypeForm || n.opts.Blocked[section.ID] {
+			continue
+		}
+		visible, visibilityErr := n.sectionVisible(section, visibilityValues)
+		if visibilityErr != nil {
+			n.fail(section.Code, "could not evaluate section visibility")
+			continue
+		}
+		if !visible {
 			r.hidden[section.ID] = true
 		}
 	}

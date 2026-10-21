@@ -71,9 +71,9 @@ func (e *Engine) pf14cApplyFormEdit(ctx context.Context, tx *store.Tx, a Actor, 
 	if in.SlipItems != nil {
 		slipValues = *in.SlipItems
 		opts.SlipMode = slipReplaceAll
-		if partial || approver {
-			// Approver updates may address only the detail sections they can
-			// edit; preserve other populated sections even through PATCH /ticket.
+		if partial {
+			// PATCH /form is section-differential; ordinary PATCH /ticket
+			// replaces the complete detail collection.
 			opts.SlipMode = slipReplaceSections
 		}
 	}

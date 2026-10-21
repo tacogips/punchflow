@@ -207,7 +207,10 @@ export function sectionConditionMet(section: SectionListItem, values: Record<str
   const matches = fields.map((field) => {
     const code = str(obj(field.formField).code);
     if (!code || !Object.prototype.hasOwnProperty.call(values, code)) return false;
-    return compareCondition(values[code], str(field.symbol), field.value ?? null);
+    // Master thresholds are presented as a resolved record. Their scalar
+    // `value` is null, while condition values submitted by the editor are IDs.
+    const expected = obj(field.generalMasterItem).id ?? field.value ?? null;
+    return compareCondition(values[code], str(field.symbol), expected);
   });
   if (raw.combinationType === "custom") return customExpression(str(raw.combinationExpression), matches);
   const matched = matches.filter(Boolean).length;

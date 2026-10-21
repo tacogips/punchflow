@@ -7,6 +7,37 @@ import (
 	"punchflow/internal/store"
 )
 
+func TestTicketSectionVisibilityResolvesMasterReferenceThreshold(t *testing.T) {
+	ctx, db := pf08DB(t)
+	masterID, err := store.ResolveID(ctx, db.Q(), "general_masters", "GM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemID, err := store.MasterItemIDByCode(ctx, db.Q(), masterID, "I1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	section := model.WorkflowSection{
+		SectionType: model.SectionTypeForm, Conditional: true, CombinationType: model.StepCombinationAll,
+		ConditionFields: []model.ConditionField{{
+			FieldKey: model.StepConditionFieldKeyGeneralMasterVariable, Variable: "selection", Symbol: "equal",
+			GeneralMasterCode: "GM", GeneralMasterItemCode: "I1",
+		}},
+	}
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{{name: "matching item", value: itemID, want: true}, {name: "different item", value: "different-item", want: false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pf08TicketSectionVisible(ctx, db.Q(), section, map[string]any{"selection": tc.value})
+			if err != nil || got != tc.want {
+				t.Fatalf("visible=%v err=%v, want %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
 // A condition variable written as "$code" or "${code}" must resolve the same
 // form field as the bare code, mirroring the engine's variable normalization.
 func TestWorkflowConditionFieldNormalizesVariable(t *testing.T) {

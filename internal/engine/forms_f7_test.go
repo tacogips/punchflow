@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"testing"
 
 	"punchflow/internal/model"
@@ -107,6 +108,108 @@ func TestCalculationCannotReadConditionallyHiddenSection(t *testing.T) {
 	}
 	if got := pf16FormValue(t, e, id, "hidden-total"); got != nil {
 		t.Fatalf("hidden section calculation=%v, want unavailable/null", got)
+	}
+}
+
+func TestCalculationVisibilityResolvesMasterConditionBeforeFormulaSerialization(t *testing.T) {
+	e := pf14Setup(t)
+	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			if def.SectionList[i].SectionType == model.SectionTypeForm {
+				def.SectionList[i].FormFields = append(def.SectionList[i].FormFields, pf16FormField("hidden-total", "calculation"))
+			}
+		}
+		secret := pf16FormField("secret", "number")
+		def.SectionList = append(def.SectionList, model.WorkflowSection{
+			ID: "conditional-master-secret", Code: "master-secret-section", SectionType: model.SectionTypeForm,
+			Conditional: true, CombinationType: "all",
+			ConditionFields: []model.ConditionField{{
+				FieldKey: model.StepConditionFieldKeyGeneralMasterVariable, Variable: "cost-center", Symbol: "not_equal",
+				GeneralMasterCode: "cost-centers", GeneralMasterItemCode: "cc-eng",
+			}}, FormFields: []model.FormField{secret},
+		})
+		for i := range def.SectionList {
+			for j := range def.SectionList[i].FormFields {
+				if def.SectionList[i].FormFields[j].Code == "hidden-total" {
+					def.SectionList[i].FormFields[j].Formula = pf16Formula("$secret * 2")
+				}
+			}
+		}
+	})
+	itemID := pf14cMasterItemID(t, e, "cost-centers", "cc-eng")
+	inputs := pf16Inputs(t, e, map[string]any{"amount": "100", "purpose": "travel", "secret": "25", "cost-center": itemID})
+	_, fields := pf14FormDefinition(t, e, "expense-claim")
+	encoded, err := json.Marshal(itemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range inputs {
+		if inputs[i].FormFieldID == fields["cost-center"] {
+			inputs[i].GeneralMasterItemID = encoded
+			inputs[i].Value = nil
+		}
+	}
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, inputs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pf16FormValue(t, e, id, "hidden-total"); got != nil {
+		t.Fatalf("calculation from hidden master-conditioned section=%v, want unavailable/null", got)
+	}
+}
+
+func TestApplicantReapplicationPreservesApproverOnlyDetailCells(t *testing.T) {
+	e := pf14Setup(t)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		lines := pf16Section(def, "lines")
+		field := pf16SlipField("approver-note", "text")
+		field.Author, field.Approver = false, true
+		lines.SlipFields = append(lines.SlipFields, field)
+	})
+	row := pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10, "approver-note": nil})
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, pf16Base), []SlipItemInput{row})
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := pf16Def(t, e, "expense-claim")
+	rows := pf16Slips(t, e, id)
+	if len(rows) != 1 {
+		t.Fatalf("detail rows=%d, want 1", len(rows))
+	}
+	var noteID string
+	for _, field := range pf16Section(&def, "lines").SlipFields {
+		if field.Code == "approver-note" {
+			noteID = field.ID
+		}
+	}
+	if noteID == "" {
+		t.Fatal("approver-only detail field not found")
+	}
+	rows[0].Inputs[noteID] = "reviewed"
+	raw, err := json.Marshal(rows[0].Inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE ticket_slip_items SET inputs=? WHERE id=?`, string(raw), rows[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE tickets SET status='rejected' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	status := model.TicketStatusInProgress
+	if err = pf16Update(e, e.actor("sales-rep"), id, UpdateInput{Status: &status}); err != nil {
+		t.Fatalf("reapplication rejected stored approver-only detail cell: %v", err)
+	}
+	rows = pf16Slips(t, e, id)
+	if got := pf16Cell(t, def, rows[0], "approver-note"); got != "reviewed" {
+		t.Fatalf("stored approver-only cell=%v, want reviewed", got)
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE tickets SET status='rejected' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	unauthorized := pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10, "approver-note": "overwritten"})
+	if err = pf16Update(e, e.actor("sales-rep"), id, UpdateInput{SlipItems: &[]SlipItemInput{unauthorized}}); err == nil {
+		t.Fatal("applicant explicit approver-only detail write was accepted")
 	}
 }
 

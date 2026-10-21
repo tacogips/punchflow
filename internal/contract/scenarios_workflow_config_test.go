@@ -273,8 +273,8 @@ func TestContractWorkflowRouteConditionResourceThresholds(t *testing.T) {
 		ID: "00000000-0000-4000-8000-0000000000d1", ConditionType: model.RouteConditionTypeField,
 		CombinationType: model.RouteCombinationAll, RouteCode: &def.RouteCode,
 		ConditionFields: []model.ConditionField{
-			{ID: "00000000-0000-4000-8000-0000000000d2", Variable: "amount", FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "sales"},
-			{ID: "00000000-0000-4000-8000-0000000000d3", Variable: "amount", FieldKey: model.StepConditionFieldKeyAuthorGrade, Symbol: "equal", Value: "staff"},
+			{ID: "team-condition", FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "sales"},
+			{ID: "grade-condition", FieldKey: model.StepConditionFieldKeyAuthorGrade, Symbol: "equal", Value: "staff"},
 			{ID: "00000000-0000-4000-8000-0000000000d4", FieldKey: model.StepConditionFieldKeyGeneralMasterVariable, Variable: "cost-center", Symbol: "equal", GeneralMasterCode: "cost-centers", GeneralMasterItemCode: "cc-eng"},
 		},
 	}
@@ -307,5 +307,11 @@ func TestContractWorkflowRouteConditionResourceThresholds(t *testing.T) {
 	fields := body.RouteConditions[0].Fields
 	if len(fields) != 3 || fields[0]["team"] == nil || fields[1]["grade"] == nil || fields[2]["generalMasterItem"] == nil || fields[2]["value"] != nil {
 		t.Fatalf("route condition resource presentation=%v", fields)
+	}
+	for i := 0; i < 2; i++ {
+		formField, ok := fields[i]["formField"].(map[string]any)
+		if !ok || formField == nil {
+			t.Fatalf("resource condition %d formField=%#v, want a schema-valid object", i, fields[i]["formField"])
+		}
 	}
 }

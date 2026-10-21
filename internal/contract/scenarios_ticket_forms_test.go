@@ -189,6 +189,29 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 	spec := loadSpec(t)
 	compiler := schemaCompiler(t, spec)
 	pf16PrepareExpenseWorkflow(t, env)
+	workflowID, err := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def.SectionList = append(def.SectionList, model.WorkflowSection{
+		ID: "00000000-0000-4000-8000-0000000000c1", Code: "master-conditional", Title: "Master conditional",
+		SectionType: model.SectionTypeForm, Conditional: true, CombinationType: model.StepCombinationAll,
+		ConditionFields: []model.ConditionField{{
+			ID: "00000000-0000-4000-8000-0000000000c2", FieldKey: model.StepConditionFieldKeyGeneralMasterVariable,
+			Variable: "cost-center", Symbol: "equal", GeneralMasterCode: "cost-centers", GeneralMasterItemCode: "cc-sales",
+		}},
+	})
+	definitionJSON, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=? WHERE id=?`, string(definitionJSON), workflowID); err != nil {
+		t.Fatal(err)
+	}
 
 	upload := pf26bUploadFile(t, env, []byte("%PDF-1.4 receipt"), true)
 	var uploaded struct {
@@ -199,7 +222,6 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 		t.Fatalf("upload returned no signedId: %s", upload.Body)
 	}
 
-	workflowID, _ := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
 	salesTeamID, _ := store.ResolveID(t.Context(), env.DB.Q(), "teams", "sales")
 	costCenterID, err := store.ResolveID(t.Context(), env.DB.Q(), "general_masters", "cost-centers")
 	if err != nil {
@@ -274,6 +296,18 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 		TicketSections []map[string]any `json:"ticketSections"`
 	}
 	created.JSON(t, &ticket)
+	var masterSectionVisible *bool
+	for _, section := range ticket.TicketSections {
+		if section["id"] == "00000000-0000-4000-8000-0000000000c1" {
+			visible, ok := section["visible"].(bool)
+			if ok {
+				masterSectionVisible = &visible
+			}
+		}
+	}
+	if masterSectionVisible == nil || !*masterSectionVisible {
+		t.Fatalf("master-conditioned ticket section visibility=%v, want true", ticket.TicketSections)
+	}
 	if len(ticket.SlipItems) != 2 {
 		t.Fatalf("slipItems=%d want 2: %s", len(ticket.SlipItems), created.Body)
 	}

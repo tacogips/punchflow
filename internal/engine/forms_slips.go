@@ -145,6 +145,17 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 		}
 		supplied[field.ID] = true
 		if !n.editableByActor(field) {
+			if n.opts.Revalidating && prev != nil {
+				// Submit-time normalization is not a new write. Keep stored
+				// approver-only cells intact when revalidating as the applicant.
+				if old, ok := slipCell(*prev, field); ok {
+					cells[field.ID] = old
+				}
+				if snapshot, ok := prev.ReferenceSnapshots[field.ID]; ok {
+					snapshots[field.ID] = snapshot
+				}
+				continue
+			}
 			value, err := slipRawValue(in)
 			if err != nil || !pf14Empty(value) {
 				return nil, nil, kferr.InvalidParameter("Invalid slip field code")
@@ -283,14 +294,14 @@ func (n *normalizer) assembleSlips(newRows []model.TicketSlipItem) ([]model.Tick
 		for _, row := range newRows {
 			newCounts[row.SlipSectionID]++
 		}
-		explicitDeleteAll := n.opts.SlipMode == slipReplaceSections && !n.opts.Partial && len(newRows) == 0
+		explicitDeleteAll := n.opts.SlipMode == slipReplaceAll && len(newRows) == 0
 		for sectionID, count := range oldCounts {
 			if n.opts.Blocked[sectionID] {
 				continue
 			}
-			// A section omitted from PATCH /form is preserved by the merge below;
-			// only an explicitly replaced section can delete rows.
-			if n.opts.SlipMode == slipReplaceSections && !explicitDeleteAll {
+			// PATCH /form omits sections to preserve them. A full ticket PATCH
+			// replaces the complete list, so omission is a deletion attempt.
+			if n.opts.SlipMode == slipReplaceSections {
 				if _, explicitlyReplaced := newCounts[sectionID]; !explicitlyReplaced {
 					continue
 				}

@@ -232,6 +232,21 @@ describe("conditional sections", () => {
     expect(sectionConditionMet(conditional("custom", fields), { amount: "999", kind: "item-travel" })).toBe(false);
   });
 
+  test("resolves general-master thresholds for single and multiple selections", () => {
+    const masterCondition = {
+      id: "category-condition", symbol: "equal", value: null,
+      formField: { id: "category-field", code: "category" }, grade: null, team: null,
+      generalMasterItem: { id: "gm-1", code: "travel", name: "Travel" },
+    };
+    const section = conditional("all", [masterCondition]);
+    expect(sectionConditionMet(section, { category: "gm-1" })).toBe(true);
+    expect(sectionConditionMet(section, { category: "gm-2" })).toBe(false);
+
+    const multiple = conditional("all", [{ ...masterCondition, symbol: "include" }]);
+    expect(sectionConditionMet(multiple, { category: ["gm-2", "gm-1"] })).toBe(true);
+    expect(sectionConditionMet(multiple, { category: ["gm-2"] })).toBe(false);
+  });
+
   test("custom expressions use ordered A-J references, parentheses, and backend precedence", () => {
     const fields = [field("amount", "equal", "yes"), field("kind", "equal", "yes"), field("missing", "equal", "yes")];
     const values = { amount: "yes", kind: "no", missing: "no" };

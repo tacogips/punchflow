@@ -192,6 +192,18 @@ func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.Co
 	}
 	if ok {
 		out["formField"] = pf08FormField(ctx, q, field)
+	} else if f.FieldKey == model.StepConditionFieldKeyAuthorGrade || f.FieldKey == model.StepConditionFieldKeyAuthorTeam {
+		// The public schema requires a populated FormField even for resource-only
+		// applicant team/grade conditions, which do not target an input field.
+		// Present a schema-shaped descriptor keyed by the condition itself.
+		fieldType, title := "text", "Applicant grade"
+		if f.FieldKey == model.StepConditionFieldKeyAuthorTeam {
+			fieldType, title = "team", "Applicant team"
+		}
+		out["formField"] = pf08FormField(ctx, q, model.FormField{
+			ID: stableUUID("workflow-condition-form-field", f.ID), Title: title, FieldType: fieldType, Code: f.FieldKey, Size: "full",
+			Orientation: "horizontal", AllowedExtensions: []string{}, AllowedTicketStatus: []string{}, Options: []string{},
+		})
 	}
 	code, _ := f.Value.(string)
 	if code != "" {

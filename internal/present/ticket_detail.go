@@ -118,7 +118,10 @@ func ticketDetail(ctx context.Context, q store.Querier, id string, caller *acces
 		}
 		visible := true
 		if s.Conditional {
-			visible = conditions.MatchExpression(s.ConditionFields, s.CombinationType, s.CombinationExpression, values)
+			visible, err = pf08TicketSectionVisible(ctx, q, s, values)
+			if err != nil {
+				return nil, fmt.Errorf("evaluate ticket section %s visibility: %w", s.ID, err)
+			}
 		}
 		restricted := s.SectionType == model.SectionTypeForm && s.ViewRestriction
 		viewers := []any{}
@@ -155,6 +158,79 @@ func ticketDetail(ctx context.Context, q store.Querier, id string, caller *acces
 	}
 	out["customNumberingValues"] = customNumbers
 	return out, nil
+}
+
+func pf08TicketSectionVisible(ctx context.Context, q store.Querier, section model.WorkflowSection, values map[string]any) (bool, error) {
+	matched := make([]bool, len(section.ConditionFields))
+	for i, field := range section.ConditionFields {
+		value, err := pf08TicketConditionMatch(ctx, q, field, values)
+		if err != nil {
+			return false, err
+		}
+		matched[i] = value
+	}
+	switch section.CombinationType {
+	case model.StepCombinationAny:
+		for _, value := range matched {
+			if value {
+				return true, nil
+			}
+		}
+		return false, nil
+	case model.RouteCombinationCustom:
+		fields := make([]model.ConditionField, len(matched))
+		customValues := make(map[string]any, len(matched))
+		for i, value := range matched {
+			key := fmt.Sprintf("section-condition-%d", i)
+			customValues[key] = value
+			fields[i] = model.ConditionField{Variable: key, Symbol: "equal", Value: true}
+		}
+		return conditions.MatchExpression(fields, section.CombinationType, section.CombinationExpression, customValues), nil
+	default:
+		for _, value := range matched {
+			if !value {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+}
+
+func pf08TicketConditionMatch(ctx context.Context, q store.Querier, field model.ConditionField, values map[string]any) (bool, error) {
+	if field.FieldKey != model.StepConditionFieldKeyGeneralMasterVariable || field.GeneralMasterCode == "" || field.GeneralMasterItemCode == "" {
+		return conditions.Match([]model.ConditionField{field}, model.StepCombinationAll, values), nil
+	}
+	masterID, err := store.ResolveID(ctx, q, "general_masters", field.GeneralMasterCode)
+	if err != nil {
+		return false, nil
+	}
+	itemID, err := store.MasterItemIDByCode(ctx, q, masterID, field.GeneralMasterItemCode)
+	if err != nil {
+		return false, nil
+	}
+	actual, ok := conditions.Value(values, field.Variable)
+	if !ok {
+		return false, nil
+	}
+	operator := field.Symbol
+	if _, multiple := actual.([]any); multiple {
+		switch operator {
+		case "equal":
+			operator = "include"
+		case "not_equal":
+			operator = "exclude"
+		}
+	} else if _, multiple := actual.([]string); multiple {
+		switch operator {
+		case "equal":
+			operator = "include"
+		case "not_equal":
+			operator = "exclude"
+		}
+	}
+	field.Value = itemID
+	field.Symbol = operator
+	return conditions.Compare(actual, field.Symbol, field.Value), nil
 }
 
 func restrictedFormSection(def model.WorkflowDef, sectionID string) bool {

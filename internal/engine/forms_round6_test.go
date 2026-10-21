@@ -93,6 +93,52 @@ func TestApproverDetailPartialRowMustSupplyEditableCellsAndNullClears(t *testing
 	}
 }
 
+func TestApproverFullTicketPatchReplacesDetailCollection(t *testing.T) {
+	e := pf14Setup(t)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		def.SectionList = append(def.SectionList, model.WorkflowSection{
+			ID: "second-slip-section", Code: "second-lines", Title: "Second lines", SectionType: model.SectionTypeSlip,
+			SlipFields: []model.SlipField{pf16SlipField("second-item", "text")},
+		})
+	})
+	initial := []SlipItemInput{
+		pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10}),
+		pf16Row("second-lines", map[string]any{"second-item": "notebook"}),
+	}
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusInProgress, pf16Inputs(t, e, pf16Base), initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approver := Actor{UserID: pf14cCurrentApprover(t, e, id)}
+	// The full ticket endpoint replaces the complete detail collection. Omitting
+	// a populated section would delete its row, which approvers are not allowed to do.
+	err = pf16Update(e, approver, id, UpdateInput{SlipItems: &[]SlipItemInput{
+		pf16Row("lines", map[string]any{"item": "pencil", "qty": 2, "unit-price": 12}),
+	}})
+	if api, ok := kferr.As(err); !ok || api.Code != "validation_failed" {
+		t.Fatalf("omitting populated approver detail section error=%v, want validation_failed", err)
+	}
+	rows := pf16Slips(t, e, id)
+	if len(rows) != 2 {
+		t.Fatalf("rejected replacement changed detail rows: %+v", rows)
+	}
+	complete := []SlipItemInput{
+		pf16Row("lines", map[string]any{"item": "pencil", "qty": 2, "unit-price": 12}),
+		pf16Row("second-lines", map[string]any{"second-item": "notebook"}),
+	}
+	if err = pf16Update(e, approver, id, UpdateInput{SlipItems: &complete}); err != nil {
+		t.Fatalf("complete approver detail replacement rejected: %v", err)
+	}
+	rows = pf16Slips(t, e, id)
+	if len(rows) != 2 {
+		t.Fatalf("replacement detail rows=%d, want 2", len(rows))
+	}
+	def := pf16Def(t, e, "expense-claim")
+	if got := pf16Cell(t, def, rows[0], "item"); got != "pencil" {
+		t.Fatalf("replacement first section item=%v, want pencil", got)
+	}
+}
+
 func TestCalculationRecalculationUsesActorInputPermissions(t *testing.T) {
 	e := pf14Setup(t)
 	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"testing"
 
 	"punchflow/internal/model"
@@ -117,6 +118,45 @@ func TestApplicantNominationsOnDraftAndRejectedTickets(t *testing.T) {
 		// Drafts are not shared with applicant-team members until application.
 		assertPF14ErrorCode(t, err, "invisible_ticket")
 	})
+}
+
+func TestDraftNominationValidationUsesApplicantRouteBranch(t *testing.T) {
+	e := pf14Setup(t)
+	workflow, err := store.GetWorkflowByCode(e.ctx, e.db.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := store.WorkflowDefByID(e.ctx, e.db.Q(), workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	standardRoute, applicantRoute := "expense-standard", "purchase"
+	def.RouteCode = standardRoute
+	def.RouteConditions = []model.RouteCondition{
+		{ConditionType: model.RouteConditionTypeField, CombinationType: model.RouteCombinationAll, RouteCode: &applicantRoute, ConditionFields: []model.ConditionField{{
+			FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "sales",
+		}}},
+		{ConditionType: model.RouteConditionTypeFieldOtherwise, RouteCode: &standardRoute},
+	}
+	raw, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.apply(func(tx *store.Tx) error {
+		_, err := tx.ExecContext(e.ctx, `UPDATE workflows SET definition_json=? WHERE id=?`, string(raw), workflow.ID)
+		return err
+	})
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusDraft)
+	_, err = compatUpdate(e, "sales-rep", id, UpdateInput{Approvers: &[]ApproverInput{{
+		RouteStepCode: "purchase-nominee", UserIDs: []string{e.user("engineer")},
+	}}})
+	if err != nil {
+		t.Fatalf("valid nominee for applicant-selected route rejected: %v", err)
+	}
+	ids, err := store.EngCustomApprovers(e.ctx, e.db.Q(), id, "purchase-nominee")
+	if err != nil || len(ids) != 1 || ids[0] != e.user("engineer") {
+		t.Fatalf("saved nominees=%v err=%v", ids, err)
+	}
 }
 
 // R10 / PF-05: an explicit status that equals the current draft/rejected status

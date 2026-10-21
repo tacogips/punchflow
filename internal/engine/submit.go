@@ -107,7 +107,29 @@ func pf14SaveAuthorNominations(ctx context.Context, tx *store.Tx, ticketID strin
 		return err
 	}
 	values := pf14InputValues(def, pf14InputsFromRows(def, rows))
-	if routeCode, selectErr := pf14SelectRouteCode(def, values); selectErr == nil {
+	ticket, err := store.EngLoadTicket(ctx, tx, ticketID)
+	if err != nil {
+		return err
+	}
+	blocked := map[string]bool{}
+	if ticket.AuthorID != nil {
+		applicant, actorErr := ActorForUser(ctx, tx, *ticket.AuthorID)
+		if actorErr != nil {
+			return actorErr
+		}
+		blocked, err = pf16BlockedSections(ctx, tx, applicant, ticket, def)
+		if err != nil {
+			return err
+		}
+	} else {
+		for _, section := range def.SectionList {
+			if section.ViewRestriction {
+				blocked[section.ID] = true
+			}
+		}
+	}
+	applicantValues := pf14RouteApplicantValues(def, values, blocked)
+	if routeCode, selectErr := pf14SelectRouteCodeForApplicant(ctx, tx, def, &ticket, applicantValues); selectErr == nil {
 		if routeID, idErr := store.RouteIDByCode(ctx, tx, routeCode); idErr == nil {
 			if selected, defErr := store.RouteDefByID(ctx, tx, routeID); defErr == nil {
 				route = &selected

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"punchflow/internal/kferr"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
@@ -23,6 +24,14 @@ func TestApproverFormPatchPreservesOmittedDetailSections(t *testing.T) {
 			approver := Actor{UserID: pf14cCurrentApprover(t, e, id)}
 			rowsToPatch := []SlipItemInput{pf16Row("lines", map[string]any{"item": "pencil", "qty": 2, "unit-price": 20, "reviewer-note": nil})}
 			if endpoint == "ticket" {
+				err = pf16Update(e, approver, id, UpdateInput{SlipItems: &rowsToPatch})
+				if api, ok := kferr.As(err); !ok || api.Code != "validation_failed" {
+					t.Fatalf("full ticket update omitting populated section error=%v, want validation_failed", err)
+				}
+				rowsToPatch = []SlipItemInput{
+					pf16Row("lines", map[string]any{"item": "pencil", "qty": 2, "unit-price": 20, "reviewer-note": nil}),
+					pf16Row("extras", map[string]any{"memo": "preserve me"}),
+				}
 				err = pf16Update(e, approver, id, UpdateInput{SlipItems: &rowsToPatch})
 			} else {
 				err = pf16UpdateForm(e, approver, id, FormPatch{SlipItems: rowsToPatch})
