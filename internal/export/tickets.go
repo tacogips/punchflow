@@ -159,8 +159,17 @@ func fixedCells(detail map[string]any, layout string) []string {
 		return cells
 	}
 	return append(cells,
-		str(author, "email"), str(nested(detail, "authorTeam"), "fullName"),
+		str(author, "email"), authorTeamName(detail),
 		str(detail, "createdAt"), str(detail, "openedAt"), str(detail, "completedAt"), str(detail, "archivedAt"), str(detail, "updatedAt"))
+}
+
+// authorTeamName preserves the submitted team name for completed tickets whose
+// live author team has since been removed (INF-NUM-04).
+func authorTeamName(detail map[string]any) string {
+	if name := str(nested(detail, "authorTeam"), "fullName"); name != "" {
+		return name
+	}
+	return str(nested(detail, "authorTeamSnapshot"), "fullName")
 }
 
 func withFields(cells []string, columns []column, values map[string]string) []string {

@@ -55,41 +55,42 @@ func (a *API) setAssigneePending(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		stepID := ""
+		activeSteps := make([]model.TicketStep, 0, len(steps))
 		for _, step := range steps {
 			if step.StepOrder == ticket.CurrentStep && step.Status == model.StepStatusInProgress {
-				stepID = step.ID
-				break
+				activeSteps = append(activeSteps, step)
 			}
 		}
-		if stepID == "" {
+		if len(activeSteps) == 0 {
 			return kferr.InvalidState("No active approval step")
 		}
-		assignees, err := store.EngStepAssignees(r.Context(), tx, stepID)
-		if err != nil {
-			return err
-		}
-		for _, assignee := range assignees {
-			if assignee.ID != r.PathValue("assigneeId") || assignee.Completed {
-				continue
-			}
-			allowed := assignee.UserID == p.User.ID
-			if !allowed {
-				allowed, err = store.EngActiveProxyApprovers(r.Context(), tx, assignee.UserID, p.User.ID, ticket.WorkflowID, kftime.FormatDate(a.d.Clock.Now()))
-				if err != nil {
-					return err
-				}
-			}
-			if !allowed {
-				return kferr.UserNotAssigned()
-			}
-			assignee.Pending = *body.Pending
-			assignee.UpdatedAt = a.d.Clock.Now()
-			if err = store.EngUpdateAssignee(r.Context(), tx, assignee); err != nil {
+		for _, step := range activeSteps {
+			assignees, err := store.EngStepAssignees(r.Context(), tx, step.ID)
+			if err != nil {
 				return err
 			}
-			out.Pending = assignee.Pending
-			return nil
+			for _, assignee := range assignees {
+				if assignee.ID != r.PathValue("assigneeId") || assignee.Completed {
+					continue
+				}
+				allowed := assignee.UserID == p.User.ID
+				if !allowed {
+					allowed, err = store.EngActiveProxyApprovers(r.Context(), tx, assignee.UserID, p.User.ID, ticket.WorkflowID, kftime.FormatDate(a.d.Clock.Now()))
+					if err != nil {
+						return err
+					}
+				}
+				if !allowed {
+					return kferr.UserNotAssigned()
+				}
+				assignee.Pending = *body.Pending
+				assignee.UpdatedAt = a.d.Clock.Now()
+				if err = store.EngUpdateAssignee(r.Context(), tx, assignee); err != nil {
+					return err
+				}
+				out.Pending = assignee.Pending
+				return nil
+			}
 		}
 		return kferr.ResourceNotFound()
 	})

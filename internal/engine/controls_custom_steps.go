@@ -23,8 +23,9 @@ type CustomStepInput struct {
 	AfterStepOrder *int `json:"afterStepOrder"`
 }
 
-// AssignCurrentApprover lets a ticket administrator repair an empty current
-// approval step. The route step itself remains intact (INF-LIFE-R3-15).
+// AssignCurrentApprover lets a ticket administrator add a distinct active user
+// to the current approval step, including one that already has assignments
+// (INF-NUM-06).
 func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Actor, ticketID, userID string) ([]model.WebhookEvent, error) {
 	t, err := e.pf15Guard(ctx, tx, a, ticketID)
 	if err != nil {
@@ -44,25 +45,32 @@ func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Acto
 	if err != nil {
 		return nil, err
 	}
+	currentSteps := make([]model.TicketStep, 0)
 	for _, step := range steps {
 		if step.StepOrder != t.CurrentStep || step.Status != model.StepStatusInProgress {
 			continue
 		}
+		currentSteps = append(currentSteps, step)
 		assignees, er := store.EngStepAssignees(ctx, tx, step.ID)
 		if er != nil {
 			return nil, er
 		}
-		if len(assignees) != 0 {
-			continue
+		for _, existing := range assignees {
+			if existing.UserID == userID {
+				return nil, kferr.ValidationFailed(map[string][]string{"userId": {"is already assigned to the current step"}})
+			}
 		}
-		now := e.clock.Now()
-		assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: ticketID, UserID: userID, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
-		if er = store.EngInsertAssignee(ctx, tx, assignee); er != nil {
-			return nil, er
-		}
-		return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, ticketID, a.UserID)}, nil
 	}
-	return nil, kferr.InvalidState("The current step is not unassigned")
+	if len(currentSteps) == 0 {
+		return nil, kferr.InvalidState("The current step is not active")
+	}
+	step := currentSteps[0]
+	now := e.clock.Now()
+	assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: ticketID, UserID: userID, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
+	if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
+		return nil, err
+	}
+	return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, ticketID, a.UserID)}, nil
 }
 
 // pf15InsertPositions lists the step orders a custom step may follow.

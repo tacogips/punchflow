@@ -28,7 +28,7 @@ type TicketQueryFilter struct {
 	SortBy                                                         string
 	Desc                                                           bool
 	Tasks                                                          bool
-	Pending                                                        bool
+	Pending                                                        *bool
 }
 
 // TicketQueryList returns matching ticket IDs and a total before pagination.
@@ -85,8 +85,12 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 	if filter.Tasks {
 		assigneeWhere, values := taskAssigneeWhere("ta")
 		pendingClause := ""
-		if filter.Pending {
-			pendingClause = " AND ta.pending=1"
+		if filter.Pending != nil {
+			pendingValue := 0
+			if *filter.Pending {
+				pendingValue = 1
+			}
+			pendingClause = fmt.Sprintf(" AND ta.pending=%d", pendingValue)
 		}
 		// No explicit status means actionable outstanding assignments. Explicit
 		// historical statuses retain the caller's completed assignment rows.

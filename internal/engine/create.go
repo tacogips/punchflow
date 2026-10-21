@@ -85,10 +85,16 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	snapshot := teamJSON
 	author := a.UserID
 	t := model.Ticket{ID: id, WorkflowID: workflow.ID, Status: in.Status, AuthorID: &author, AuthorTeamID: &authorTeam.ID, AuthorTeamSnapshot: snapshot, ProxyClientUserID: in.ProxyClientUserID, Title: in.Title, ForcedPublicType: model.ForcedPublicTypeFollowWorkflow, CreatedAt: now, UpdatedAt: now}
+	if err = store.EngInsertTicket(ctx, tx, t); err != nil {
+		return "", nil, err
+	}
+	// Custom number values reference the ticket, so create the parent row
+	// before allocating either standard or custom numbers. Both writes remain
+	// in the request transaction and roll back together on failure.
 	if err = pf14Number(ctx, tx, &t, def, now, numberingEventCreated); err != nil {
 		return "", nil, err
 	}
-	if err = store.EngInsertTicket(ctx, tx, t); err != nil {
+	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
 		return "", nil, err
 	}
 	if err = store.EngReplaceInputs(ctx, tx, id, form.Inputs); err != nil {

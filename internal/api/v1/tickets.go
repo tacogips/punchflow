@@ -70,8 +70,9 @@ func (a *API) pf22ListTickets(w http.ResponseWriter, r *http.Request, tasks bool
 			kferr.Write(w, kferr.InvalidParameter("Invalid pending"))
 			return
 		}
-		if pending == "true" {
-			filter.Pending = true
+		if q.Has("pending") {
+			value := pending == "true"
+			filter.Pending = &value
 		}
 	} else {
 		filter.AssigneeUserID = q.Get("assigneeUserId")

@@ -248,23 +248,32 @@ func TestSubStatusListEndpoint(t *testing.T) {
 	}
 }
 
-func TestAssignCurrentApproverRepairsEmptyCurrentStep(t *testing.T) {
+func TestAssignCurrentApproverAddsDistinctUsersToAssignedCurrentStep(t *testing.T) {
 	env := testutil.New(t)
 	ticketID := createTicket(t, env)
 	steps, err := store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	var suspendedAssigneeID string
 	for _, step := range steps {
 		if step.StepOrder == 1 && step.Status == "in_progress" {
-			if err = store.EngDeleteStepAssignees(t.Context(), env.DB.Q(), step.ID); err != nil {
+			// A suspended original assignee remains attached while an active
+			// replacement is added (Help Center articles 28410770323737 and
+			// 43509621580313; INF-NUM-06).
+			if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT user_id FROM ticket_assignees WHERE ticket_step_id=? LIMIT 1`, step.ID).Scan(&suspendedAssigneeID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE users SET status='suspended' WHERE id=?`, suspendedAssigneeID); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"userId": env.UserID(t, "accountant")})
-	if response.Status != http.StatusOK {
-		t.Fatalf("assign current approver status=%d body=%s", response.Status, response.Body)
+	for _, userCode := range []string{"accountant", "ceo"} {
+		response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"userId": env.UserID(t, userCode)})
+		if response.Status != http.StatusOK {
+			t.Fatalf("assign current approver %s status=%d body=%s", userCode, response.Status, response.Body)
+		}
 	}
 	steps, err = store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
 	if err != nil {
@@ -276,11 +285,61 @@ func TestAssignCurrentApproverRepairsEmptyCurrentStep(t *testing.T) {
 			if er != nil {
 				t.Fatal(er)
 			}
-			if len(assignees) != 1 || assignees[0].UserID != env.UserID(t, "accountant") {
+			if len(assignees) != 3 {
 				t.Fatalf("current assignees=%+v", assignees)
+			}
+			users := map[string]bool{}
+			for _, assignee := range assignees {
+				users[assignee.UserID] = true
+			}
+			for _, userCode := range []string{"accountant", "ceo"} {
+				if !users[env.UserID(t, userCode)] {
+					t.Errorf("current assignees omitted added user %s: %+v", userCode, assignees)
+				}
+			}
+			if !users[suspendedAssigneeID] {
+				t.Errorf("suspended existing assignee %s was removed: %+v", suspendedAssigneeID, assignees)
 			}
 			return
 		}
 	}
 	t.Fatal("current step not found")
+}
+
+func TestAssignCurrentApproverFillsMultiApprovalStepIncrementally(t *testing.T) {
+	env := testutil.New(t)
+	ticketID := createTicket(t, env)
+	steps, err := store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var activeStepID string
+	for _, step := range steps {
+		if step.StepOrder == 1 && step.Status == "in_progress" {
+			activeStepID = step.ID
+			break
+		}
+	}
+	if activeStepID == "" {
+		t.Fatal("active current step not found")
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_steps SET required_approvals_number=2 WHERE id=?`, activeStepID); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.EngDeleteStepAssignees(t.Context(), env.DB.Q(), activeStepID); err != nil {
+		t.Fatal(err)
+	}
+	for _, userCode := range []string{"accountant", "ceo"} {
+		response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"userId": env.UserID(t, userCode)})
+		if response.Status != http.StatusOK {
+			t.Fatalf("assign multi-approval user %s status=%d body=%s", userCode, response.Status, response.Body)
+		}
+	}
+	assignees, err := store.EngStepAssignees(t.Context(), env.DB.Q(), activeStepID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 2 {
+		t.Fatalf("multi-approval assignees=%+v, want both distinct users", assignees)
+	}
 }

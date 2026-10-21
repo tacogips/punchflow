@@ -53,3 +53,22 @@ func TestWriterFraming(t *testing.T) {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
+
+func TestAuthorTeamNameFallsBackToSnapshot(t *testing.T) {
+	tests := []struct {
+		name   string
+		detail map[string]any
+		want   string
+	}{
+		{name: "live team", detail: map[string]any{"authorTeam": map[string]any{"fullName": "Sales"}, "authorTeamSnapshot": map[string]any{"fullName": "Former Sales"}}, want: "Sales"},
+		{name: "deleted team", detail: map[string]any{"authorTeam": nil, "authorTeamSnapshot": map[string]any{"fullName": "Former Sales"}}, want: "Former Sales"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fixedCells(tt.detail, LayoutTicket)
+			if got[7] != tt.want {
+				t.Fatalf("CSV author-team cell = %q, want %q", got[7], tt.want)
+			}
+		})
+	}
+}

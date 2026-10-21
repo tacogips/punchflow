@@ -1,6 +1,7 @@
 // Package ticketsearch implements punchflow's free-text ticket keyword search
-// (PF-22). It matches ticket numbers, titles, form input values, detail row
-// cells and comments, and never matches text of any restricted form section.
+// (PF-22). It matches ticket numbers, issued custom numbers, titles, form input
+// values, detail row cells and comments, and never matches text of any
+// restricted form section.
 // Ticket visibility itself is applied by the caller.
 package ticketsearch
 
@@ -107,6 +108,11 @@ func matchesVisible(ctx context.Context, q store.Querier, ticket model.Ticket, h
 	if ticket.TicketNumber != nil {
 		haystacks = append(haystacks, *ticket.TicketNumber)
 	}
+	customNumbers, err := store.TicketCustomNumberingValues(ctx, q, ticket.ID)
+	if err != nil {
+		return false, err
+	}
+	haystacks = append(haystacks, customNumbers...)
 	if ticket.Title != nil {
 		haystacks = append(haystacks, *ticket.Title)
 	}

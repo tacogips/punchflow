@@ -153,6 +153,7 @@ func TestTicketKeywordCandidates(t *testing.T) {
 	statements := []string{
 		`UPDATE tickets SET title='Quarterly offsite', ticket_number='EXP-0007' WHERE id='t1'`,
 		`INSERT INTO tickets(id,workflow_id,status,title,created_at,updated_at) VALUES('t2','w1','draft','Taxi',2,2)`,
+		`INSERT INTO ticket_custom_numbering_values(ticket_id,custom_numbering_id,formatted_number) VALUES('t2','custom','CN-2026-42')`,
 		`INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,created_at,updated_at) VALUES('i1','t1','f1','"team lunch"',1,1)`,
 		`INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,created_at,updated_at) VALUES('i2','t2','f1','12500',1,1)`,
 		`INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,created_at,updated_at) VALUES('i3','t2','f2','["alpha","beta"]',1,1)`,
@@ -172,6 +173,7 @@ func TestTicketKeywordCandidates(t *testing.T) {
 	}{
 		{"title", []string{"offsite"}, []string{"t1"}},
 		{"ticket number", []string{"EXP-0007"}, []string{"t1"}},
+		{"custom number", []string{"CN-2026-42"}, []string{"t2"}},
 		{"string input", []string{"lunch"}, []string{"t1"}},
 		{"number input", []string{"12500"}, []string{"t2"}},
 		{"array input element", []string{"beta"}, []string{"t2"}},

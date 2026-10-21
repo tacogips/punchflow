@@ -105,3 +105,32 @@ func TestAssigneePendingRejectsOtherUsersAndInvalidState(t *testing.T) {
 	}
 	testutil.AssertError(t, e.Do(t, testutil.Manager, http.MethodPost, path, map[string]any{"pending": true}), http.StatusUnprocessableEntity, "invalid_state")
 }
+
+func TestAssigneePendingFindsAssignmentsAcrossCurrentParallelGroup(t *testing.T) {
+	e := newExpenseEnv(t)
+	id := e.createTicket(t, testutil.Employee, ticketSpec{title: "Parallel hold", purpose: "review"})
+	var currentStep int
+	if err := e.DB.Q().QueryRowContext(t.Context(), `SELECT current_step FROM tickets WHERE id=?`, id).Scan(&currentStep); err != nil {
+		t.Fatal(err)
+	}
+	stepID, assigneeID := "parallel-step", "parallel-assignee"
+	managerID := e.UserID(t, "sales-manager")
+	if _, err := e.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_steps(id,ticket_id,step_order,display_order,title,action_type,required_approvals_number,required_approvals_percent,status,skip,fallback,created_at,updated_at) VALUES(?,?,?,?,?,'approve',1,100,'in_progress',0,0,1,1)`, stepID, id, currentStep, 99, "Parallel review"); err != nil {
+		t.Fatalf("insert parallel active step: %v", err)
+	}
+	if _, err := e.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,assigned_at,created_at,updated_at) VALUES(?,?,?, ?,0,1,1,1)`, assigneeID, stepID, id, managerID); err != nil {
+		t.Fatalf("insert parallel assignee: %v", err)
+	}
+	path := fmt.Sprintf("/ui/api/tickets/%s/assignees/%s/pending", id, assigneeID)
+	// sales-deputy is an active proxy for sales-manager; the proxy authority
+	// check must still apply when the assignment is on a later parallel step.
+	e.CallerFor = "sales-deputy"
+	response := e.Do(t, testutil.Integration, http.MethodPost, path, map[string]any{"pending": true})
+	if response.Status != http.StatusOK || string(response.Body) != `{"pending":true}` {
+		t.Fatalf("hold later parallel assignment: status=%d body=%s", response.Status, response.Body)
+	}
+	var pending bool
+	if err := e.DB.Q().QueryRowContext(t.Context(), `SELECT pending FROM ticket_assignees WHERE id=?`, assigneeID).Scan(&pending); err != nil || !pending {
+		t.Fatalf("later parallel assignment pending=%t err=%v", pending, err)
+	}
+}

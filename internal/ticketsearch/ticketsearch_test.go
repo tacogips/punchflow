@@ -92,6 +92,7 @@ func TestMatchExcludesRestrictedSectionFieldsForEveryCaller(t *testing.T) {
 		{`INSERT INTO users(id,code,email,first_name,last_name,status,locale,user_type,created_at,updated_at) VALUES('author','author','author@example.test','Author','User','activated','ja','member',1,1)`, nil},
 		{`INSERT INTO workflows(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('workflow','workflow','visible','folder',?,1,1)`, []any{string(definition)}},
 		{`INSERT INTO tickets(id,workflow_id,status,title,author_id,created_at,updated_at) VALUES('ticket','workflow','draft','Searchable title','author',1,1)`, nil},
+		{`INSERT INTO ticket_custom_numbering_values(ticket_id,custom_numbering_id,formatted_number) VALUES('ticket','custom','CUSTOM-LOOKUP-17')`, nil},
 		{`INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,created_at,updated_at) VALUES('restricted-input','ticket','secret-field','"restrictedneedle"',1,1)`, nil},
 		{`INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,created_at,updated_at) VALUES('public-input','ticket','public-field','"publicneedle"',1,1)`, nil},
 	}
@@ -114,6 +115,7 @@ func TestMatchExcludesRestrictedSectionFieldsForEveryCaller(t *testing.T) {
 			for keyword, want := range map[string]bool{
 				"restrictedneedle": false,
 				"publicneedle":     true,
+				"CUSTOM-LOOKUP-17": true,
 			} {
 				got, err := Match(ctx, db.Q(), principal, keyword)
 				if err != nil {

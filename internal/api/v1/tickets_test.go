@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -91,14 +92,41 @@ func TestTicketCreateGetAndVisibility(t *testing.T) {
 func TestTasksPendingAndAssignedToCurrentUser(t *testing.T) {
 	env := testutil.New(t)
 	id := pf22CreateTicket(t, env, testutil.Employee, "in_progress", 5000)
-	pending := env.Do(t, testutil.Manager, http.MethodGet, "/v1/tickets/tasks?pending=true", nil)
-	if pending.Status != http.StatusOK {
-		t.Fatalf("pending tasks: %d %s", pending.Status, pending.Body)
+	unheldID := pf22CreateTicket(t, env, testutil.Employee, "in_progress", 5000)
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_assignees SET pending=1 WHERE ticket_id=? AND completed=0`, id); err != nil {
+		t.Fatalf("hold first task: %v", err)
 	}
-	var none []any
-	pending.JSON(t, &none)
-	if len(none) != 0 {
-		t.Fatalf("pending=true returned %d tasks", len(none))
+	for _, tc := range []struct {
+		query string
+		want  map[string]bool
+	}{
+		{query: "", want: map[string]bool{id: true, unheldID: true}},
+		{query: "?pending=true", want: map[string]bool{id: true}},
+		{query: "?pending=false", want: map[string]bool{unheldID: true}},
+	} {
+		response := env.Do(t, testutil.Manager, http.MethodGet, "/v1/tickets/tasks"+tc.query, nil)
+		if response.Status != http.StatusOK {
+			t.Fatalf("tasks%s: %d %s", tc.query, response.Status, response.Body)
+		}
+		var rows []struct {
+			ID string `json:"id"`
+		}
+		response.JSON(t, &rows)
+		got := make(map[string]bool, len(rows))
+		for _, row := range rows {
+			got[row.ID] = true
+		}
+		if len(got) != len(tc.want) {
+			t.Errorf("tasks%s returned %v, want %v", tc.query, got, tc.want)
+		}
+		for wantID := range tc.want {
+			if !got[wantID] {
+				t.Errorf("tasks%s omitted %s: %v", tc.query, wantID, got)
+			}
+		}
+		if total := response.Header.Get("Total"); total != fmt.Sprint(len(tc.want)) {
+			t.Errorf("tasks%s Total=%q, want %d", tc.query, total, len(tc.want))
+		}
 	}
 	invalid := env.Do(t, testutil.Manager, http.MethodGet, "/v1/tickets/tasks?status=archived", nil)
 	testutil.AssertError(t, invalid, http.StatusBadRequest, "invalid_parameter")
