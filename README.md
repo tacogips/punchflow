@@ -79,9 +79,9 @@ The 13 event types are `ping`, `ticket_created`, `ticket_updated`, `ticket_opene
 
 Deliveries include `Content-Type: application/json`, `User-Agent: kickflow-Hookshot/v1`, `X-Kickflow-Delivery` and, when a secret is configured, `X-Kickflow-Signature: sha256=<hex>`. Verify the lowercase hexadecimal HMAC-SHA256 using your secret and the exact raw request body bytes. The initial delivery is followed by up to 10 retries with exponential backoff (10 seconds by default, capped at one hour). Use **Resend** in the delivery log or `POST /admin/api/webhook-events/{eventId}/resend` to retry manually; test delivery uses `POST /admin/api/webhooks/{id}/ping`. The dev admin endpoint `POST /admin/api/webhook-events` fires an event for a ticket or comment. See [webhook design](design-docs/specs/design-webhooks.md) for payload and delivery details.
 
-## Watching, notifications, search and CSV export (UI helper API)
+## UI helper API
 
-kickflow's public API does not document these, so punchflow serves them under `/ui/api/` (same authentication as `/v1`):
+Browser-only helpers use `/ui/api/` with the same authentication as `/v1`. They cover application teams and workflow master-item pickers; ticket links, labels, sub-statuses, submission, approval cancellation, raising, custom steps and approver assignment; plus watch subscriptions, notifications, ticket search and CSV export. Watch, notification, search and export examples:
 
 ```sh
 # Watch a ticket and read your notification inbox
@@ -96,11 +96,11 @@ curl -OJ -H 'Authorization: Bearer pf_pat_dev_employee' 'http://localhost:8080/u
 curl -OJ -H 'Authorization: Bearer pf_pat_dev_admin' 'http://localhost:8080/ui/api/audit-logs/export'
 ```
 
-Notifications are local only (no email or chat). The UI has a watch toggle on ticket detail, a **Notifications** inbox with an unread badge, a keyword box and CSV links on ticket search, and an export link on audit logs. See [the design](design-docs/specs/design-notifications-export-search.md).
+Notifications are local only (no email or chat). See the [UI helper API design](design-docs/specs/design-notifications-export-search.md) and [ticket controls design](design-docs/specs/design-approval-engine.md).
 
 ## Keycloak SSO (manual check)
 
-Start Keycloak, then start punchflow with its realm as the OIDC issuer:
+Start the bundled Keycloak realm, then enable OIDC by setting its issuer (or `PUNCHFLOW_OIDC_ISSUER`):
 
 ```sh
 mise run keycloak:up
@@ -111,7 +111,7 @@ Open `http://localhost:8080`, sign in as `sales-rep@punchflow.test` with passwor
 
 ## Development switches and test scenarios
 
-Local e-mail login and the admin fixture reset API are disabled by default. Enable them explicitly with `--enable-local-login` and `--enable-admin-reset` (or `PUNCHFLOW_ENABLE_LOCAL_LOGIN=true` and `PUNCHFLOW_ENABLE_ADMIN_RESET=true`). `--rate-limit N` enables per-IP request limiting on `/v1`; `--rate-limit-secret VALUE` configures the secret that raises the limit. Tenant modes and fault injection can be configured through the dev admin API to exercise error responses.
+Local e-mail login and the admin fixture reset API are disabled by default. Enable them with `--enable-local-login` and `--enable-admin-reset` (or their `PUNCHFLOW_ENABLE_LOCAL_LOGIN` and `PUNCHFLOW_ENABLE_ADMIN_RESET` variables). OIDC settings also accept `PUNCHFLOW_OIDC_*`; `--rate-limit N` and `--rate-limit-secret VALUE` configure `/v1` rate limiting. Tenant modes and fault injection are available through the dev admin API.
 
 ## Labels, sub-statuses and lifecycle controls
 
@@ -119,7 +119,7 @@ Labels (`labels.json`) and sub-statuses (`sub-statuses.json`, referenced by rout
 
 ## CLI, fixtures and inferred behavior
 
-The CLI includes `serve`, `fixtures load`, `fixtures reset`, `fixtures export --out DIR`, `token issue` and `version`. Shared database options include `--data-dir`, `--db` and `--fixtures`; configuration flags have `PUNCHFLOW_...` environment forms. See the full [CLI reference](design-docs/specs/command.md). Default JSON fixtures are in `fixtures/default` (17 files, including `user-custom-fields.json`, `labels.json` and `sub-statuses.json`); export them with `punchflow fixtures export --out DIR` or restore them with `punchflow fixtures reset`. Some behavior is inferred from public kickflow materials; the inference register is in [notes.md](design-docs/specs/notes.md), and endpoint and event coverage is in the [API coverage matrix](design-docs/specs/design-api-coverage.md).
+The CLI includes `serve`, `fixtures load`, `fixtures reset`, `fixtures export --out DIR`, `token issue` and `version`. Shared database options include `--data-dir`, `--db` and `--fixtures`; configuration flags have `PUNCHFLOW_...` environment forms. See the full [CLI reference](design-docs/specs/command.md). Default JSON fixtures are in `fixtures/default` (18 files, including `user-custom-fields.json`, `labels.json` and `sub-statuses.json`); export them with `punchflow fixtures export --out DIR` or restore them with `punchflow fixtures reset`. Some behavior is inferred from public kickflow materials; the inference register is in [notes.md](design-docs/specs/notes.md), and endpoint and event coverage is in the [API coverage matrix](design-docs/specs/design-api-coverage.md).
 
 ## Development
 

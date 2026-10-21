@@ -18,7 +18,7 @@ This document describes CLI command interface design specifications for the `pun
 | `punchflow fixtures load` | Load a fixture set into an empty DB. Fails (exit 1) if the DB already contains data |
 | `punchflow fixtures reset` | Delete all data (including uploaded files) and load a fixture set. Local operator command, so it does not require `--enable-admin-reset`; stop `serve` first or expect the running server to see the new data on its next request |
 | `punchflow fixtures export` | Write the current definitions and org data in canonical fixture form to `--out DIR` |
-| `punchflow token issue` | Issue a token and print it once to stdout: `--user <id|code|email>` for a PAT, or `--service-account <name>` for a SAT |
+| `punchflow token issue` | Issue a token and print it once to stdout: `--user <id\|code\|email>` for a PAT, or `--service-account <name>` for a SAT |
 | `punchflow version` | Print the version from `internal/build/VERSION` |
 
 ### Flags and Options
