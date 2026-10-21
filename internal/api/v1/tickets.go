@@ -235,6 +235,10 @@ func (a *API) createTicket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := pf22ValidateTicketRequestRequiredProperties(raw, "createTicket"); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	var input engine.CreateInput
 	if err := json.Unmarshal(raw, &input); err != nil {
 		kferr.Write(w, kferr.InvalidParameter("Invalid ticket request"))
@@ -277,9 +281,18 @@ func (a *API) createTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateTicket(w http.ResponseWriter, r *http.Request) {
-	var input engine.UpdateInput
-	if err := httpx.DecodeJSON(r, &input); err != nil {
+	var raw json.RawMessage
+	if err := httpx.DecodeJSON(r, &raw); err != nil {
 		kferr.Write(w, err)
+		return
+	}
+	if err := pf22ValidateTicketRequestRequiredProperties(raw, "updateTicket"); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	var input engine.UpdateInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		kferr.Write(w, kferr.InvalidParameter("Invalid ticket request"))
 		return
 	}
 	a.pf22Update(w, r, "ticket.update", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
@@ -291,9 +304,18 @@ func (a *API) updateTicketForm(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("form patch must not be empty"))
 		return
 	}
-	var input engine.FormPatch
-	if err := httpx.DecodeJSON(r, &input); err != nil {
+	var raw json.RawMessage
+	if err := httpx.DecodeJSON(r, &raw); err != nil {
 		kferr.Write(w, err)
+		return
+	}
+	if err := pf22ValidateTicketRequestRequiredProperties(raw, "updateTicketForm"); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	var input engine.FormPatch
+	if err := json.Unmarshal(raw, &input); err != nil {
+		kferr.Write(w, kferr.InvalidParameter("Invalid ticket form request"))
 		return
 	}
 	if len(input.Inputs) == 0 && len(input.SlipItems) == 0 {

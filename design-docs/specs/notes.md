@@ -498,6 +498,12 @@ These are scope cuts, not inferences. Each is visible to API clients only as a c
 | INF-B8-06 | General-master picker options remain an accessor in the Solid `<For>` expression so asynchronous item loading and changes to source filter fields refresh the rendered choices. Filter matching continues to use the configured filter definitions. | General-master manual 360044511774; component source fix and filter-source regression. The browser test exercises the reactive filter source data; mounted UI reactivity follows Solid accessor semantics. |
 | INF-B8-07 | Ticket-copy mapping values are converted to the destination wire representation after compatibility checks; numeric and calculation values copied to short/long text are serialized as strings. | Copy compatibility FAQ 9731410254489 explicitly allows integer, number and calculation sources into text destinations; numeric-to-text editor regression. |
 
+### Round-10 request validation (INF-Q10-*)
+
+| ID | Inference / compatibility decision | Evidence |
+|---|---|---|
+| INF-Q10-01 | Ticket create, full update, and form-patch nested items reject omitted or null schema-required properties as `400 invalid_parameter`; form and slip-field identifiers accept the documented ID-or-code alternatives. Full create/update slip rows retain the documented default-first-section behavior, while form-patch rows require an explicit section ID or code. The locally inferred inline `viewers[].userId` requirement is enforced. Unknown request properties remain ignored, including inside these bodies. | OpenAPI `createTicket`, `updateTicket`, and `TicketFormPartialUpdateBody` required/anyOf declarations and descriptions; existing changelog-derived inline viewer schema; handler and contract regressions. |
+
 ### Round-9 REST request validation and pagination (INF-V9-*)
 
 | ID | Inference / compatibility decision | Evidence |

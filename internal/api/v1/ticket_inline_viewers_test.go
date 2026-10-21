@@ -130,13 +130,28 @@ func TestCreateTicketRejectsInvalidInlineUsers(t *testing.T) {
 	}
 	before := n03TicketCount(t, env)
 
-	for name, extra := range map[string]map[string]any{
-		"nonexistent viewer":  {"viewers": []map[string]any{{"userId": n03MissingUser}}},
-		"malformed viewer id": {"viewers": []map[string]any{{"userId": "not-a-uuid"}}},
-		"missing viewer id":   {"viewers": []map[string]any{{}}},
+	for _, tc := range []struct {
+		name       string
+		extra      map[string]any
+		statusCode int
+		errorCode  string
+	}{
+		{name: "nonexistent viewer", extra: map[string]any{"viewers": []map[string]any{{"userId": n03MissingUser}}}, statusCode: http.StatusUnprocessableEntity, errorCode: "validation_failed"},
+		{name: "malformed viewer id", extra: map[string]any{"viewers": []map[string]any{{"userId": "not-a-uuid"}}}, statusCode: http.StatusUnprocessableEntity, errorCode: "validation_failed"},
+		{name: "missing viewer id", extra: map[string]any{"viewers": []map[string]any{{}}}, statusCode: http.StatusBadRequest, errorCode: "invalid_parameter"},
 	} {
-		t.Run(name, func(t *testing.T) {
-			n03AssertValidationField(t, env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", n03CreateBody(t, env, "draft", extra)), "viewers[0].userId")
+		t.Run(tc.name, func(t *testing.T) {
+			resp := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", n03CreateBody(t, env, "draft", tc.extra))
+			testutil.AssertError(t, resp, tc.statusCode, tc.errorCode)
+			if tc.errorCode == "validation_failed" {
+				var body struct {
+					Errors map[string][]string `json:"errors"`
+				}
+				resp.JSON(t, &body)
+				if len(body.Errors["viewers[0].userId"]) == 0 {
+					t.Fatalf("errors=%v, want an entry for viewers[0].userId", body.Errors)
+				}
+			}
 		})
 	}
 	t.Run("nonexistent watcher", func(t *testing.T) {
