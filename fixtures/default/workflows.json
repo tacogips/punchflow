@@ -856,7 +856,12 @@
             "autoLink": true,
             "useTodayForDefaultValue": false,
             "allowedTicketStatus": [
-              "all"
+              "draft",
+              "in_progress",
+              "completed",
+              "rejected",
+              "archived",
+              "denied"
             ]
           },
           {

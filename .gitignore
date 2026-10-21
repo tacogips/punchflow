@@ -61,3 +61,6 @@
 mise.local.toml
 /web/dist/app/
 /.punchflow-data/
+
+## agent worktrees
+/.claude/worktrees/
