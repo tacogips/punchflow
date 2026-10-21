@@ -94,6 +94,9 @@ func (n *normalizer) normalizeSlipRows(items []SlipItemInput) ([]model.TicketSli
 		if position < len(existing[section.ID]) {
 			prev = &existing[section.ID][position]
 		}
+		if n.opts.Approver && prev == nil && !section.AllowApproverToAddItems {
+			return nil, kferr.InvalidParameter("Approver cannot add rows to this detail section")
+		}
 		cells, err := n.normalizeSlipCells(section, item, prev)
 		if err != nil {
 			return nil, err

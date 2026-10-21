@@ -22,7 +22,7 @@ func pf14SelectRouteCode(def model.WorkflowDef, values map[string]any) (string, 
 			}
 			break
 		}
-		match := condition.ConditionType == model.RouteConditionTypeAlways || pf14ConditionMatch(condition.ConditionFields, condition.CombinationType, values)
+		match := condition.ConditionType == model.RouteConditionTypeAlways || pf14ConditionMatchExpression(condition.ConditionFields, condition.CombinationType, condition.CombinationExpression, values)
 		if !match {
 			continue
 		}

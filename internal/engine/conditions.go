@@ -63,6 +63,10 @@ func pf14ConditionMatch(fields []model.ConditionField, combination string, value
 	return conditions.Match(fields, combination, values)
 }
 
+func pf14ConditionMatchExpression(fields []model.ConditionField, combination, expression string, values map[string]any) bool {
+	return conditions.MatchExpression(fields, combination, expression, values)
+}
+
 func pf14Compare(actual any, symbol string, expected any) bool {
 	return conditions.Compare(actual, symbol, expected)
 }
@@ -81,7 +85,7 @@ func pf14SectionVisible(section model.WorkflowSection, values map[string]any) bo
 	if section.SectionType != model.SectionTypeForm || !section.Conditional {
 		return true
 	}
-	return pf14ConditionMatch(section.ConditionFields, section.CombinationType, values)
+	return pf14ConditionMatchExpression(section.ConditionFields, section.CombinationType, section.CombinationExpression, values)
 }
 
 func pf14FieldValue(input FieldInput) (any, []string, error) {

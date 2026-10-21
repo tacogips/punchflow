@@ -101,7 +101,7 @@ func formInputJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 		for i := range section.FormFields {
 			if section.FormFields[i].ID == in.FormFieldID {
 				fieldModel = &section.FormFields[i]
-				field = pf08FormField(ctx, q, section.FormFields[i])
+				field = pf08FormFieldWithCustomValidations(ctx, q, section.FormFields[i], pf08FormFieldsByCode(def.SectionList))
 			}
 		}
 	}
@@ -122,8 +122,8 @@ func formInputJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 	return map[string]any{"id": in.ID, "formFieldId": in.FormFieldID, "value": in.Value, "formField": field, "generalMasterItems": resolved.general, "users": resolved.users, "teams": resolved.teams, "inputTickets": resolved.tickets, "attachments": attachments}, nil
 }
 
-func slipFieldInTicket(ctx context.Context, q store.Querier, f model.SlipField) map[string]any {
-	out := pf08SlipField(f)
+func slipFieldInTicket(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
+	out := pf08SlipFieldWithCustomValidations(f, fields)
 	if f.GeneralMasterCode != "" {
 		if id, err := store.ResolveID(ctx, q, "general_masters", f.GeneralMasterCode); err == nil {
 			if m, err := GeneralMaster(ctx, q, id); err == nil {
@@ -158,7 +158,7 @@ func slipItemsJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 		cells := []any{}
 		if section != nil {
 			for _, f := range section.SlipFields {
-				cell, err := slipCellJSON(ctx, q, row, f)
+				cell, err := slipCellJSON(ctx, q, row, f, section.SlipFields)
 				if err != nil {
 					return nil, err
 				}
@@ -170,7 +170,7 @@ func slipItemsJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 	return slips, nil
 }
 
-func slipCellJSON(ctx context.Context, q store.Querier, row model.TicketSlipItem, f model.SlipField) (map[string]any, error) {
+func slipCellJSON(ctx context.Context, q store.Querier, row model.TicketSlipItem, f model.SlipField, fields []model.SlipField) (map[string]any, error) {
 	value, ok := row.Inputs[f.ID]
 	if !ok {
 		value = row.Inputs[f.Code]
@@ -189,6 +189,6 @@ func slipCellJSON(ctx context.Context, q store.Querier, row model.TicketSlipItem
 	return map[string]any{
 		"id": stableUUID(row.ID, f.ID), "slipFieldId": f.ID, "value": value, "createdAt": pf08Time(row.CreatedAt), "updatedAt": pf08Time(row.UpdatedAt),
 		"generalMasterItems": resolved.general, "users": resolved.users, "teams": resolved.teams, "inputTickets": resolved.tickets,
-		"attachments": attachments, "slipField": slipFieldInTicket(ctx, q, f),
+		"attachments": attachments, "slipField": slipFieldInTicket(ctx, q, f, fields),
 	}, nil
 }

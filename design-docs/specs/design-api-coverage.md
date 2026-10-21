@@ -229,8 +229,8 @@ Added in session 462 to close carried finding CF-01 (`notes.md`). The values com
 | Step condition combination | `all`, `any` | `RouteStepCondition.combinationType` | - | `StepCombinationTypes` |
 | Step condition field key | spec enum | `RouteStepConditionField.fieldKey` | `other_variable` (INF-18) | `StepConditionFieldKeys` |
 | Route condition type | `always`, `field`, `field_otherwise` | `WorkflowRouteCondition.conditionType` | - | `RouteConditionTypes` |
-| Route condition combination | `all`, `any` | `WorkflowRouteCondition.combinationType` | `custom` (INF-18) | `RouteCombinationTypes` |
-| Section type | `form`, `slip` | `SectionListItem.sectionType` | `conditional` is not a type. A conditional section is a `form` section with `conditional: true`, `combinationType` (`all`/`any`; `custom` rejected, INF-18) and its own `conditionFields`. Slip sections carry `code` | `SectionTypes` |
+| Route condition combination | `all`, `any`, `custom` | `WorkflowRouteCondition.combinationType` | `custom` uses the A-J expression grammar with `&&`, `||`, and parentheses (INF-CFG-02) | `RouteCombinationTypes` |
+| Section type | `form`, `slip` | `SectionListItem.sectionType` | `conditional` is not a type. A conditional section is a `form` section with `conditional: true`, `combinationType` (`all`/`any`/`custom`), `combinationExpression` for `custom`, and its own `conditionFields`. Slip sections carry `code` and `allowApproverToAddItems` (default false; INF-CFG-01) | `SectionTypes` |
 | Route status | `visible`, `deleted`, `error` | `Route.status` | - | `RouteStatuses` |
 | Workflow status | `visible`, `invisible`, `deleted` | `Workflow.status` | - | `WorkflowStatuses` |
 | User status | `invited`, `activated`, `suspended`, `deactivated` | `User.status` | - | `UserStatuses` (`UserStatusActive = "activated"`) |

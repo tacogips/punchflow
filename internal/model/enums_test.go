@@ -37,7 +37,8 @@ func TestEnumListsMatchOpenAPI(t *testing.T) {
 		{"StepCombinationTypes", StepCombinationTypes, "RouteStepCondition", []string{"combinationType"}, nil},
 		{"StepConditionFieldKeys", StepConditionFieldKeys, "RouteStepConditionField", []string{"fieldKey"}, []string{"other_variable"}},
 		{"RouteConditionTypes", RouteConditionTypes, "WorkflowRouteCondition", []string{"conditionType"}, nil},
-		{"RouteCombinationTypes", RouteCombinationTypes, "WorkflowRouteCondition", []string{"combinationType"}, []string{"custom"}},
+		{"RouteCombinationTypes", RouteCombinationTypes, "WorkflowRouteCondition", []string{"combinationType"}, nil},
+		{"SectionCombinationTypes", SectionCombinationTypes, "SectionListItem", []string{"combinationType"}, nil},
 		{"SectionTypes", SectionTypes, "SectionListItem", []string{"sectionType"}, nil},
 		{"RouteStatuses", RouteStatuses, "Route", []string{"status"}, nil},
 		{"WorkflowStatuses", WorkflowStatuses, "Workflow", []string{"status"}, nil},
@@ -49,8 +50,8 @@ func TestEnumListsMatchOpenAPI(t *testing.T) {
 		{"FormFieldSizes", FormFieldSizes, "FormField", []string{"size"}, nil},
 		{"ForcedPublicTypes", ForcedPublicTypes, "TicketSummary", []string{"forcedPublicType"}, nil},
 	}
-	if len(rows) != 22 {
-		t.Fatalf("enum rows=%d; want 22", len(rows))
+	if len(rows) != 23 {
+		t.Fatalf("enum rows=%d; want 23", len(rows))
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -79,7 +80,7 @@ func TestEnumListsHaveNoDuplicates(t *testing.T) {
 		"StepTypes": StepTypes, "FallbackTypes": FallbackTypes, "ManagerSelectionTypes": ManagerSelectionTypes,
 		"GradeSymbols": GradeSymbols, "StepConditionTypes": StepConditionTypes, "StepCombinationTypes": StepCombinationTypes,
 		"StepConditionFieldKeys": StepConditionFieldKeys, "RouteConditionTypes": RouteConditionTypes,
-		"RouteCombinationTypes": RouteCombinationTypes, "SectionTypes": SectionTypes, "RouteStatuses": RouteStatuses,
+		"RouteCombinationTypes": RouteCombinationTypes, "SectionCombinationTypes": SectionCombinationTypes, "SectionTypes": SectionTypes, "RouteStatuses": RouteStatuses,
 		"WorkflowStatuses": WorkflowStatuses, "UserStatuses": UserStatuses, "UserTypes": UserTypes,
 		"Permissions": Permissions, "MasterFieldTypes": MasterFieldTypes, "MasterSortKeys": MasterSortKeys,
 		"FormFieldSizes": FormFieldSizes, "ForcedPublicTypes": ForcedPublicTypes,

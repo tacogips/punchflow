@@ -25,7 +25,11 @@ func Workflow(ctx context.Context, q store.Querier, id string) (WorkflowJSON, er
 	if d.TicketNumberFormat != nil {
 		next = m.TicketNumberCounter + 1
 	}
-	out := WorkflowJSON{"id": m.ID, "code": m.Code, "versionId": m.ID, "versionNumber": 1, "name": d.Name, "description": d.Description, "status": m.Status, "publicTicket": d.PublicTicket, "visibleToManager": d.VisibleToManager, "visibleToTeamMembers": d.VisibleToTeamMembers, "titleDescription": d.TitleDescription, "ticketNumberFormat": d.TicketNumberFormat, "overwritable": d.Overwritable, "createdAt": pf08Time(m.CreatedAt), "updatedAt": pf08Time(m.UpdatedAt), "titleInputMode": d.TitleInputMode, "titleFormula": d.TitleFormula, "availableToEveryone": d.AvailableToEveryone, "reportFormats": pf08EmptyStrings(d.ReportFormats), "hiddenOnWorkflowFilterForTicket": d.HiddenOnWorkflowFilterForTicket, "hiddenOnWorkflowSelectionScreen": d.HiddenOnWorkflowSelectionScreen, "approvalCancellable": d.ApprovalCancellable, "reportFileNameFormat": d.ReportFileNameFormat, "current": true, "notes": d.Notes, "versionCreatedAt": pf08Time(m.CreatedAt), "collectEmailOnExternalPublish": d.CollectEmailOnExternalPublish, "notifyGuestOnCompletion": d.NotifyGuestOnCompletion, "allowCustomSteps": d.AllowCustomSteps, "commentingRequiredOnApproval": d.CommentingRequiredOnApproval, "commentingRequiredOnRejection": d.CommentingRequiredOnRejection, "commentingRequiredOnDenial": d.CommentingRequiredOnDenial, "allowEditingOfViewers": d.AllowEditingOfViewers, "commentingEnabled": d.CommentingEnabled, "nextTicketNumberValue": next, "nextTicketNumberValueByKey": nil, "author": nil, "versionAuthor": nil, "externalPublish": nil, "folder": folder, "categories": pf08Categories(ctx, q, d.CategoryCodes)}
+	_, nextByKey, _, err := pf08WorkflowNumbering(ctx, q, d)
+	if err != nil {
+		return nil, err
+	}
+	out := WorkflowJSON{"id": m.ID, "code": m.Code, "versionId": m.ID, "versionNumber": 1, "name": d.Name, "description": d.Description, "status": m.Status, "publicTicket": d.PublicTicket, "visibleToManager": d.VisibleToManager, "visibleToTeamMembers": d.VisibleToTeamMembers, "titleDescription": d.TitleDescription, "ticketNumberFormat": d.TicketNumberFormat, "overwritable": d.Overwritable, "createdAt": pf08Time(m.CreatedAt), "updatedAt": pf08Time(m.UpdatedAt), "titleInputMode": d.TitleInputMode, "titleFormula": d.TitleFormula, "availableToEveryone": d.AvailableToEveryone, "reportFormats": pf08EmptyStrings(d.ReportFormats), "hiddenOnWorkflowFilterForTicket": d.HiddenOnWorkflowFilterForTicket, "hiddenOnWorkflowSelectionScreen": d.HiddenOnWorkflowSelectionScreen, "approvalCancellable": d.ApprovalCancellable, "reportFileNameFormat": d.ReportFileNameFormat, "current": true, "notes": d.Notes, "versionCreatedAt": pf08Time(m.CreatedAt), "collectEmailOnExternalPublish": d.CollectEmailOnExternalPublish, "notifyGuestOnCompletion": d.NotifyGuestOnCompletion, "allowCustomSteps": d.AllowCustomSteps, "commentingRequiredOnApproval": d.CommentingRequiredOnApproval, "commentingRequiredOnRejection": d.CommentingRequiredOnRejection, "commentingRequiredOnDenial": d.CommentingRequiredOnDenial, "allowEditingOfViewers": d.AllowEditingOfViewers, "commentingEnabled": d.CommentingEnabled, "nextTicketNumberValue": next, "nextTicketNumberValueByKey": nextByKey, "author": nil, "versionAuthor": nil, "externalPublish": nil, "folder": folder, "categories": pf08Categories(ctx, q, d.CategoryCodes)}
 	_ = folder
 	return out, nil
 }
@@ -46,10 +50,18 @@ func WorkflowInTicket(ctx context.Context, q store.Querier, id string) (Workflow
 	out["sectionList"] = sections
 	out["ticketViewers"] = pf08TicketViewers(ctx, q, pf08WorkflowViewers(ctx, q, id))
 	out["cloudSignSetting"] = nil
-	out["ticketNumberKey"] = nil
+	key, _, custom, err := pf08WorkflowNumbering(ctx, q, d)
+	if err != nil {
+		return nil, err
+	}
+	out["ticketNumberKey"] = key
 	out["excelTemplate"] = nil
-	out["customNumberings"] = []any{}
-	out["customNumberingSettings"] = []any{}
+	out["customNumberings"] = custom
+	settings, err := pf08CustomNumberingSettings(ctx, q, d.CustomNumberingSettings)
+	if err != nil {
+		return nil, err
+	}
+	out["customNumberingSettings"] = settings
 	return out, nil
 }
 func WorkflowDetail(ctx context.Context, q store.Querier, id string) (WorkflowDetailJSON, error) {

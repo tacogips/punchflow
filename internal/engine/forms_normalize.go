@@ -129,6 +129,7 @@ func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, de
 	n.checkRequiredCells(finalSlips)
 	normalized = n.carryOverBlocked(normalized)
 	title, calcChanged := n.calculate(normalized, finalSlips)
+	n.validateCustomFields(normalized, finalSlips)
 	if len(n.errs) > 0 {
 		return formResult{}, kferr.ValidationFailed(n.errs)
 	}

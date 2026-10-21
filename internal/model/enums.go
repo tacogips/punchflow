@@ -62,6 +62,7 @@ const (
 	RouteConditionTypeFieldOtherwise = "field_otherwise"
 	RouteCombinationAll              = "all"
 	RouteCombinationAny              = "any"
+	RouteCombinationCustom           = "custom"
 
 	SectionTypeForm = "form"
 	SectionTypeSlip = "slip"
@@ -154,7 +155,8 @@ var StepConditionTypes = []string{StepConditionTypeAlways, StepConditionTypeCond
 var StepCombinationTypes = []string{StepCombinationAll, StepCombinationAny}
 var StepConditionFieldKeys = []string{StepConditionFieldKeyAuthorGrade, StepConditionFieldKeyAuthorTeam, StepConditionFieldKeyTextVariable, StepConditionFieldKeyNumberVariable, StepConditionFieldKeyCheckboxVariable, StepConditionFieldKeyGeneralMasterVariable}
 var RouteConditionTypes = []string{RouteConditionTypeAlways, RouteConditionTypeField, RouteConditionTypeFieldOtherwise}
-var RouteCombinationTypes = []string{RouteCombinationAll, RouteCombinationAny}
+var RouteCombinationTypes = []string{RouteCombinationAll, RouteCombinationAny, RouteCombinationCustom}
+var SectionCombinationTypes = []string{RouteCombinationAll, RouteCombinationAny, RouteCombinationCustom}
 var SectionTypes = []string{SectionTypeForm, SectionTypeSlip}
 var RouteStatuses = []string{RouteStatusVisible, RouteStatusDeleted, RouteStatusError}
 var WorkflowStatuses = []string{WorkflowStatusVisible, WorkflowStatusInvisible, WorkflowStatusDeleted}

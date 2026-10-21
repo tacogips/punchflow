@@ -37,7 +37,7 @@ Large features are split into multiple related plans with cross-references.
 
 ## Active Plans (punchflow dummy kickflow server)
 
-All plans are completed and archived in session 467. `active/` holds only `punchflow-kickflow-dummy-s467-dispatch.json`, the final manifest. The s460 and s462..s466 manifests are in `completed/`.
+The session 467 plans are archived; `active/` holds the final dispatch manifest. Later review-fix plans are listed below when completed.
 
 ## Completed Plans
 
@@ -80,6 +80,7 @@ All plans are completed and archived in session 467. `active/` holds only `punch
 | [pf-26f-contract-proxies-roles](./completed/pf-26f-contract-proxies-roles.md) | 2026-10-21 (s467) | `design-docs/specs/design-api-coverage.md` |
 | [pf-27-finalize](./completed/pf-27-finalize.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
 | [engine-lifecycle-review-fixes](./completed/engine-lifecycle-review-fixes.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-webhooks.md` |
+| [workflow-configuration-review-fixes](./completed/workflow-configuration-review-fixes.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-docs/specs/design-api-coverage.md` |
 
 ## Phase Dependencies (for impl-exec-auto)
 

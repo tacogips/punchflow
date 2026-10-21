@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"os"
 	"testing"
+
+	"punchflow/internal/model"
 )
 
 func TestValidateMinimal(t *testing.T) {
@@ -17,6 +19,25 @@ func TestValidateMinimal(t *testing.T) {
 	}
 }
 
+func TestValidateCustomRouteAndSectionExpressions(t *testing.T) {
+	set, err := Parse(pf06FSSub(t, "testdata/minimal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wf := &set.Workflows[0]
+	conditionField := model.ConditionField{ID: "00000000-0000-4000-8000-000000000031", FieldKey: model.StepConditionFieldKeyCheckboxVariable, Symbol: "equal", Value: "yes"}
+	wf.RouteConditions = []model.RouteCondition{
+		{ID: "00000000-0000-4000-8000-000000000032", ConditionType: model.RouteConditionTypeField, CombinationType: "custom", CombinationExpression: "(A || B) && C", RouteCode: strPtr("ROUTE"), ConditionFields: []model.ConditionField{conditionField, {ID: "00000000-0000-4000-8000-000000000033", FieldKey: model.StepConditionFieldKeyCheckboxVariable, Symbol: "equal", Value: "yes"}, {ID: "00000000-0000-4000-8000-000000000034", FieldKey: model.StepConditionFieldKeyCheckboxVariable, Symbol: "equal", Value: "yes"}}},
+		{ID: "00000000-0000-4000-8000-000000000035", ConditionType: model.RouteConditionTypeAlways, RouteCode: strPtr("ROUTE")},
+	}
+	wf.SectionList = []model.WorkflowSection{{ID: "00000000-0000-4000-8000-000000000036", Title: "Conditional", SectionType: model.SectionTypeForm, Conditional: true, CombinationType: "custom", CombinationExpression: "A && B", ConditionFields: []model.ConditionField{{ID: "00000000-0000-4000-8000-000000000038", FieldKey: model.StepConditionFieldKeyCheckboxVariable, Symbol: "equal", Value: "yes"}, {ID: "00000000-0000-4000-8000-000000000037", FieldKey: model.StepConditionFieldKeyCheckboxVariable, Symbol: "equal", Value: "yes"}}}}
+	if err := Validate(set); err != nil {
+		t.Fatalf("custom conditions should validate: %v", err)
+	}
+}
+
+func strPtr(value string) *string { return &value }
+
 func TestValidateInvalidCases(t *testing.T) {
 	cases := []struct {
 		name string
@@ -28,7 +49,7 @@ func TestValidateInvalidCases(t *testing.T) {
 		{"bad-enum", FileUsers, "[0].status"},
 		{"dangling-user-code", FileRoles, "[0].memberCodes[1]"},
 		{"two-current-charts", FileOrganizationCharts, "$"},
-		{"custom-combination", FileWorkflows, "[0].routeConditions[0].combinationType"},
+		{"custom-combination", FileWorkflows, "[0].routeConditions[0].combinationExpression"},
 		{"other-variable", FileWorkflows, "[0].routeConditions[0].conditionFields[0].fieldKey"},
 		{"both-thresholds", FileRoutes, "[0].steps[0]"},
 		{"route-no-else", FileWorkflows, "[0].routeConditions"},

@@ -57,5 +57,14 @@ func validateLabelsAndSubStatuses(s *Set, add func(file, path, msg string)) {
 		case w.TicketNumberingSubStatus != nil && !known(*w.TicketNumberingSubStatus):
 			add(FileWorkflows, p, "unknown sub-status code")
 		}
+		knownIDs := make(map[string]bool, len(s.SubStatuses))
+		for _, subStatus := range s.SubStatuses {
+			knownIDs[subStatus.ID] = true
+		}
+		for j, setting := range w.CustomNumberingSettings {
+			if setting.SubStatusID != nil && !knownIDs[*setting.SubStatusID] {
+				add(FileWorkflows, fmt.Sprintf("[%d].customNumberingSettings[%d].subStatusId", i, j), "unknown sub-status id")
+			}
+		}
 	}
 }

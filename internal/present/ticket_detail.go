@@ -121,7 +121,7 @@ func ticketDetail(ctx context.Context, q store.Querier, id string, caller *acces
 		}
 		visible := true
 		if s.Conditional {
-			visible = conditions.Match(s.ConditionFields, s.CombinationType, values)
+			visible = conditions.MatchExpression(s.ConditionFields, s.CombinationType, s.CombinationExpression, values)
 		}
 		restricted := s.SectionType == model.SectionTypeForm && s.ViewRestriction
 		viewers := []any{}
@@ -152,7 +152,11 @@ func ticketDetail(ctx context.Context, q store.Querier, id string, caller *acces
 	out["inputs"] = inputMaps
 	out["cloudSignDocument"] = nil
 	out["steps"] = steps
-	out["customNumberingValues"] = []any{}
+	customNumbers, err := pf08TicketCustomNumberingValues(ctx, q, id, def)
+	if err != nil {
+		return nil, err
+	}
+	out["customNumberingValues"] = customNumbers
 	return out, nil
 }
 

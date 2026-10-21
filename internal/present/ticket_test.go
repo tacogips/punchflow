@@ -19,6 +19,11 @@ func TestTicketPresenters(t *testing.T) {
 		t.Fatal(err)
 	}
 	def.SectionList[0].FormFields = append(def.SectionList[0].FormFields, model.FormField{ID: "ffgm", Code: "MASTER", Title: "Master", FieldType: "master", GeneralMasterCode: "GM", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}})
+	customID := "324a3c20-74e3-4a73-9466-1a45375486b1"
+	customFormat := "DEC-[number]"
+	def.CustomNumberings = []model.CustomNumbering{{ID: customID, Code: "DECISION", Name: "Decision number", Value: 12}}
+	def.CustomNumberingSettings = []model.CustomNumberingSetting{{ID: "424a3c20-74e3-4a73-9466-1a45375486b1", CustomNumberingID: customID, TicketNumberFormat: &customFormat, TimingType: "opened", SortOrder: 1}}
+	def.TicketNumberKey = &model.TicketNumberKey{ID: "524a3c20-74e3-4a73-9466-1a45375486b1", Code: "SHARED", Name: "Shared group"}
 	definition, err := json.Marshal(def)
 	if err != nil {
 		t.Fatal(err)
@@ -43,6 +48,9 @@ func TestTicketPresenters(t *testing.T) {
 		if _, err := q.ExecContext(ctx, stmt.query, stmt.args...); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if _, err := q.ExecContext(ctx, `INSERT INTO ticket_custom_numbering_values(ticket_id,custom_numbering_id,formatted_number) VALUES('tk',?,'DEC-12')`, customID); err != nil {
+		t.Fatal(err)
 	}
 	summary, err := TicketSummary(ctx, q, "tk")
 	if err != nil {
@@ -85,6 +93,26 @@ func TestTicketPresenters(t *testing.T) {
 		}
 	}
 	detailStep := detail["steps"].([]any)[0].(map[string]any)
+	customValues := detail["customNumberingValues"].([]any)
+	if len(customValues) != 1 {
+		t.Fatalf("custom numbering values=%v, want one populated value", customValues)
+	}
+	customValue := customValues[0].(map[string]any)
+	if customValue["formattedNumber"] != "DEC-12" || customValue["customNumbering"].(model.CustomNumbering).Code != "DECISION" {
+		t.Fatalf("custom numbering value=%v", customValue)
+	}
+	workflowInTicket := detail["workflow"].(WorkflowInTicketJSON)
+	if workflowInTicket["ticketNumberKey"].(*model.TicketNumberKey).Code != "SHARED" || len(workflowInTicket["customNumberings"].([]any)) != 1 || len(workflowInTicket["customNumberingSettings"].([]any)) != 1 {
+		t.Fatalf("workflow numbering config=%v", workflowInTicket)
+	}
+	webhook, err := TicketDetailWebhook(ctx, q, "tk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	webhookValues := webhook["customNumberingValues"].([]any)
+	if len(webhookValues) != 1 || webhookValues[0].(map[string]any)["formattedNumber"] != "DEC-12" {
+		t.Fatalf("webhook custom numbering values=%v", webhookValues)
+	}
 	pf08Keys(t, detailStep, "id routeStepId title actionType requiredApprovalsNumber requiredApprovalsPercent stepOrder skip fallback fallbackResult author assignees completed completedAt instruction displayOrder status")
 	detailAssignee := detailStep["assignees"].([]any)[0].(map[string]any)
 	pf08Keys(t, detailAssignee, "id stepOrder current completed completedAt pending user proxyUserIds actualApprover")

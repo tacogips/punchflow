@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"punchflow/internal/conditions"
 	"punchflow/internal/model"
 )
 
@@ -325,6 +326,32 @@ func Validate(s *Set) error {
 		if !routeCodes[w.RouteCode] {
 			add(FileWorkflows, p+".routeCode", "unknown route code")
 		}
+		if len(w.CustomNumberings) > 5 {
+			add(FileWorkflows, p+".customNumberings", "at most 5 custom numberings are supported")
+		}
+		numberingIDs := make(map[string]bool, len(w.CustomNumberings))
+		for j, numbering := range w.CustomNumberings {
+			path := fmt.Sprintf("%s.customNumberings[%d]", p, j)
+			if numbering.ID == "" || numbering.Code == "" || numbering.Name == "" {
+				add(FileWorkflows, path, "id, code and name are required")
+			}
+			if numberingIDs[numbering.ID] {
+				add(FileWorkflows, path+".id", "duplicate custom numbering id")
+			}
+			numberingIDs[numbering.ID] = true
+		}
+		for j, setting := range w.CustomNumberingSettings {
+			path := fmt.Sprintf("%s.customNumberingSettings[%d]", p, j)
+			if !numberingIDs[setting.CustomNumberingID] {
+				add(FileWorkflows, path+".customNumberingId", "unknown custom numbering id")
+			}
+			if !pf06Contains(ticketNumberingTimings, setting.TimingType) {
+				add(FileWorkflows, path+".timingType", "invalid custom numbering timing")
+			}
+			if setting.TicketNumberFormat != nil && (*setting.TicketNumberFormat == "" || !strings.Contains(*setting.TicketNumberFormat, "[number]")) {
+				add(FileWorkflows, path+".ticketNumberFormat", "format must include [number]")
+			}
+		}
 		for j, c := range w.CategoryCodes {
 			if !categoryCodes[c] {
 				add(FileWorkflows, fmt.Sprintf("%s.categoryCodes[%d]", p, j), "unknown category code")
@@ -348,10 +375,12 @@ func Validate(s *Set) error {
 				if sec.SectionType != model.SectionTypeForm {
 					add(FileWorkflows, sp+".sectionType", "conditional section must be form")
 				}
-				if sec.CombinationType == "custom" {
-					add(FileWorkflows, sp+".combinationType", "combinationType custom is unsupported")
-				} else if !pf06Contains(model.StepCombinationTypes, sec.CombinationType) {
+				if !pf06Contains(model.SectionCombinationTypes, sec.CombinationType) {
 					add(FileWorkflows, sp+".combinationType", "invalid combinationType")
+				} else if sec.CombinationType == "custom" {
+					if err := conditions.ValidateExpression(sec.CombinationExpression, len(sec.ConditionFields)); err != nil {
+						add(FileWorkflows, sp+".combinationExpression", err.Error())
+					}
 				}
 			}
 			if (sec.ViewRestriction || len(sec.SectionViewers) > 0) && sec.SectionType != model.SectionTypeForm {
@@ -394,10 +423,12 @@ func Validate(s *Set) error {
 				add(FileWorkflows, cp+".routeCode", "unknown route code")
 			}
 			if c.ConditionType == model.RouteConditionTypeField || c.CombinationType != "" {
-				if c.CombinationType == "custom" {
-					add(FileWorkflows, cp+".combinationType", "combinationType custom is unsupported")
-				} else if !pf06Contains(model.RouteCombinationTypes, c.CombinationType) {
+				if !pf06Contains(model.RouteCombinationTypes, c.CombinationType) {
 					add(FileWorkflows, cp+".combinationType", "invalid combination type")
+				} else if c.CombinationType == "custom" {
+					if err := conditions.ValidateExpression(c.CombinationExpression, len(c.ConditionFields)); err != nil {
+						add(FileWorkflows, cp+".combinationExpression", err.Error())
+					}
 				}
 			}
 			for k, cf := range c.ConditionFields {
@@ -421,6 +452,7 @@ func Validate(s *Set) error {
 			}
 		}
 	}
+	ps = append(ps, pf12CustomValidationProblems(s)...)
 	for i, p := range append(append([]ProxyFixture{}, s.ProxyApplicants...), s.ProxyApprovers...) {
 		path := fmt.Sprintf("proxy[%d]", i)
 		if !userCodes[p.UserCode] {

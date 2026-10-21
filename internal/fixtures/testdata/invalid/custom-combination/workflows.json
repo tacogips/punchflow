@@ -32,7 +32,7 @@
         "id": "00000000-0000-4000-8000-000000000022",
         "conditionType": "always",
         "combinationType": "custom",
-        "combinationExpression": "",
+        "combinationExpression": "A &&",
         "routeCode": "ROUTE",
         "errorMessage": null,
         "conditionFields": []

@@ -64,9 +64,6 @@ func (e *Engine) pf15SyncSubStatus(ctx context.Context, tx *store.Tx, t *model.T
 	if err != nil {
 		return err
 	}
-	if def.TicketNumberingSubStatus != nil && *def.TicketNumberingSubStatus != want.Code {
-		return nil
-	}
 	return pf14Number(ctx, tx, t, def, now, numberingEventSubStatusAttached)
 }
 

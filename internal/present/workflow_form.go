@@ -12,11 +12,11 @@ func pf08Sections(ctx context.Context, q store.Querier, sections []model.Workflo
 	for _, s := range sections {
 		fields := []any{}
 		for _, f := range s.FormFields {
-			fields = append(fields, pf08FormField(ctx, q, f))
+			fields = append(fields, pf08FormFieldWithCustomValidations(ctx, q, f, formFields))
 		}
 		slips := []any{}
 		for _, f := range s.SlipFields {
-			slips = append(slips, pf08SlipField(f))
+			slips = append(slips, pf08SlipFieldWithCustomValidations(f, s.SlipFields))
 		}
 		cfs := []any{}
 		for _, f := range s.ConditionFields {
@@ -36,14 +36,63 @@ func pf08Sections(ctx context.Context, q store.Querier, sections []model.Workflo
 			section["conditional"] = s.Conditional
 			if s.Conditional {
 				section["combinationType"] = s.CombinationType
+				if s.CombinationExpression == "" {
+					section["combinationExpression"] = nil
+				} else {
+					section["combinationExpression"] = s.CombinationExpression
+				}
 			}
 		case model.SectionTypeSlip:
 			section["code"] = s.Code
+			section["allowApproverToAddItems"] = s.AllowApproverToAddItems
 		}
 		out = append(out, section)
 	}
 	return out, nil
 }
+
+func pf08FormFieldWithCustomValidations(ctx context.Context, q store.Querier, f model.FormField, fields map[string]model.FormField) map[string]any {
+	out := pf08FormField(ctx, q, f)
+	validations := make([]any, 0, len(f.CustomValidations))
+	for _, validation := range f.CustomValidations {
+		conditions := make([]any, 0, len(validation.Fields))
+		for _, condition := range validation.Fields {
+			field, ok := fields[condition.FormFieldCode]
+			var fieldJSON any
+			if ok {
+				fieldJSON = pf08FormField(ctx, q, field)
+			}
+			conditions = append(conditions, map[string]any{"id": condition.ID, "symbol": condition.Symbol, "value": condition.Value, "formField": fieldJSON, "generalMasterItem": nil, "grade": nil, "team": nil})
+		}
+		validations = append(validations, map[string]any{"id": validation.ID, "combinationType": validation.CombinationType, "errorMessage": validation.ErrorMessage, "fields": conditions})
+	}
+	out["customValidations"] = validations
+	return out
+}
+
+func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipField) map[string]any {
+	out := pf08SlipField(f)
+	byCode := make(map[string]model.SlipField, len(fields))
+	for _, field := range fields {
+		byCode[field.Code] = field
+	}
+	validations := make([]any, 0, len(f.CustomValidations))
+	for _, validation := range f.CustomValidations {
+		conditions := make([]any, 0, len(validation.Fields))
+		for _, condition := range validation.Fields {
+			field, ok := byCode[condition.SlipFieldCode]
+			var fieldJSON any
+			if ok {
+				fieldJSON = pf08SlipField(field)
+			}
+			conditions = append(conditions, map[string]any{"id": condition.ID, "symbol": condition.Symbol, "value": condition.Value, "slipField": fieldJSON, "generalMasterItem": nil, "grade": nil, "team": nil})
+		}
+		validations = append(validations, map[string]any{"id": validation.ID, "combinationType": validation.CombinationType, "errorMessage": validation.ErrorMessage, "fields": conditions})
+	}
+	out["customValidations"] = validations
+	return out
+}
+
 func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[string]any {
 	allowed := f.AllowedExtensions
 	if allowed == nil {
