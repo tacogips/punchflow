@@ -2,7 +2,8 @@ import { For, Show, createEffect, createResource, createSignal } from "solid-js"
 import { A, useParams, useSearchParams } from "@solidjs/router";
 import type { FormField, SectionListItem, TicketDetail, Team, Workflow, WorkflowDetail } from "../../api/types";
 import { apiFetch, apiList } from "../../api/client";
-import { toSlipItems, toTicketInputs, type FieldState } from "../../lib/form-model";
+import { toTicketInputs, type FieldState } from "../../lib/form-model";
+import { approverEditable, buildFormPayload, conditionValues, formStateFromTicket, sectionConditionMet, sectionViewable, slipKey, slipRowsFromTicket } from "../../lib/ticket-form";
 import { buildApprovers } from "../../lib/ticket-view";
 import type { SlipRows } from "../../components/tickets/SlipTable";
 import FormFields from "../../components/tickets/FormFields";
@@ -13,37 +14,6 @@ const obj = (v: unknown): Record<string, unknown> => v && typeof v === "object" 
 const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
 const str = (v: unknown): string => typeof v === "string" ? v : "";
 const sections = (workflow: WorkflowDetail): SectionListItem[] => workflow.sectionList ?? [];
-function conditionVisible(section: SectionListItem, state: Record<string, FieldState>): boolean {
-  const raw = section as unknown as Record<string, unknown>;
-  const condition = obj(raw.displayCondition ?? raw.condition); const code = str(condition.fieldCode ?? condition.formFieldCode);
-  if (!code) return true;
-  const actual = state[code]?.value; const expected = condition.value;
-  switch (condition.operator ?? condition.conditionType) {
-    case "equal": case "equals": return actual === expected;
-    case "not_equal": case "notEquals": return actual !== expected;
-    case "include": return Array.isArray(actual) ? actual.includes(expected) : String(actual ?? "").includes(String(expected ?? ""));
-    default: return true;
-  }
-}
-function initialState(workflow: WorkflowDetail, ticket?: TicketDetail): Record<string, FieldState> {
-  const state: Record<string, FieldState> = {};
-  for (const section of sections(workflow)) for (const field of section.formFields ?? []) {
-    const input = arr(ticket?.inputs).map(obj).find((item) => item.formFieldCode === field.code || item.formFieldId === field.id);
-    state[field.code] = { code: field.code, fieldType: field.fieldType, value: input ? input.value ?? input.generalMasterItemId ?? input.userId ?? input.teamId ?? input.ticketId ?? input.files ?? null : null };
-  }
-  return state;
-}
-function initialSlips(workflow: WorkflowDetail, ticket?: TicketDetail): SlipRows {
-  const rows: SlipRows = {};
-  for (const section of sections(workflow).filter((item) => item.sectionType === "slip")) {
-    const code = section.code ?? section.id;
-    rows[code] = arr(ticket?.slipItems).filter((row) => str(obj(row).slipSectionCode ?? obj(obj(row).section).code) === code).map((row) => Object.fromEntries((section.slipFields ?? []).map((field) => {
-      const input = arr(obj(row).inputs).map(obj).find((item) => item.slipFieldCode === field.code || item.slipFieldId === field.id);
-      return [field.code, { code: field.code, fieldType: field.fieldType, value: input?.value ?? input?.generalMasterItemId ?? input?.userId ?? input?.teamId ?? input?.ticketId ?? input?.files ?? null }];
-    })));
-  }
-  return rows;
-}
 export default function TicketEdit() {
   const params = useParams(); const [search] = useSearchParams(); const [chosenWorkflow, setChosenWorkflow] = createSignal(search.workflow ?? "");
   const [ticket, { refetch: refetchTicket }] = createResource(() => params.id, (id) => id ? apiFetch<TicketDetail>("GET", `/v1/tickets/${id}`) : Promise.resolve(undefined));
@@ -62,7 +32,7 @@ export default function TicketEdit() {
   createEffect(() => {
     const definition = workflow(); const existing = ticket(); const key = `${workflowId()}:${existing?.id ?? "new"}`;
     if (!definition || initialized() === key) return;
-    setForm(initialState(definition, existing)); setSlips(initialSlips(definition, existing)); setTitle(str(existing?.title)); setProxyClientUserId(str(obj(obj(existing).proxyClientUser).id));
+    setForm(formStateFromTicket(definition, existing)); setSlips(slipRowsFromTicket(definition, existing)); setTitle(str(existing?.title)); setProxyClientUserId(str(obj(obj(existing).proxyClientUser).id));
     const myTeams = teams() ?? []; setTeamId(str(obj(obj(existing).authorTeam).id) || (!params.id ? str(myTeams[0]?.id) : "")); setInitialized(key);
   });
   createEffect(() => {
@@ -71,18 +41,14 @@ export default function TicketEdit() {
   });
   const approverEdit = () => params.id !== undefined && ticket()?.status === "in_progress";
   const routeSteps = () => arr(obj(obj(workflow()).route).steps);
+  const memberTeams = (): Team[] => teams.state === "ready" ? teams() ?? [] : [];
+  const canView = (section: SectionListItem) => sectionViewable(section, ticket(), { userId: me()?.id, permissions: session()?.permissions, teamIds: memberTeams().map((team) => team.id) });
+  const conditionInputs = () => { const definition = workflow(); return definition ? conditionValues(toTicketInputs(definition, form())) : {}; };
+  const editableField = (field: FormField) => !approverEdit() || approverEditable(workflow() as WorkflowDetail, field);
   const save = async (status: "draft" | "in_progress") => {
     setBusy(true); setError(""); setErrors({});
     const definition = workflow(); if (!definition) { setError("Choose a workflow first."); setBusy(false); return; }
-    const allInputs = toTicketInputs(definition, form());
-    const allSlipItems = toSlipItems(definition, slips());
-    const approverFormCodes = new Set(sections(definition).flatMap((section) => (section.formFields ?? []).filter((field) => field.approver).map((field) => field.code)));
-    const approverSlipCodes = new Set(sections(definition).flatMap((section) => (section.slipFields ?? []).filter((field) => field.approver).map((field) => field.code)));
-    const approverInputs = allInputs.filter((input) => approverFormCodes.has(str(input.formFieldCode)));
-    const approverSlips = allSlipItems.map((slip) => ({ ...slip, inputs: slip.inputs.filter((input) => approverSlipCodes.has(str(input.slipFieldCode))) })).filter((slip) => slip.inputs.length > 0);
-    const formPayload: Record<string, unknown> = approverEdit()
-      ? { ...(approverInputs.length ? { inputs: approverInputs } : {}), ...(approverSlips.length ? { slipItems: approverSlips } : {}) }
-      : { inputs: allInputs, slipItems: allSlipItems };
+    const formPayload: Record<string, unknown> = { ...buildFormPayload(definition, form(), slips(), { viewable: canView, approver: approverEdit() }) };
     const approversPayload = buildApprovers(approvers());
     const payload: Record<string, unknown> = params.id && approverEdit() ? formPayload : {
       status, workflowId: workflowId(), authorTeamId: teamId(), proxyClientUserId: proxyClientUserId() || null,
@@ -111,9 +77,9 @@ export default function TicketEdit() {
             <label>Proxy client user ID (optional)<input value={proxyClientUserId()} onInput={(event) => setProxyClientUserId(event.currentTarget.value)} /></label>
             <Show when={obj(definition()).titleInputMode === "input" || obj(definition()).allowTitle === true}><label>Title<input value={title()} onInput={(event) => setTitle(event.currentTarget.value)} /></label></Show>
           </Show>
-          <For each={sections(definition())}>{(section) => <Show when={conditionVisible(section, form())}><section><h2>{section.title || (section.sectionType === "slip" ? "Items" : "Form")}</h2>
-            <Show when={section.sectionType === "form"} fallback={<SlipTable code={section.code ?? section.id} title={section.title ?? "Items"} fields={(section.slipFields ?? []).filter((field) => !approverEdit() || obj(field).approver === true)} rows={slips} setRows={setSlips} errors={errors()} />}>
-              <FormFields fields={(section.formFields ?? []).filter((field) => !approverEdit() || obj(field).approver === true)} state={form} setState={setForm} errors={errors()} />
+          <For each={sections(definition())}>{(section) => <Show when={canView(section) && sectionConditionMet(section, conditionInputs())}><section><h2>{section.title || (section.sectionType === "slip" ? "Items" : "Form")}</h2>
+            <Show when={section.sectionType === "form"} fallback={<SlipTable code={slipKey(section)} title={section.title ?? "Items"} fields={(section.slipFields ?? []).filter(editableField)} rows={slips} setRows={setSlips} errors={errors()} />}>
+              <FormFields fields={(section.formFields ?? []).filter(editableField)} state={form} setState={setForm} errors={errors()} />
             </Show>
           </section></Show>}</For>
           <For each={routeSteps().filter((step) => obj(step).stepType === "author_customizable")}>{(step) => { const code = str(obj(step).code); return <label>Approvers for {str(obj(step).title) || code}<input value={approvers()[code] ?? ""} onInput={(event) => setApprovers((current) => ({ ...current, [code]: event.currentTarget.value }))} placeholder="User IDs separated by commas" /></label>; }}</For>

@@ -29,7 +29,7 @@ export interface TicketInputBody {
   ticketId?: unknown;
   files?: string[] | null;
 }
-export interface SlipItemBody { slipSectionCode: string; inputs: Array<TicketInputBody & { slipFieldCode: string }> }
+export interface SlipItemBody { slipSectionId?: string; slipSectionCode?: string; inputs: Array<TicketInputBody & { slipFieldCode: string }> }
 export interface TicketWithStep { id: string; ticketNumber: string | null; title: string | null; status: string; steps: TicketStep[]; [key: string]: unknown }
 export interface TicketDetail extends TicketWithStep { inputs: TicketInput[]; route: RouteDetail | null; [key: string]: unknown }
 export interface Comment { id: string; content: string; [key: string]: unknown }

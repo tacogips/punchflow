@@ -1,4 +1,4 @@
-import type { SlipItemBody, TicketInputBody, WorkflowDetail } from "../api/types";
+import type { FormField, SlipItemBody, TicketInputBody, WorkflowDetail } from "../api/types";
 export type FieldState = { code: string; fieldType: string; value: unknown };
 
 function fields(workflow: WorkflowDetail) {
@@ -26,11 +26,14 @@ export function toTicketInputs(workflow: WorkflowDetail, state: Record<string, F
   return fields(workflow).map((field) => inputFor(state[field.code] ?? { code: field.code, fieldType: field.fieldType, value: null }, field.code));
 }
 
-export function toSlipItems(workflow: WorkflowDetail, rows: Record<string, Record<string, FieldState>[]>): SlipItemBody[] {
+export function toSlipItems(workflow: WorkflowDetail, rows: Record<string, Record<string, FieldState>[]>, fieldFilter: (field: FormField) => boolean = () => true): SlipItemBody[] {
+  // slipSectionId selects the section unambiguously (the backend prefers it
+  // over the code); every row of the section is sent because slipItems
+  // replaces all stored rows.
   return workflow.sectionList.filter((section) => section.sectionType === "slip").flatMap((section) =>
     (rows[section.code ?? section.id] ?? []).map((row) => ({
-      slipSectionCode: section.code ?? section.id,
-      inputs: (section.slipFields ?? []).map((field) => inputFor(row[field.code] ?? { code: field.code, fieldType: field.fieldType, value: null }, field.code, true) as TicketInputBody & { slipFieldCode: string }),
+      slipSectionId: section.id,
+      inputs: (section.slipFields ?? []).filter(fieldFilter).map((field) => inputFor(row[field.code] ?? { code: field.code, fieldType: field.fieldType, value: null }, field.code, true) as TicketInputBody & { slipFieldCode: string }),
     })),
   );
 }
