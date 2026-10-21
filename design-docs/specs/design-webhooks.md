@@ -48,10 +48,11 @@ Payloads reuse `internal/present` so they are identical to `getTicket` / `listTi
 
 - One dispatcher per server process, started by `serve` with the server context and stopped on shutdown (waits for in-flight attempts up to the 10 s timeout).
 - Wake-ups: `Notify()` after commits that enqueued events, a 1 s ticker, and startup (so persisted pending events survive restarts).
-- Selection: due rows (`status = pending AND next_attempt_at <= now`) ordered by `next_attempt_at, created_seq`. At most one in-flight attempt per webhook (preserves first-attempt order per webhook); at most 4 concurrent attempts overall.
+- Selection: due rows (`status = pending AND next_attempt_at <= now`) ordered by `next_attempt_at, created_seq`, restricted in SQL (before the batch limit) to rows of enabled webhooks plus rows with a pending manual resend, so a backlog of undeliverable rows of disabled webhooks never starves enabled ones; the rows of disabled webhooks stay `pending` untouched. At most one in-flight attempt per webhook (preserves first-attempt order per webhook); at most 4 concurrent attempts overall.
 - HTTP client: 10 s timeout; redirects not followed (3xx is a failure); proxy from environment disabled. No TLS verification override (dev receivers normally use plain `http://localhost`).
 - Outcome: exactly `200` = success (`succeeded`, clears webhook `first_failure_at`). Anything else, timeout or connection error = failure: record the attempt, and if `attempt_count < 11` set `next_attempt_at = now + backoff(attempt_count)` (INF-08), otherwise `failed`. Auto-disable per INF-10.
 - No database transaction is held during the HTTP call.
+- Concurrent deletion: deleting a webhook cascades to its events and attempts. If the webhook or delivery row is gone before lookup or by the time the attempt is recorded (including while the HTTP request is in flight), that single delivery is cancelled silently and the batch continues. Any other per-delivery store error is logged and retried on the next poll (without the wake-up fast path); it never stops the dispatcher or the HTTP server. Only context cancellation ends the dispatcher.
 - Testability: the dispatcher takes a `kftime.Clock`, an `*http.Client`, and a `Backoff func(retry int) time.Duration`; tests use a zero backoff and an httptest receiver. `RunOnce(ctx)` processes currently due rows synchronously so tests do not sleep.
 
 ### Manual operations (admin API, `integration` permission)
@@ -63,7 +64,7 @@ Payloads reuse `internal/present` so they are identical to `getTicket` / `listTi
 | Fire event (`POST /admin/api/webhook-events`) | Body `{eventType, ticketId?, commentId?, webhookIds?}`. Builds the payload from the current state of the referenced ticket/comment (ticket required for ticket_* and comment_*, comment required for comment_*), actor = the admin. With `webhookIds` it targets those webhooks ignoring their filters; without it, normal fan-out rules apply. Returns the created event rows |
 | List / inspect | `GET /admin/api/webhooks/{id}/events` (paginated like /v1), `GET /admin/api/webhook-events/{eventId}` with its attempts |
 
-Webhook create, and update that changes `url` or `secret`, enqueue a `ping` (Confirmed). Re-enabling a disabled webhook is done with `PATCH {enabled: true}`, which clears `disabled_at` and `first_failure_at`.
+Webhook create, and update that changes `url` or `secret`, enqueue a `ping` (Confirmed). Re-enabling a disabled webhook is done with `PATCH {enabled: true}`, which clears `disabled_at` and `first_failure_at`. `first_failure_at` is cleared only by a successful delivery or by this disabled-to-enabled transition; ordinary edits (name, filters, url, secret, or `enabled: true` on an already enabled webhook) preserve it, so edits cannot postpone automatic disabling.
 
 ### Required tests (`internal/webhook/*_test.go`)
 

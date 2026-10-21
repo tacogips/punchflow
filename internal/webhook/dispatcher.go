@@ -3,8 +3,10 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -12,58 +14,111 @@ import (
 	"punchflow/internal/store"
 )
 
-const pf09ResponseLimit = 64 * 1024
+const (
+	pf09ResponseLimit = 64 * 1024
+	pf09DueBatchLimit = 1000
+)
+
+// errDeliveryGone reports that the webhook or delivery row disappeared (for
+// example an administrator deleted the registration) before the attempt could be
+// recorded. It cancels that single delivery and is never fatal to the dispatcher.
+var errDeliveryGone = errors.New("webhook: delivery or registration no longer exists")
 
 // Run starts the delivery loop. It scans persisted work at startup and exits on cancellation.
+//
+// Store errors raised while processing deliveries are logged and retried on the
+// next poll; they never stop the loop. Only context cancellation ends Run.
 func (s *Service) Run(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.PollEvery)
 	defer ticker.Stop()
 	for {
+		notify := s.notify
 		if _, err := s.RunOnce(ctx); err != nil && ctx.Err() == nil {
-			return err
+			slog.Error("webhook dispatcher: delivery pass failed; retrying on next poll", "error", err)
+			// Back off: ignore wake-up notifications and wait for the poll tick.
+			notify = nil
 		}
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-s.notify:
+		case <-notify:
 		case <-ticker.C:
 		}
 	}
 }
 
 // RunOnce synchronously attempts all currently due deliveries, returning the number attempted.
+//
+// A webhook or delivery deleted concurrently cancels only that delivery. Other
+// per-delivery store errors are collected and returned after the remaining
+// deliveries were processed. Context cancellation returns immediately.
 func (s *Service) RunOnce(ctx context.Context) (int, error) {
 	now := s.clock.Now()
-	events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, 1000)
+	events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, pf09DueBatchLimit, s.pf09ManualIDs())
 	if err != nil {
 		return 0, err
 	}
 	attempts := 0
+	var failures []error
 	for _, ev := range events {
 		if err := ctx.Err(); err != nil {
 			return attempts, err
 		}
-		hook, err := store.GetWebhook(ctx, s.db.Q(), ev.WebhookID)
-		if err != nil {
-			return attempts, err
-		}
-		manual := s.pf09TakeManual(ev.ID)
-		if !hook.Enabled && !manual {
-			continue
-		}
-		if err := pf09WebhookURL(hook.URL); err != nil {
-			if err := s.pf09Record(ctx, ev, hook, manual, nil, nil, err.Error(), 0, now); err != nil {
-				return attempts, err
-			}
+		attempted, err := s.pf09Process(ctx, ev, now)
+		if attempted {
 			attempts++
+		}
+		if err == nil {
 			continue
 		}
-		if err := s.pf09Deliver(ctx, ev, hook, manual); err != nil {
-			return attempts, err
+		if ctx.Err() != nil {
+			return attempts, ctx.Err()
 		}
-		attempts++
+		failures = append(failures, fmt.Errorf("webhook delivery %s: %w", ev.ID, err))
 	}
-	return attempts, nil
+	return attempts, errors.Join(failures...)
+}
+
+// pf09Process delivers one due row. It reports whether an attempt was recorded.
+func (s *Service) pf09Process(ctx context.Context, ev model.WebhookDelivery, now time.Time) (bool, error) {
+	hook, err := store.GetWebhook(ctx, s.db.Q(), ev.WebhookID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			// Deleted between batch selection and lookup: cancel this delivery.
+			s.pf09TakeManual(ev.ID)
+			return false, nil
+		}
+		return false, err
+	}
+	manual := s.pf09TakeManual(ev.ID)
+	if !hook.Enabled && !manual {
+		// Disabled after batch selection.
+		return false, nil
+	}
+	if err := pf09WebhookURL(hook.URL); err != nil {
+		err = s.pf09Record(ctx, ev, hook, manual, nil, nil, err.Error(), 0, now)
+		return pf09Recorded(err)
+	}
+	return pf09Recorded(s.pf09Deliver(ctx, ev, hook, manual))
+}
+
+// pf09Recorded maps a record result to (attempted, error), treating a concurrent
+// deletion as a cancelled delivery rather than a failure.
+func pf09Recorded(err error) (bool, error) {
+	if errors.Is(err, errDeliveryGone) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (s *Service) pf09ManualIDs() []string {
+	s.manualMu.Lock()
+	defer s.manualMu.Unlock()
+	ids := make([]string, 0, len(s.manual))
+	for id := range s.manual {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (s *Service) pf09TakeManual(id string) bool {
@@ -145,16 +200,19 @@ func (s *Service) pf09Record(ctx context.Context, ev model.WebhookDelivery, hook
 	if message != "" {
 		attempt.Error = &message
 	}
-	return s.db.WithTx(ctx, func(tx *store.Tx) error {
-		if err := store.InsertWebhookAttempt(ctx, tx, attempt); err != nil {
-			return err
-		}
+	err := s.db.WithTx(ctx, func(tx *store.Tx) error {
+		// Update the event first: a missing row means the webhook (and its
+		// events) was deleted while the request was in flight.
 		if err := store.MarkEventAttempt(ctx, tx, ev.ID, count, next, eventStatus, status, now); err != nil {
 			return err
 		}
-		if err := store.SetWebhookFailureState(ctx, tx, hook.ID, first, disable, now); err != nil {
+		if err := store.InsertWebhookAttempt(ctx, tx, attempt); err != nil {
 			return err
 		}
-		return nil
+		return store.SetWebhookFailureState(ctx, tx, hook.ID, first, disable, now)
 	})
+	if errors.Is(err, store.ErrNotFound) {
+		return errDeliveryGone
+	}
+	return err
 }

@@ -121,6 +121,7 @@ func (a *API) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	beforeURL := v.URL
+	wasEnabled := v.Enabled
 	beforeSecret := ""
 	if v.Secret != nil {
 		beforeSecret = *v.Secret
@@ -165,7 +166,12 @@ func (a *API) updateWebhook(w http.ResponseWriter, r *http.Request) {
 	v.UpdatedAt = now
 	if v.Enabled {
 		v.DisabledAt = nil
-		v.FirstFailureAt = nil
+		// The continuous-failure clock restarts only on an explicit
+		// disabled-to-enabled transition (or a successful delivery); ordinary
+		// edits of an enabled webhook must not postpone automatic disabling.
+		if !wasEnabled {
+			v.FirstFailureAt = nil
+		}
 	}
 	changed := beforeURL != v.URL || beforeSecret != pf24Secret(v.Secret)
 	var eventID string

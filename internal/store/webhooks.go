@@ -160,9 +160,33 @@ func InsertWebhookEvent(ctx context.Context, q Querier, v model.WebhookDelivery)
 	return nil
 }
 
+const dueWebhookEventColumns = "e.id,e.webhook_id,e.event_type,e.ticket_id,e.comment_id,e.actor_user_id,e.body,e.status,e.attempt_count,e.next_attempt_at,e.last_status_code,e.created_at,e.updated_at"
+
 // DueWebhookEvents returns pending rows ready for delivery, oldest first.
-func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int) ([]model.WebhookDelivery, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at FROM webhook_events WHERE status='pending' AND next_attempt_at<=? ORDER BY next_attempt_at,rowid LIMIT ?", Millis(now), limit)
+//
+// Eligibility is applied in SQL before the limit so a backlog of rows that cannot
+// be delivered never starves deliverable ones: only rows of enabled webhooks are
+// returned, plus the rows listed in manualIDs (operator resends, which are
+// attempted even when the webhook is disabled).
+func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int, manualIDs []string) ([]model.WebhookDelivery, error) {
+	query := "SELECT " + dueWebhookEventColumns + " FROM webhook_events e JOIN webhooks w ON w.id=e.webhook_id WHERE e.status='pending' AND e.next_attempt_at<=?"
+	args := []any{Millis(now)}
+	if len(manualIDs) == 0 {
+		query += " AND w.enabled=1"
+	} else {
+		placeholders := make([]byte, 0, len(manualIDs)*2)
+		for i, id := range manualIDs {
+			if i > 0 {
+				placeholders = append(placeholders, ',')
+			}
+			placeholders = append(placeholders, '?')
+			args = append(args, id)
+		}
+		query += " AND (w.enabled=1 OR e.id IN (" + string(placeholders) + "))"
+	}
+	query += " ORDER BY e.next_attempt_at,e.rowid LIMIT ?"
+	args = append(args, limit)
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: query due webhook events: %w", err)
 	}
