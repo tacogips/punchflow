@@ -100,7 +100,10 @@ func (e *Engine) Controls(ctx context.Context, q store.Querier, a Actor, id stri
 	out.Raise = len(targets) > 0
 	if err = e.pf15CanAddCustomStep(ctx, q, a, t, def, steps); err == nil {
 		out.AddCustomStep = true
-		out.CustomStepInsertAfter = pf15InsertPositions(t, steps)
+		out.CustomStepInsertAfter, err = pf15EligibleInsertPositions(ctx, q, t, steps)
+		if err != nil {
+			return out, err
+		}
 	} else if _, domain := kferr.As(err); !domain {
 		return out, err
 	}

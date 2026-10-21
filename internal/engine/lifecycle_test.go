@@ -91,6 +91,40 @@ func TestSendBackToEarlierStep(t *testing.T) {
 		t.Fatalf("currentStep=%d", got)
 	}
 }
+
+func TestSendBackPreservesUnactivatedCustomStepCreationTimestamp(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetRoute(t, e, "expense-claim",
+		pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"),
+		pf15RouteStep("finance", 2, model.ActionTypeApprove, "", false, "finance-manager"),
+		pf15RouteStep("final", 3, model.ActionTypeApprove, "", false, "ceo"),
+	)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	compatApprove(t, e, "sales-manager", id)
+	two := 2
+	_, err := pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
+		return e.engine.AddCustomStep(e.ctx, tx, e.actor("sales-rep"), id, CustomStepInput{Title: "Future custom", ActionType: model.ActionTypeApprove, UserIDs: []string{e.user("hr-manager")}, AfterStepOrder: &two})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom := pf15StepByTitle(t, e, id, "Future custom")
+	assignments, err := store.EngStepAssignees(e.ctx, e.db.Q(), custom.ID)
+	if err != nil || len(assignments) != 1 || assignments[0].AssignedAt == nil {
+		t.Fatalf("custom assignments before send-back: %+v err=%v", assignments, err)
+	}
+	createdAssignmentAt := *assignments[0].AssignedAt
+	_, err = pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
+		return e.engine.SendBack(e.ctx, tx, e.actor("finance-manager"), id, 1, nil)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignments, err = store.EngStepAssignees(e.ctx, e.db.Q(), custom.ID)
+	if err != nil || len(assignments) != 1 || assignments[0].AssignedAt == nil || !assignments[0].AssignedAt.Equal(createdAssignmentAt) {
+		t.Fatalf("send-back changed unactivated custom-step AssignedAt: %+v err=%v", assignments, err)
+	}
+}
 func TestWithdraw(t *testing.T) {
 	e := pf14Setup(t)
 	id := e.createExpense("sales-rep", 5000, true)

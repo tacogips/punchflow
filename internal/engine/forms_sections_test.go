@@ -256,6 +256,29 @@ func TestSectionAccessIncludesProxyApplicantsAndActiveProxyApprovers(t *testing.
 	}
 }
 
+func TestSectionViewerMinimumGradeIncludesHigherGrade(t *testing.T) {
+	e := pf14Setup(t)
+	pf16RestrictApproverNote(t, e)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			if def.SectionList[i].ID == pf16ConfSection {
+				def.SectionList[i].SectionViewers = []model.SectionViewer{{ID: "grade-viewer", TeamCode: "company", Descendants: true, GradeCode: "manager"}}
+			}
+		}
+	})
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusInProgress, pf16Inputs(t, e, pf16Base, "approver-note"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := present.TicketDetailFor(e.ctx, e.db.Q(), id, &access.Caller{UserID: e.user("ceo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pf16SectionViewable(detail) {
+		t.Fatal("higher-grade CEO cannot view section restricted to manager and above")
+	}
+}
+
 func pf16SectionViewable(detail present.TicketDetailJSON) bool {
 	for _, raw := range detail["ticketSections"].([]any) {
 		section := raw.(map[string]any)

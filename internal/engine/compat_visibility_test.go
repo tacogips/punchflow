@@ -73,7 +73,7 @@ func TestVisibilityPersistedTicketViewers(t *testing.T) {
 		compatAssertVisible(t, e, "eng-manager", id, true)
 		compatAssertVisible(t, e, "hr-manager", id, true)
 		compatAssertVisible(t, e, "engineer", id, false) // staff grade
-		compatAssertVisible(t, e, "ceo", id, false)      // executive grade
+		compatAssertVisible(t, e, "ceo", id, true)       // above the configured minimum
 
 		e = pf14Setup(t)
 		compatSetWorkflow(t, e, "expense-claim", "$.visibleToManager", "")

@@ -120,7 +120,7 @@ func (a *API) handover(w http.ResponseWriter, r *http.Request, kind string) {
 				}
 				continue
 			}
-			moved, transferErr := handoverApprovalAssignments(r, tx, id, fromID, toID)
+			moved, transferErr := handoverApprovalAssignments(r, tx, id, fromID, toID, a.d.Clock.Now())
 			if transferErr != nil {
 				return transferErr
 			}
@@ -170,7 +170,7 @@ func handoverTicketIDs(r *http.Request, q store.Querier, supplied []string, kind
 	}
 	var query string
 	if kind == "applicant" {
-		query = `SELECT id FROM tickets WHERE author_id=? AND proxy_client_user_id IS NULL AND status IN ('draft','in_progress','rejected') ORDER BY id`
+		query = `SELECT id FROM tickets WHERE author_id=? AND status IN ('draft','in_progress','rejected') ORDER BY id`
 	} else {
 		query = `SELECT DISTINCT t.id FROM tickets t JOIN ticket_assignees a ON a.ticket_id=t.id JOIN ticket_steps s ON s.id=a.ticket_step_id WHERE a.user_id=? AND a.completed=0 AND s.status='in_progress' AND t.status='in_progress' ORDER BY t.id`
 	}
@@ -195,23 +195,25 @@ func handoverApplicantTicket(r *http.Request, tx *store.Tx, id, fromID, toID str
 	if err != nil {
 		return false, err
 	}
-	if ticket.AuthorID == nil || *ticket.AuthorID != fromID || ticket.ProxyClientUserID != nil || (ticket.Status != model.TicketStatusDraft && ticket.Status != model.TicketStatusInProgress && ticket.Status != model.TicketStatusRejected) {
+	if ticket.AuthorID == nil || *ticket.AuthorID != fromID || (ticket.Status != model.TicketStatusDraft && ticket.Status != model.TicketStatusInProgress && ticket.Status != model.TicketStatusRejected) {
 		return false, nil
 	}
-	if team == nil {
+	if ticket.ProxyClientUserID == nil && team == nil {
 		return false, kferr.ValidationFailed(map[string][]string{"teamId": {"is required for applicant tickets without a proxy applicant"}})
 	}
-	teamName, err := store.TeamFullName(r.Context(), tx, team.ID)
-	if err != nil {
-		return false, err
-	}
-	snapshot, err := json.Marshal(map[string]string{"id": team.ID, "name": team.Name, "fullName": teamName, "code": team.Code})
-	if err != nil {
-		return false, err
+	if team != nil {
+		teamName, err := store.TeamFullName(r.Context(), tx, team.ID)
+		if err != nil {
+			return false, err
+		}
+		snapshot, err := json.Marshal(map[string]string{"id": team.ID, "name": team.Name, "fullName": teamName, "code": team.Code})
+		if err != nil {
+			return false, err
+		}
+		ticket.AuthorTeamID = &team.ID
+		ticket.AuthorTeamSnapshot = snapshot
 	}
 	ticket.AuthorID = &toID
-	ticket.AuthorTeamID = &team.ID
-	ticket.AuthorTeamSnapshot = snapshot
 	ticket.UpdatedAt = now
 	if err = store.EngUpdateTicket(r.Context(), tx, ticket); err != nil {
 		return false, err
@@ -219,7 +221,7 @@ func handoverApplicantTicket(r *http.Request, tx *store.Tx, id, fromID, toID str
 	return true, nil
 }
 
-func handoverApprovalAssignments(r *http.Request, tx *store.Tx, id, fromID, toID string) (bool, error) {
+func handoverApprovalAssignments(r *http.Request, tx *store.Tx, id, fromID, toID string, now time.Time) (bool, error) {
 	ticket, err := store.EngLoadTicket(r.Context(), tx, id)
 	if err != nil {
 		return false, err
@@ -227,14 +229,19 @@ func handoverApprovalAssignments(r *http.Request, tx *store.Tx, id, fromID, toID
 	if ticket.Status != model.TicketStatusInProgress {
 		return false, nil
 	}
-	if ticket.AuthorID != nil && *ticket.AuthorID == toID {
-		return false, kferr.ValidationFailed(map[string][]string{"toUserId": {"handover would create a self-approval assignment"}})
-	}
 	steps, err := store.EngTicketSteps(r.Context(), tx, id)
 	if err != nil {
 		return false, err
 	}
 	moved := false
+	var route *model.RouteDef
+	if ticket.RouteID != nil {
+		loaded, routeErr := store.RouteDefByID(r.Context(), tx, *ticket.RouteID)
+		if routeErr != nil {
+			return false, routeErr
+		}
+		route = &loaded
+	}
 	for _, step := range steps {
 		if step.Status != model.StepStatusInProgress {
 			continue
@@ -247,12 +254,48 @@ func handoverApprovalAssignments(r *http.Request, tx *store.Tx, id, fromID, toID
 			if assignee.UserID != fromID || assignee.Completed {
 				continue
 			}
+			if ticket.AuthorID != nil && *ticket.AuthorID == toID && !routeStepAllowsSelfApproval(route, step.RouteStepCode) {
+				return false, kferr.ValidationFailed(map[string][]string{"toUserId": {"handover would create a self-approval assignment"}})
+			}
+			duplicate := false
+			for _, existing := range assignees {
+				if existing.ID != assignee.ID && existing.UserID == toID {
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
+				if _, e = tx.ExecContext(r.Context(), `DELETE FROM ticket_assignees WHERE id=?`, assignee.ID); e != nil {
+					return false, e
+				}
+				moved = true
+				continue
+			}
 			assignee.UserID = toID
+			assignee.UpdatedAt = now
 			if e = store.EngUpdateAssignee(r.Context(), tx, assignee); e != nil {
 				return false, e
 			}
 			moved = true
 		}
 	}
+	if moved {
+		ticket.UpdatedAt = now
+		if err = store.EngUpdateTicket(r.Context(), tx, ticket); err != nil {
+			return false, err
+		}
+	}
 	return moved, nil
+}
+
+func routeStepAllowsSelfApproval(route *model.RouteDef, code *string) bool {
+	if route == nil || code == nil {
+		return false
+	}
+	for _, step := range route.Steps {
+		if step.Code == *code {
+			return step.AllowSelfApproval
+		}
+	}
+	return false
 }

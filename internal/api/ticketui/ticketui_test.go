@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
+	"punchflow/internal/model"
 	"punchflow/internal/store"
 	"punchflow/internal/testutil"
 )
@@ -316,6 +318,175 @@ func TestApplicantHandoverTransfersOpenUnproxiedTicketAndApprovalHandoverReassig
 	var assignedUserID string
 	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT a.user_id FROM ticket_assignees a JOIN ticket_steps s ON s.id=a.ticket_step_id WHERE a.ticket_id=? AND s.status='in_progress' AND a.completed=0 LIMIT 1`, approvalTicket).Scan(&assignedUserID); err != nil || assignedUserID != env.UserID(t, "ceo") {
 		t.Fatalf("pending approver=%q err=%v, want ceo", assignedUserID, err)
+	}
+}
+
+func TestPreviousApproverCanNominateNextCustomizableStepOverUIAPI(t *testing.T) {
+	env := testutil.New(t)
+	workflow, err := store.GetWorkflowByCode(t.Context(), env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routeID, err := store.RouteIDByCode(t.Context(), env.DB.Q(), definition.RouteCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	route, err := store.RouteDefByID(t.Context(), env.DB.Q(), routeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(route.Steps) < 2 {
+		t.Fatalf("fixture route has %d steps", len(route.Steps))
+	}
+	route.Steps[1].StepType = model.StepTypeAssigneeCustomizable
+	minimum := 1
+	route.Steps[1].MinCustomAssignees = &minimum
+	raw, err := json.Marshal(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE routes SET definition_json=? WHERE id=?`, string(raw), routeID); err != nil {
+		t.Fatal(err)
+	}
+	id := createTicket(t, env)
+	testutil.AssertError(t, env.Do(t, testutil.Employee, http.MethodPost, "/ui/api/tickets/"+id+"/assignee-nominations", map[string]any{"routeStepCode": route.Steps[1].Code, "userIds": []string{env.UserID(t, "finance-manager")}}), http.StatusForbidden, "user_not_assigned")
+	// In-progress public PATCH continues to ignore approvers, per OpenAPI.
+	response := env.Do(t, testutil.Manager, http.MethodPatch, "/v1/tickets/"+id, map[string]any{"approvers": []map[string]any{{"routeStepCode": route.Steps[1].Code, "userId": []string{env.UserID(t, "finance-manager")}}}})
+	if response.Status != http.StatusOK {
+		t.Fatalf("in-progress PATCH: %d %s", response.Status, response.Body)
+	}
+	testutil.AssertError(t, env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+id+"/approve", nil), http.StatusUnprocessableEntity, "assignment_required_before_approve")
+	response = env.Do(t, testutil.Manager, http.MethodPost, "/ui/api/tickets/"+id+"/assignee-nominations", map[string]any{"routeStepCode": route.Steps[1].Code, "userIds": []string{env.UserID(t, "finance-manager")}})
+	if response.Status != http.StatusOK {
+		t.Fatalf("nominate next approver: %d %s", response.Status, response.Body)
+	}
+	response = env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+id+"/approve", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("approve preceding step: %d %s", response.Status, response.Body)
+	}
+	response = env.Do(t, testutil.Finance, http.MethodPost, "/v1/tickets/"+id+"/approve", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("approve nominated step: %d %s", response.Status, response.Body)
+	}
+	var assigned int
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM ticket_assignees a JOIN ticket_steps s ON s.id=a.ticket_step_id WHERE a.ticket_id=? AND s.route_step_code=? AND a.user_id=?`, id, route.Steps[1].Code, env.UserID(t, "finance-manager")).Scan(&assigned); err != nil || assigned != 1 {
+		t.Fatalf("nominated assignee count=%d err=%v, want one", assigned, err)
+	}
+}
+
+func TestApprovalHandoverDeduplicatesRecipientAndCountsDistinctApprovers(t *testing.T) {
+	env := testutil.New(t)
+	id := createTicket(t, env)
+	var stepID string
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT id FROM ticket_steps WHERE ticket_id=? AND status='in_progress' ORDER BY step_order LIMIT 1`, id).Scan(&stepID); err != nil {
+		t.Fatal(err)
+	}
+	fromID, recipientID := env.UserID(t, "finance-manager"), env.UserID(t, "sales-manager")
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_steps SET required_approvals_number=2,required_approvals_percent=0 WHERE id=?`, stepID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_assignees(id,ticket_step_id,ticket_id,user_id,completed,created_at,updated_at) VALUES(?,?,?,?,0,1,1)`, store.NewID(), stepID, id, fromID); err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/admin/tickets/approval-handover", map[string]any{"fromUserId": fromID, "toUserId": recipientID, "ticketIds": []string{id}})
+	if response.Status != http.StatusOK {
+		t.Fatalf("approval handover: %d %s", response.Status, response.Body)
+	}
+	var recipientRows int
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT count(*) FROM ticket_assignees WHERE ticket_step_id=? AND user_id=? AND completed=0`, stepID, recipientID).Scan(&recipientRows); err != nil || recipientRows != 1 {
+		t.Fatalf("recipient assignment rows=%d err=%v, want exactly one", recipientRows, err)
+	}
+	response = env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+id+"/approve", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("recipient approval: %d %s", response.Status, response.Body)
+	}
+	ticket, err := store.Ticket(t.Context(), env.DB.Q(), id)
+	if err != nil || ticket.Status != "in_progress" || ticket.CurrentStep != 1 {
+		t.Fatalf("ticket after one distinct approval: status=%s currentStep=%d err=%v, want in_progress/1", ticket.Status, ticket.CurrentStep, err)
+	}
+}
+
+func TestApplicantProxyHandoverPreservesProxyAndTeam(t *testing.T) {
+	env := testutil.New(t)
+	id := createTicketStatus(t, env, "draft", 5000)
+	clientID := env.UserID(t, "hr-manager")
+	var originalTeamID string
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT author_team_id FROM tickets WHERE id=?`, id).Scan(&originalTeamID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE tickets SET proxy_client_user_id=? WHERE id=?`, clientID, id); err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/admin/tickets/applicant-handover", map[string]any{"fromUserId": env.UserID(t, "sales-rep"), "toUserId": env.UserID(t, "sales-manager"), "ticketIds": []string{id}})
+	if response.Status != http.StatusOK {
+		t.Fatalf("proxy applicant handover: %d %s", response.Status, response.Body)
+	}
+	ticket, err := store.Ticket(t.Context(), env.DB.Q(), id)
+	if err != nil || ticket.AuthorID == nil || *ticket.AuthorID != env.UserID(t, "sales-manager") || ticket.ProxyClientUserID == nil || *ticket.ProxyClientUserID != clientID || ticket.AuthorTeamID == nil || *ticket.AuthorTeamID != originalTeamID {
+		t.Fatalf("proxy applicant ticket after handover=%+v err=%v", ticket, err)
+	}
+}
+
+func TestApprovalHandoverAllowsConfiguredSelfApprovalAndUpdatesWebhookTimestamp(t *testing.T) {
+	env := testutil.New(t)
+	env.RegisterReceiverWebhook(t, "secret")
+	workflow, err := store.GetWorkflowByCode(t.Context(), env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routeID, err := store.RouteIDByCode(t.Context(), env.DB.Q(), definition.RouteCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	route, err := store.RouteDefByID(t.Context(), env.DB.Q(), routeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disallowedTicket := createTicket(t, env)
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/admin/tickets/approval-handover", map[string]any{"fromUserId": env.UserID(t, "sales-manager"), "toUserId": env.UserID(t, "sales-rep"), "ticketIds": []string{disallowedTicket}})
+	testutil.AssertError(t, response, http.StatusUnprocessableEntity, "validation_failed")
+	route.Steps[0].AllowSelfApproval = true
+	raw, err := json.Marshal(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE routes SET definition_json=? WHERE id=?`, string(raw), routeID); err != nil {
+		t.Fatal(err)
+	}
+	id := createTicket(t, env)
+	before, err := store.Ticket(t.Context(), env.DB.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.Clock.Advance(time.Second)
+	response = env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/admin/tickets/approval-handover", map[string]any{"fromUserId": env.UserID(t, "sales-manager"), "toUserId": env.UserID(t, "sales-rep"), "ticketIds": []string{id}})
+	if response.Status != http.StatusOK {
+		t.Fatalf("permitted self-approval handover: %d %s", response.Status, response.Body)
+	}
+	after, err := store.Ticket(t.Context(), env.DB.Q(), id)
+	if err != nil || !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("approval handover updatedAt=%v before=%v err=%v", after.UpdatedAt, before.UpdatedAt, err)
+	}
+	var payload []byte
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT body FROM webhook_events WHERE ticket_id=? AND event_type='ticket_updated' ORDER BY rowid DESC LIMIT 1`, id).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	var event map[string]any
+	if err = json.Unmarshal(payload, &event); err != nil {
+		t.Fatal(err)
+	}
+	webhookTicket := event["data"].(map[string]any)["ticket"].(map[string]any)
+	webhookUpdatedAt, parseErr := time.Parse(time.RFC3339Nano, webhookTicket["updatedAt"].(string))
+	if parseErr != nil || !webhookUpdatedAt.After(before.UpdatedAt) || !webhookUpdatedAt.Equal(after.UpdatedAt) {
+		t.Fatalf("handover event updatedAt=%v parsed=%v err=%v, saved=%v before=%v", webhookTicket["updatedAt"], webhookUpdatedAt, parseErr, after.UpdatedAt, before.UpdatedAt)
 	}
 }
 

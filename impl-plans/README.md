@@ -1,5 +1,13 @@
 # Implementation Plans
 
+## Active Plans
+
+- None.
+
+## Completed Plans
+
+- [Round 9 Routing and Lifecycle Fixes](completed/r9-routing-lifecycle.md)
+
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
 
 ## Purpose

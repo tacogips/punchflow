@@ -70,6 +70,7 @@ var operations = [...]Operation{
 	{Name: "addTicketCustomStep", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/custom-steps", Handle: (*API).addCustomStep},
 	{Name: "removeTicketCustomStep", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/custom-steps/{stepId}", Handle: (*API).removeCustomStep},
 	{Name: "assignCurrentApprover", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/assignees", Handle: (*API).assignCurrentApprover},
+	{Name: "nominateNextApprovers", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/assignee-nominations", Handle: (*API).nominateNextApprovers},
 	{Name: "handoverApplicants", Method: http.MethodPost, Pattern: "/ui/api/admin/tickets/applicant-handover", Handle: (*API).handoverApplicants},
 	{Name: "handoverApprovalRequests", Method: http.MethodPost, Pattern: "/ui/api/admin/tickets/approval-handover", Handle: (*API).handoverApprovalRequests},
 	{Name: "resetCustomNumbering", Method: http.MethodPost, Pattern: "/ui/api/admin/workflows/{workflowId}/custom-numberings/{customNumberingId}/reset", Handle: (*API).resetCustomNumbering},
@@ -370,6 +371,24 @@ func (a *API) assignCurrentApprover(w http.ResponseWriter, r *http.Request) {
 	}
 	a.act(w, r, "ticket.assign_current_approver", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
 		return a.d.Engine.AssignCurrentApprover(ctx, tx, actor, id, body.TicketStepID, body.UserID)
+	})
+}
+
+func (a *API) nominateNextApprovers(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RouteStepCode string   `json:"routeStepCode"`
+		UserIDs       []string `json:"userIds"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	if body.RouteStepCode == "" {
+		kferr.Write(w, kferr.InvalidParameter("routeStepCode is required"))
+		return
+	}
+	a.act(w, r, "ticket.nominate_next_approvers", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
+		return a.d.Engine.NominateNextApprovers(ctx, tx, actor, id, body.RouteStepCode, body.UserIDs)
 	})
 }
 

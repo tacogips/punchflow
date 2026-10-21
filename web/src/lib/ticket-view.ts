@@ -1,4 +1,4 @@
-import type { TicketDetail, TicketStep } from "../api/types";
+import type { RouteStep, TicketDetail, TicketStep } from "../api/types";
 
 export type TicketAction = "approve" | "reject" | "deny" | "withdraw" | "archive" | "edit";
 
@@ -25,6 +25,19 @@ export function routeNominationSteps(routeConditions: unknown): Loose[] {
 /** Returns ticket sections the presenter marked visible, with their populated inputs. */
 export function visibleTicketSections(ticketSections: unknown): Loose[] {
   return asArray(ticketSections).map(asRecord).filter((section) => section.visible !== false);
+}
+
+export function nextCustomizableRouteSteps(ticket: TicketDetail): RouteStep[] {
+  const route = asRecord(ticket.route);
+  const routeSteps = asArray(route.steps).map(asRecord);
+  const currentOrder = Number(asRecord(ticket).currentStep ?? 0);
+  const futureSteps = ticket.steps.map(asRecord).filter((step) => (Number(step.stepOrder) || 0) > currentOrder
+    && !["completed", "skipped", "raised"].includes(asString(step.status)));
+  const nextOrder = Math.min(...futureSteps.map((step) => Number(step.stepOrder) || Number.POSITIVE_INFINITY));
+  if (!Number.isFinite(nextOrder)) return [];
+  const nextRouteCodes = new Set(futureSteps.filter((step) => Number(step.stepOrder) === nextOrder)
+    .map((step) => asString(step.routeStepCode)).filter(Boolean));
+  return routeSteps.filter((step) => nextRouteCodes.has(asString(step.code)) && step.stepType === "assignee_customizable") as unknown as RouteStep[];
 }
 
 type Loose = Record<string, unknown>;

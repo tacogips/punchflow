@@ -324,6 +324,29 @@ func TestAddCustomStepEligibilityAndValidation(t *testing.T) {
 	}
 }
 
+func TestCustomStepCannotBeInsertedAfterConditionalRouteStep(t *testing.T) {
+	e := pf14Setup(t)
+	conditional := pf15RouteStep("conditional", 2, model.ActionTypeApprove, "", false, "finance-manager")
+	conditional.RouteStepCondition = &model.RouteStepCondition{ID: "condition", ConditionType: model.StepConditionTypeConditional, CombinationType: model.StepCombinationAll}
+	compatSetRoute(t, e, "expense-claim",
+		pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"),
+		conditional,
+		pf15RouteStep("final", 3, model.ActionTypeApprove, "", false, "ceo"),
+	)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	controls := pf15Controls(t, e, "sales-rep", id)
+	for _, order := range controls.CustomStepInsertAfter {
+		if order == 2 {
+			t.Fatalf("custom-step controls allow insertion after conditional step: %+v", controls.CustomStepInsertAfter)
+		}
+	}
+	order := 2
+	_, err := pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
+		return e.engine.AddCustomStep(e.ctx, tx, e.actor("sales-rep"), id, CustomStepInput{Title: "Forbidden", ActionType: model.ActionTypeApprove, UserIDs: []string{e.user("hr-manager")}, AfterStepOrder: &order})
+	})
+	pf15WantCode(t, "insert after conditional route step", err, "validation_failed")
+}
+
 func TestCustomStepApprovalCountCanBeBelowUnanimous(t *testing.T) {
 	e := pf14Setup(t)
 	compatSetRoute(t, e, "expense-claim",

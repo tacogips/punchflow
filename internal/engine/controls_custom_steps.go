@@ -95,6 +95,39 @@ func pf15InsertPositions(t model.Ticket, steps []pf15Step) []int {
 	return out
 }
 
+func pf15EligibleInsertPositions(ctx context.Context, q store.Querier, t model.Ticket, steps []pf15Step) ([]int, error) {
+	positions := pf15InsertPositions(t, steps)
+	if t.RouteID == nil {
+		return positions, nil
+	}
+	route, err := store.RouteDefByID(ctx, q, *t.RouteID)
+	if err != nil {
+		return nil, err
+	}
+	byCode := make(map[string]model.RouteStep, len(route.Steps))
+	for _, routeStep := range route.Steps {
+		byCode[routeStep.Code] = routeStep
+	}
+	out := make([]int, 0, len(positions))
+	for _, order := range positions {
+		eligible := true
+		for _, step := range steps {
+			if step.StepOrder != order || step.RouteStepCode == nil {
+				continue
+			}
+			routeStep, ok := byCode[*step.RouteStepCode]
+			if !ok || routeStep.RouteStepCondition != nil && routeStep.RouteStepCondition.ConditionType != model.StepConditionTypeAlways {
+				eligible = false
+				break
+			}
+		}
+		if eligible {
+			out = append(out, order)
+		}
+	}
+	return out, nil
+}
+
 // pf15CanAddCustomStep applies the eligibility rule (INF-63): the workflow
 // enables allowCustomSteps, the ticket is in progress and the caller is the
 // applicant or an approver who still has to act on the current group.
@@ -199,13 +232,17 @@ func (e *Engine) AddCustomStep(ctx context.Context, tx *store.Tx, a Actor, id st
 	after := t.CurrentStep
 	if in.AfterStepOrder != nil {
 		after = *in.AfterStepOrder
-		valid := false
-		for _, position := range pf15InsertPositions(t, steps) {
-			valid = valid || position == after
-		}
-		if !valid {
-			problems["afterStepOrder"] = []string{"is not a step the new step can follow"}
-		}
+	}
+	valid := false
+	positions, positionErr := pf15EligibleInsertPositions(ctx, tx, t, steps)
+	if positionErr != nil {
+		return nil, positionErr
+	}
+	for _, position := range positions {
+		valid = valid || position == after
+	}
+	if !valid {
+		problems["afterStepOrder"] = []string{"is not a step the new step can follow"}
 	}
 	if len(problems) > 0 {
 		return nil, kferr.ValidationFailed(problems)

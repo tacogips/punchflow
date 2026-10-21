@@ -245,9 +245,25 @@ func pf14UserInTeam(ctx context.Context, q store.Querier, userID, teamID string,
 		if err != nil {
 			return false, err
 		}
+		var minimum model.Grade
+		if gradeID != "" {
+			minimum, err = store.GetGrade(ctx, q, gradeID)
+			if err != nil {
+				return false, err
+			}
+		}
 		for _, membership := range memberships {
-			if gradeID == "" || pf14Contains(membership.GradeIDs, gradeID) {
+			if gradeID == "" {
 				return true, nil
+			}
+			for _, membershipGradeID := range membership.GradeIDs {
+				membershipGrade, gradeErr := store.GetGrade(ctx, q, membershipGradeID)
+				if gradeErr != nil {
+					return false, gradeErr
+				}
+				if model.GradeMeetsMinimum(membershipGrade, minimum) {
+					return true, nil
+				}
 			}
 		}
 	}

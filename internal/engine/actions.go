@@ -285,13 +285,15 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 				actedConfirm = true
 			}
 		}
-		completed := 0
+		completedUsers := map[string]bool{}
+		allUsers := map[string]bool{}
 		for _, as := range assignees {
+			allUsers[as.UserID] = true
 			if as.Completed {
-				completed++
+				completedUsers[as.UserID] = true
 			}
 		}
-		if len(assignees) > 0 && completed >= pf14RequiredApprovals(step, len(assignees)) {
+		if len(allUsers) > 0 && len(completedUsers) >= pf14RequiredApprovals(step, len(allUsers)) {
 			step.Status = model.StepStatusCompleted
 			step.CompletedAt = &now
 			step.UpdatedAt = now
@@ -509,9 +511,9 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 			as.Completed = false
 			as.CompletedAt = nil
 			as.ActualApproverID = nil
-			// A send-back makes each later step pending again. Its next entry is
-			// a new approval request, so task date filters must use that entry.
-			if step.StepOrder >= to {
+			// Route-step assignment dates mark activation. Runtime custom-step
+			// dates mark creation and must survive a send-back before activation.
+			if step.StepOrder >= to && step.RouteStepID != nil {
 				as.AssignedAt = nil
 			}
 			as.UpdatedAt = now

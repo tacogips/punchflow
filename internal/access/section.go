@@ -176,6 +176,7 @@ func viewerMatches(ctx context.Context, q store.Querier, userID string, v model.
 		}
 	}
 	gradeID := ""
+	var minimumGrade model.Grade
 	if v.GradeCode != "" {
 		gradeID, err = store.GradeIDByCode(ctx, q, v.GradeCode)
 		if errors.Is(err, store.ErrNotFound) {
@@ -183,6 +184,10 @@ func viewerMatches(ctx context.Context, q store.Querier, userID string, v model.
 		}
 		if err != nil {
 			return false, fmt.Errorf("access: resolve section viewer grade: %w", err)
+		}
+		minimumGrade, err = store.GetGrade(ctx, q, gradeID)
+		if err != nil {
+			return false, fmt.Errorf("access: load section viewer grade: %w", err)
 		}
 	}
 	memberships, err := store.EngActiveMemberships(ctx, q, userID, "")
@@ -197,7 +202,11 @@ func viewerMatches(ctx context.Context, q store.Querier, userID string, v model.
 			return true, nil
 		}
 		for _, g := range m.GradeIDs {
-			if g == gradeID {
+			memberGrade, gradeErr := store.GetGrade(ctx, q, g)
+			if gradeErr != nil {
+				return false, fmt.Errorf("access: load membership grade: %w", gradeErr)
+			}
+			if model.GradeMeetsMinimum(memberGrade, minimumGrade) {
 				return true, nil
 			}
 		}

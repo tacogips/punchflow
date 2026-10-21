@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TicketDetail, TicketStep } from "../api/types";
-import { attachmentsOf, availableActions, buildApprovers, inputLabel, inputValueText, routeNominationSteps, sendBackTargets, stepSummary, userLabel, visibleTicketSections } from "./ticket-view";
+import { attachmentsOf, availableActions, buildApprovers, inputLabel, inputValueText, nextCustomizableRouteSteps, routeNominationSteps, sendBackTargets, stepSummary, userLabel, visibleTicketSections } from "./ticket-view";
 
 const user = { id: "u1", name: "User", email: "u@example.test" };
 const ticket = (overrides: Record<string, unknown> = {}) => ({
@@ -62,6 +62,36 @@ describe("ticket view rules", () => {
       { sectionId: "unconditional", inputs: [{ formField: { code: "note" }, value: "ok" }] },
     ]);
     expect(sections.flatMap((section) => (section.inputs as unknown[]).map((input) => inputLabel(input)))).toEqual(["name", "note"]);
+  });
+
+  test("offers the next previous-approver nomination step from the ticket route", () => {
+    const value = ticket({
+      route: { steps: [
+        { code: "review", stepOrder: 1, stepType: "user" },
+        { code: "next-custom", stepOrder: 2, stepType: "assignee_customizable" },
+        { code: "later-custom", stepOrder: 3, stepType: "assignee_customizable" },
+      ] },
+      steps: [
+        { id: "s1", routeStepCode: "review", stepOrder: 1, status: "in_progress", assignees: [] },
+        { id: "s2", routeStepCode: "next-custom", stepOrder: 2, status: "pending", assignees: [] },
+      ],
+    });
+    expect(nextCustomizableRouteSteps(value).map((step) => step.code)).toEqual(["next-custom"]);
+  });
+
+  test("hides route nominations when a runtime custom step is the next ticket group", () => {
+    const value = ticket({
+      route: { steps: [
+        { code: "review", stepOrder: 1, stepType: "user" },
+        { code: "next-custom", stepOrder: 2, stepType: "assignee_customizable" },
+      ] },
+      steps: [
+        { id: "s1", routeStepCode: "review", stepOrder: 1, status: "in_progress", assignees: [] },
+        { id: "runtime-custom", stepOrder: 2, status: "pending", assignees: [] },
+        { id: "s3", routeStepCode: "next-custom", stepOrder: 3, status: "pending", assignees: [] },
+      ],
+    });
+    expect(nextCustomizableRouteSteps(value)).toEqual([]);
   });
 
   test("current assignee can approve, send back and deny, but not withdraw", () => {

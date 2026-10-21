@@ -4,8 +4,7 @@ import type { CustomStepBody, Label, SubStatus, TicketControls, TicketDetail as 
 import { apiFetch, apiList } from "../../api/client";
 import { session } from "../../session";
 import { formatJst } from "../../lib/format";
-import { attachmentsOf, inputLabel, inputValueText, userLabel } from "../../lib/ticket-view";
-import { visibleTicketSections } from "../../lib/ticket-view";
+import { attachmentsOf, inputLabel, inputValueText, nextCustomizableRouteSteps, userLabel, visibleTicketSections } from "../../lib/ticket-view";
 import { NO_CONTROLS, normalizeControls, subStatusRestrictions, uiTicketPath } from "../../lib/ticket-controls";
 import ActionBar from "../../components/tickets/ActionBar";
 import ControlsBar from "../../components/tickets/ControlsBar";
@@ -30,14 +29,16 @@ function TicketContent(props: {
   onAddStep: (body: CustomStepBody) => void;
   onRemoveStep: (stepId: string) => void;
   onAssignCurrentApprover: (ticketStepId: string, userId: string) => void;
+  onNominateApprovers: (routeStepCode: string, userIds: string[]) => void;
   onSetHold: (assigneeId: string, pending: boolean) => void;
   onAction: (name: "approve" | "reject" | "deny" | "withdraw" | "archive" | "edit", data?: { comment?: string; to?: number }) => void;
   onChanged: () => void;
   onLinkTicket: (ticketID: string) => void;
   onUnlinkTicket: (ticketID: string) => void;
 }) {
-  const t = props.ticket; const workflow = obj(t.workflow); const subStatus = () => (t.subStatus ?? null) as SubStatus | null; const labels = () => (Array.isArray(t.labels) ? t.labels : []) as Label[]; const author = obj(t.author); const currentSession = session(); const [replacementUserId, setReplacementUserId] = createSignal(""); const [replacementStepId, setReplacementStepId] = createSignal("");
+  const t = props.ticket; const workflow = obj(t.workflow); const subStatus = () => (t.subStatus ?? null) as SubStatus | null; const labels = () => (Array.isArray(t.labels) ? t.labels : []) as Label[]; const author = obj(t.author); const currentSession = session(); const [replacementUserId, setReplacementUserId] = createSignal(""); const [replacementStepId, setReplacementStepId] = createSignal(""); const [nomineeIDs, setNomineeIDs] = createSignal(""); const [nominationRouteCode, setNominationRouteCode] = createSignal("");
   const activeCurrentSteps = () => arr(t.steps).map(obj).filter((step) => Number(step.stepOrder) === Number(t.currentStep) && step.status === "in_progress");
+  const nominationSteps = () => nextCustomizableRouteSteps(t);
   const selectedStepId = () => replacementStepId() || str(activeCurrentSteps()[0]?.id);
   return <>
     <header class="page-header"><div><h1>{str(t.ticketNumber) || str(t.title) || "Ticket"}</h1><p>{str(t.title)} · {str(workflow.name)}</p></div><span class={`status status-${t.status}`}>{t.status.replaceAll("_", " ")}</span><WatchToggle ticketId={t.id} /></header>
@@ -51,6 +52,11 @@ function TicketContent(props: {
       <label>Current step <select value={selectedStepId()} onChange={(event) => setReplacementStepId(event.currentTarget.value)}><For each={activeCurrentSteps()}>{(step) => <option value={str(step.id)}>{str(step.title) || str(step.id)}</option>}</For></select></label>
       <label>Add approver <input value={replacementUserId()} onInput={(event) => setReplacementUserId(event.currentTarget.value)} placeholder="Active user ID" /></label>
       <button type="submit" disabled={props.busy || !replacementUserId().trim()}>Add approver</button>
+    </form></Show>
+    <Show when={currentSession && t.status === "in_progress" && activeCurrentSteps().some((step) => arr(step.assignees).map(obj).some((assignee) => obj(assignee.user).id === currentSession!.user.id && assignee.completed !== true)) && nominationSteps().length > 0}><form class="action-bar" aria-label="Nominate next approvers" onSubmit={(event) => { event.preventDefault(); const code = nominationRouteCode() || str(nominationSteps()[0]?.code); if (code) { props.onNominateApprovers(code, nomineeIDs().split(",").map((value) => value.trim()).filter(Boolean)); setNomineeIDs(""); } }}>
+      <label>Next customizable step <select value={nominationRouteCode() || str(nominationSteps()[0]?.code)} onChange={(event) => setNominationRouteCode(event.currentTarget.value)}><For each={nominationSteps()}>{(step) => <option value={str(step.code)}>{str(step.title) || str(step.code)}</option>}</For></select></label>
+      <label>Approver user IDs <input value={nomineeIDs()} onInput={(event) => setNomineeIDs(event.currentTarget.value)} placeholder="User IDs separated by commas" /></label>
+      <button type="submit" disabled={props.busy}>Save nominees</button>
     </form></Show>
     <TicketLabels ticketId={t.id} labels={labels()} onChanged={props.onChanged} />
     <section><h2>Form inputs</h2><For each={visibleTicketSections(t.ticketSections)}>{(section) => <dl class="ticket-inputs"><For each={arr(section.inputs)}>{(input) => <><dt>{inputLabel(input)}</dt><dd>{inputValueText(input)}<Show when={attachmentsOf(input).length}><ul><For each={attachmentsOf(input)}>{(file) => <li><a href={file.url}>{file.filename}</a></li>}</For></ul></Show></dd></>}</For></dl>}</For>
@@ -95,6 +101,7 @@ export default function TicketDetail() {
   const addStep = (body: CustomStepBody) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/custom-steps"), body), "Unable to add the step");
   const removeStep = (stepId: string) => void control(() => apiFetch("DELETE", uiTicketPath(params.id, `/custom-steps/${encodeURIComponent(stepId)}`)), "Unable to remove the step");
   const assignCurrentApprover = (ticketStepId: string, userId: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/assignees"), { ticketStepId, userId }), "Unable to add the approver");
+  const nominateApprovers = (routeStepCode: string, userIds: string[]) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/assignee-nominations"), { routeStepCode, userIds }), "Unable to nominate approvers");
   const setHold = (assigneeId: string, pending: boolean) => void control(() => apiFetch("POST", uiTicketPath(params.id, `/assignees/${encodeURIComponent(assigneeId)}/pending`), { pending }), "Unable to update the approval hold");
   const linkTicket = (ticketID: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/links"), { linkedTicketId: ticketID }), "Unable to link ticket");
   const unlinkTicket = (ticketID: string) => void control(() => apiFetch("DELETE", uiTicketPath(params.id, `/links/${encodeURIComponent(ticketID)}`)), "Unable to unlink ticket");
@@ -111,7 +118,7 @@ export default function TicketDetail() {
   const detail = () => ticket();
   return <main class="page"><A href="/tickets">Back to tickets</A>
     <Show when={!ticket.loading} fallback={<p>Loading ticket…</p>}><Show when={!ticket.error && detail()} fallback={<p role="alert">Unable to load ticket.</p>}>
-      <TicketContent ticket={detail()!} links={links() ?? []} availableLinks={availableLinks()} busy={busy()} error={error()} controls={controls() ?? NO_CONTROLS} onCancelApproval={cancelApproval} onRaise={raise} onAddStep={addStep} onRemoveStep={removeStep} onAssignCurrentApprover={assignCurrentApprover} onSetHold={setHold} onAction={action} onChanged={refresh} onLinkTicket={linkTicket} onUnlinkTicket={unlinkTicket} />
+      <TicketContent ticket={detail()!} links={links() ?? []} availableLinks={availableLinks()} busy={busy()} error={error()} controls={controls() ?? NO_CONTROLS} onCancelApproval={cancelApproval} onRaise={raise} onAddStep={addStep} onRemoveStep={removeStep} onAssignCurrentApprover={assignCurrentApprover} onNominateApprovers={nominateApprovers} onSetHold={setHold} onAction={action} onChanged={refresh} onLinkTicket={linkTicket} onUnlinkTicket={unlinkTicket} />
     </Show></Show>
   </main>;
 }

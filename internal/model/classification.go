@@ -28,3 +28,9 @@ type Grade struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// GradeMeetsMinimum reports whether a grade is at or above the configured
+// minimum grade. Higher level values represent higher grades.
+func GradeMeetsMinimum(grade, minimum Grade) bool {
+	return grade.Level >= minimum.Level
+}
