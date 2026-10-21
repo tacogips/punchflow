@@ -18,7 +18,7 @@ dispatcher loop --------------> due events -> POST (10 s timeout) -> webhook_att
 
 | Table | Columns (main) |
 |---|---|
-| `webhooks` | id, name, url, secret (nullable), enabled, workflow_ids JSON (empty = all workflows), event_types JSON (empty = all 12 non-ping events), first_failure_at, disabled_at, created_at, updated_at |
+| `webhooks` | id, name, url, secret (nullable), enabled, workflow_ids JSON (empty = all workflows), event_types JSON (empty = all 12 non-ping events), first_failure_at, disabled_at, `state_generation`, created_at, updated_at |
 | `webhook_events` | id (= `X-Kickflow-Delivery` UUID), webhook_id, event_type, ticket_id, comment_id, body BLOB (exact bytes sent), status (`pending`, `succeeded`, `failed`), attempt_count, next_attempt_at, last_status_code, created_seq, created_at, updated_at |
 | `webhook_attempts` | id, event_id, attempt_no, started_at, duration_ms, request_headers JSON, status_code (nullable), response_body (first 64 KiB), error (nullable), manual (bool) |
 
@@ -86,6 +86,8 @@ Ticket payloads use the shared presenter with an explicit webhook policy. Values
 | List / inspect | `GET /admin/api/webhooks/{id}/events` (paginated like /v1), `GET /admin/api/webhook-events/{eventId}` with its attempts |
 
 Webhook create, and update that changes `url` or `secret`, enqueue a `ping` (Confirmed). Re-enabling a disabled webhook is done with `PATCH {enabled: true}`, which clears `disabled_at` and `first_failure_at`. `first_failure_at` is cleared only by a successful delivery or by this disabled-to-enabled transition; ordinary edits (name, filters, url, secret, or `enabled: true` on an already enabled webhook) preserve it, so edits cannot postpone automatic disabling.
+
+Each dispatcher snapshot carries `state_generation`. A disabled-to-enabled transition increments the generation; an in-flight result may update failure state only if its snapshot still matches the stored generation. The attempt and event history is still recorded for a stale request, while its failure clock or auto-disable decision cannot overwrite the re-enabled state (WH-11; regression-tested with a blocked receiver).
 
 PATCH reads existing configuration to merge omitted fields, but persists ordinary configuration columns separately from delivery state. The failure clock and enabled/disabled timestamps are changed only by an explicit `enabled` transition, using SQL state updates within the PATCH transaction; stale configuration snapshots therefore cannot erase a dispatcher failure recorded after the read (WH-05).
 

@@ -9,17 +9,18 @@ type WebhookEvent struct {
 	ActorUserID string `json:"actorUserId,omitempty"`
 }
 type Webhook struct {
-	ID             string     `json:"id"`
-	Name           string     `json:"name"`
-	URL            string     `json:"url"`
-	Secret         *string    `json:"-"`
-	Enabled        bool       `json:"enabled"`
-	WorkflowIDs    []string   `json:"workflowIds"`
-	EventTypes     []string   `json:"eventTypes"`
-	FirstFailureAt *time.Time `json:"firstFailureAt"`
-	DisabledAt     *time.Time `json:"disabledAt"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	URL             string     `json:"url"`
+	Secret          *string    `json:"-"`
+	Enabled         bool       `json:"enabled"`
+	WorkflowIDs     []string   `json:"workflowIds"`
+	EventTypes      []string   `json:"eventTypes"`
+	FirstFailureAt  *time.Time `json:"firstFailureAt"`
+	DisabledAt      *time.Time `json:"disabledAt"`
+	StateGeneration int64      `json:"-"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 type WebhookDelivery struct {
 	ID             string    `json:"id"`

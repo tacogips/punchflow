@@ -291,6 +291,45 @@ func TestWebhookResend(t *testing.T) {
 	}
 }
 
+func TestWebhookResendFailureCannotUndoReenable(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	started, release := make(chan struct{}), make(chan struct{})
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+	first := now.Add(-7 * 24 * time.Hour)
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "hook", Name: "hook", URL: receiver.URL, Enabled: false, FirstFailureAt: &first})
+	if err := store.InsertWebhookEvent(ctx, db.Q(), model.WebhookDelivery{ID: "event", WebhookID: "hook", Body: []byte(`{}`), Status: "failed", AttemptCount: 1, NextAttemptAt: now, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{MaxAttempts: 1})
+	if err := svc.Resend(ctx, db.Q(), "event"); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(ctx); done <- err }()
+	<-started
+	if err := store.SetWebhookEnabled(ctx, db.Q(), "hook", true, now); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	hook, err := store.GetWebhook(ctx, db.Q(), "hook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hook.Enabled || hook.FirstFailureAt != nil || hook.DisabledAt != nil || hook.StateGeneration != 1 {
+		t.Fatalf("stale delivery changed re-enabled webhook state: %#v", hook)
+	}
+}
+
 func TestWebhookPersistAcrossRestart(t *testing.T) {
 	db, ctx := pf09TestDB(t)
 	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)

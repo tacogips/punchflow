@@ -132,10 +132,10 @@ func pf23Audit(r *http.Request, q store.Querier, p *auth.Principal, action, id, 
 	if err != nil {
 		return fmt.Errorf("pf23 audit data: %w", err)
 	}
-	userID, remoteIP, requestID, systemType := p.User.ID, r.RemoteAddr, r.Header.Get("X-Request-ID"), p.Via
+	userID, remoteIP, requestID := p.User.ID, r.RemoteAddr, r.Header.Get("X-Request-ID")
 	var ticket *string
 	if ticketID != "" {
 		ticket = &ticketID
 	}
-	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &userID, Action: action, Data: data, RemoteIP: &remoteIP, RequestID: &requestID, SystemType: &systemType, TicketID: ticket, CreatedAt: now})
+	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &userID, Action: action, Data: data, RemoteIP: &remoteIP, RequestID: &requestID, TicketID: ticket, CreatedAt: now})
 }

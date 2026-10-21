@@ -63,6 +63,27 @@ describe("ticket view rules", () => {
     expect(actions).toContain("approve"); expect(actions).not.toContain("reject"); expect(actions).not.toContain("deny");
   });
 
+  test("parallel current steps allow actions for a later assigned step", () => {
+    const value = ticket({
+      steps: [
+        { id: "s1", title: "Manager approval", stepOrder: 1, actionType: "approve", assignees: [{ user: { id: "u2" }, current: true, completed: false }] },
+        { id: "s2", title: "Finance approval", stepOrder: 1, actionType: "approve", assignees: [{ user: { id: "u1" }, current: true, completed: false }] },
+        { id: "s3", title: "Future approval", stepOrder: 2, actionType: "approve", assignees: [{ user, current: false, completed: false }] },
+      ],
+    });
+    expect(availableActions(value, { id: "u1", permissions: [] })).toEqual(["approve", "reject", "deny", "edit"]);
+  });
+
+  test("parallel current-step proxy assignment grants actions", () => {
+    const value = ticket({
+      steps: [
+        { id: "s1", title: "Manager approval", stepOrder: 1, actionType: "approve", assignees: [{ user: { id: "u2" }, current: true, completed: false }] },
+        { id: "s2", title: "Finance confirmation", stepOrder: 1, actionType: "confirm", assignees: [{ user: { id: "u3" }, proxyUserIds: ["u1"], current: true, completed: false }] },
+      ],
+    });
+    expect(availableActions(value, { id: "u1", permissions: [] })).toEqual(["approve", "edit"]);
+  });
+
   test("sub-status restrictions hide the actions they forbid", () => {
     const restricted = (flags: Record<string, boolean>) => ticket({ author: user, subStatus: { allowWithdrawal: true, allowRejection: true, allowDenial: true, ...flags } });
     expect(availableActions(restricted({ allowWithdrawal: false }), { id: "u1", permissions: [] })).not.toContain("withdraw");

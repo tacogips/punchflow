@@ -129,12 +129,24 @@ func (a *API) createTeam(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"is required"}}))
 		return
 	}
+	if e := pf20ValidateLength("name", *b.Name, 300); e != nil {
+		kferr.Write(w, e)
+		return
+	}
 	now := time.Now()
 	x := model.Team{ID: store.NewID(), OrganizationChartID: chart, Name: *b.Name, Code: "team-" + strings.ReplaceAll(store.NewID()[24:], "-", ""), CreatedAt: now, UpdatedAt: now}
 	if b.Code != nil && *b.Code != "" {
 		x.Code = *b.Code
 	}
+	if e := pf20ValidateLength("code", x.Code, 100); e != nil {
+		kferr.Write(w, e)
+		return
+	}
 	if b.Notes != nil {
+		if e := pf20ValidateLength("notes", *b.Notes, 10000); e != nil {
+			kferr.Write(w, e)
+			return
+		}
 		x.Notes = b.Notes
 	}
 	if b.ParentID != nil && *b.ParentID != "" {
@@ -242,7 +254,15 @@ func (a *API) updateTeam(w http.ResponseWriter, r *http.Request) {
 	if b.Name != nil {
 		x.Name = *b.Name
 	}
+	if e := pf20ValidateLength("name", x.Name, 300); e != nil {
+		kferr.Write(w, e)
+		return
+	}
 	if b.Notes != nil {
+		if e := pf20ValidateLength("notes", *b.Notes, 10000); e != nil {
+			kferr.Write(w, e)
+			return
+		}
 		x.Notes = b.Notes
 	}
 	if b.ApproveOnly != nil {
@@ -250,6 +270,10 @@ func (a *API) updateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.Code != nil && *b.Code != "" {
 		x.Code = *b.Code
+	}
+	if e := pf20ValidateLength("code", x.Code, 100); e != nil {
+		kferr.Write(w, e)
+		return
 	}
 	if b.ParentID != nil {
 		if *b.ParentID == "" {
@@ -649,8 +673,7 @@ func (a *API) pf19TeamAudit(r *http.Request, q store.Querier, user, action, id s
 	data, _ := json.Marshal(map[string]string{"teamId": id})
 	ip := httpx.ClientIP(r)
 	rid := httpx.RequestIDFrom(r.Context())
-	system := "api"
-	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &user, Action: action, Data: data, RemoteIP: &ip, RequestID: &rid, SystemType: &system, CreatedAt: time.Now()})
+	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &user, Action: action, Data: data, RemoteIP: &ip, RequestID: &rid, CreatedAt: time.Now()})
 }
 func (a *API) pf19TeamError(e error) error {
 	if e == store.ErrNotFound {

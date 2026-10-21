@@ -117,6 +117,31 @@ func pf08ActiveChartID(ctx context.Context, q store.Querier) string {
 func pf08RouteStepConditionField(ctx context.Context, q store.Querier, f model.ConditionField) map[string]any {
 	out := map[string]any{"id": f.ID, "variable": pf08NullableString(f.Variable), "fieldKey": f.FieldKey, "symbol": f.Symbol, "value": f.Value, "grade": nil, "team": nil, "generalMaster": nil, "generalMasterItem": nil}
 	code, _ := f.Value.(string)
+	if f.FieldKey == "general_master_variable" {
+		masterCode := f.GeneralMasterCode
+		if masterCode == "" {
+			masterCode = code
+		}
+		if masterCode != "" {
+			if id, e := store.ResolveID(ctx, q, "general_masters", masterCode); e == nil {
+				if master, e := store.GetGeneralMaster(ctx, q, id); e == nil {
+					count, countErr := store.CountMasterItems(ctx, q, master.ID)
+					if countErr == nil {
+						out["generalMaster"] = map[string]any{"id": master.ID, "code": master.Code, "name": master.Name, "description": master.Description, "defaultSortBy": master.DefaultSortBy, "itemsCount": count, "initialDisplayCode": master.InitialDisplayCode, "initialDisplayCreatedAt": master.InitialDisplayCreatedAt, "initialDisplayDescription": master.InitialDisplayDescription, "createdAt": pf08Time(master.CreatedAt), "updatedAt": pf08Time(master.UpdatedAt)}
+					}
+					if f.GeneralMasterItemCode != "" {
+						var itemID string
+						if e := q.QueryRowContext(ctx, `SELECT id FROM general_master_items WHERE general_master_id=? AND code=?`, master.ID, f.GeneralMasterItemCode).Scan(&itemID); e == nil {
+							if item, e := GeneralMasterItem(ctx, q, itemID); e == nil {
+								out["generalMasterItem"] = item
+							}
+						}
+					}
+				}
+			}
+		}
+		out["value"] = nil
+	}
 	if code != "" {
 		switch f.FieldKey {
 		case "author_grade":
@@ -131,18 +156,6 @@ func pf08RouteStepConditionField(ctx context.Context, q store.Querier, f model.C
 					if x, e := Team(ctx, q, id); e == nil {
 						out["team"] = x
 					}
-				}
-			}
-		case "general_master_variable":
-			if id, e := store.ResolveID(ctx, q, "general_masters", code); e == nil {
-				if x, e := store.GetGeneralMaster(ctx, q, id); e == nil {
-					out["generalMaster"] = map[string]any{"id": x.ID, "code": x.Code, "name": x.Name}
-				}
-			}
-		case "general_master_item":
-			if id, e := store.ResolveID(ctx, q, "general_master_items", code); e == nil {
-				if x, e := GeneralMasterItem(ctx, q, id); e == nil {
-					out["generalMasterItem"] = x
 				}
 			}
 		}

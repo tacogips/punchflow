@@ -423,8 +423,7 @@ func (a *API) pf19ProxyAudit(r *http.Request, q store.Querier, user string, appl
 	u := user
 	remote := httpx.ClientIP(r)
 	rid := httpx.RequestIDFrom(r.Context())
-	system := "api"
-	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &u, Action: kind + "." + verb, Data: data, RemoteIP: &remote, RequestID: &rid, SystemType: &system, CreatedAt: time.Now()})
+	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &u, Action: kind + "." + verb, Data: data, RemoteIP: &remote, RequestID: &rid, CreatedAt: time.Now()})
 }
 func (a *API) pf19ProxyWriteError(err error) error {
 	if strings.Contains(strings.ToLower(err.Error()), "unique constraint") {

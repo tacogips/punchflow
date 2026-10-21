@@ -78,6 +78,10 @@ func (a *API) createRole(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("Missing name or permissionList"))
 		return
 	}
+	if err := pf20ValidateLength("name", body.Name, 300); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	permissions, modeled, err := pf21ValidatePermissions(r.Context(), a.d.DB.Q(), body.PermissionList)
 	if err != nil {
 		kferr.Write(w, err)
@@ -143,6 +147,12 @@ func (a *API) updateRole(w http.ResponseWriter, r *http.Request) {
 	if body.Name != nil && strings.TrimSpace(*body.Name) == "" {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"must not be blank"}}))
 		return
+	}
+	if body.Name != nil {
+		if err := pf20ValidateLength("name", *body.Name, 300); err != nil {
+			kferr.Write(w, err)
+			return
+		}
 	}
 	var permissions json.RawMessage
 	var modeled []model.RolePermission

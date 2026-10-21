@@ -72,10 +72,13 @@ function assigneeCanAct(step: TicketStep, userId: string): boolean {
   });
 }
 
-function currentStep(ticket: TicketDetail): TicketStep | undefined {
+function currentSteps(ticket: TicketDetail): TicketStep[] {
   const current = Number(asRecord(ticket).currentStep ?? 0);
-  return ticket.steps.find((step) => asArray(step.assignees).some((value) => asRecord(value).current === true))
-    ?? ticket.steps.find((step) => Number(asRecord(step).stepOrder) === current);
+  const markedCurrent = ticket.steps.filter((step) => asArray(step.assignees).some((value) => asRecord(value).current === true));
+  const currentOrder = markedCurrent.length > 0
+    ? Number(asRecord(markedCurrent[0]).stepOrder)
+    : current;
+  return ticket.steps.filter((step) => Number(asRecord(step).stepOrder) === currentOrder);
 }
 
 export function availableActions(t: TicketDetail, me: { id: string; permissions: string[] }): TicketAction[] {
@@ -84,12 +87,13 @@ export function availableActions(t: TicketDetail, me: { id: string; permissions:
   const author = asRecord(ticket.author);
   const isAuthor = author.id === me.id || asRecord(ticket.proxyClientUser).id === me.id;
   const status = asString(ticket.status);
-  const step = currentStep(t);
-  const assigned = status === "in_progress" && step !== undefined && assigneeCanAct(step, me.id);
-  const actionType = asString(asRecord(step).actionType);
+  const steps = currentSteps(t);
+  const assignedSteps = status === "in_progress" ? steps.filter((step) => assigneeCanAct(step, me.id)) : [];
+  const assigned = assignedSteps.length > 0;
+  const canSendBack = assignedSteps.some((step) => asString(asRecord(step).actionType) === "approve");
   if (assigned) {
     actions.push("approve");
-    if (actionType === "approve") actions.push("reject", "deny");
+    if (canSendBack) actions.push("reject", "deny");
   }
   if (isAuthor && status === "in_progress") actions.push("withdraw");
   if ((isAuthor && ["draft", "rejected"].includes(status))

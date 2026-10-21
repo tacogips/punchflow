@@ -17,7 +17,7 @@ func ListWebhooks(ctx context.Context, q Querier, offset, limit int) ([]model.We
 	if err := q.QueryRowContext(ctx, "SELECT count(*) FROM webhooks").Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("store: count webhooks: %w", err)
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id,name,url,secret,enabled,workflow_ids,event_types,first_failure_at,disabled_at,created_at,updated_at FROM webhooks ORDER BY created_at,id LIMIT ? OFFSET ?", limit, offset)
+	rows, err := q.QueryContext(ctx, "SELECT id,name,url,secret,enabled,workflow_ids,event_types,first_failure_at,disabled_at,created_at,updated_at,state_generation FROM webhooks ORDER BY created_at,id LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list webhooks: %w", err)
 	}
@@ -38,7 +38,7 @@ func ListWebhooks(ctx context.Context, q Querier, offset, limit int) ([]model.We
 
 // GetWebhook loads a webhook by ID.
 func GetWebhook(ctx context.Context, q Querier, id string) (model.Webhook, error) {
-	row := q.QueryRowContext(ctx, "SELECT id,name,url,secret,enabled,workflow_ids,event_types,first_failure_at,disabled_at,created_at,updated_at FROM webhooks WHERE id=?", id)
+	row := q.QueryRowContext(ctx, "SELECT id,name,url,secret,enabled,workflow_ids,event_types,first_failure_at,disabled_at,created_at,updated_at,state_generation FROM webhooks WHERE id=?", id)
 	v, err := pf09ScanWebhook(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Webhook{}, ErrNotFound
@@ -106,7 +106,8 @@ func SetWebhookEnabled(ctx context.Context, q Querier, id string, enabled bool, 
 		enabled=?,
 		first_failure_at=CASE WHEN ?=1 AND enabled=0 THEN NULL ELSE first_failure_at END,
 		disabled_at=CASE WHEN ?=1 THEN NULL WHEN enabled=1 AND ?=0 THEN ? ELSE disabled_at END,
-		updated_at=? WHERE id=?`, enabled, enabled, enabled, enabled, Millis(now), Millis(now), id)
+		state_generation=state_generation+CASE WHEN ?=1 AND enabled=0 THEN 1 ELSE 0 END,
+		updated_at=? WHERE id=?`, enabled, enabled, enabled, enabled, Millis(now), enabled, Millis(now), id)
 	if err != nil {
 		return fmt.Errorf("store: set webhook enabled state: %w", err)
 	}
@@ -138,7 +139,7 @@ func DeleteWebhook(ctx context.Context, q Querier, id string) error {
 
 // EnabledWebhooks returns enabled registrations in stable order.
 func EnabledWebhooks(ctx context.Context, q Querier) ([]model.Webhook, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id,name,url,secret,enabled,workflow_ids,event_types,first_failure_at,disabled_at,created_at,updated_at FROM webhooks WHERE enabled=1 ORDER BY created_at,id")
+	rows, err := q.QueryContext(ctx, "SELECT id,name,url,secret,enabled,workflow_ids,event_types,first_failure_at,disabled_at,created_at,updated_at,state_generation FROM webhooks WHERE enabled=1 ORDER BY created_at,id")
 	if err != nil {
 		return nil, fmt.Errorf("store: list enabled webhooks: %w", err)
 	}
@@ -337,11 +338,23 @@ func ListWebhookAttempts(ctx context.Context, q Querier, eventID string) ([]mode
 
 // SetWebhookFailureState records the first failure or clears it after success; disable marks remaining pending deliveries failed.
 func SetWebhookFailureState(ctx context.Context, q Querier, id string, first *time.Time, disable bool, now time.Time) error {
+	return SetWebhookFailureStateAtGeneration(ctx, q, id, first, disable, now, -1)
+}
+
+// SetWebhookFailureStateAtGeneration ignores state updates from deliveries
+// that started before the webhook was explicitly re-enabled.
+func SetWebhookFailureStateAtGeneration(ctx context.Context, q Querier, id string, first *time.Time, disable bool, now time.Time, generation int64) error {
 	var disabled any
 	if disable {
 		disabled = Millis(now)
 	}
-	result, err := q.ExecContext(ctx, "UPDATE webhooks SET first_failure_at=?,enabled=CASE WHEN ? THEN 0 ELSE enabled END,disabled_at=CASE WHEN ? THEN ? ELSE disabled_at END,updated_at=? WHERE id=?", pf09MillisPtr(first), disable, disable, disabled, Millis(now), id)
+	query := "UPDATE webhooks SET first_failure_at=?,enabled=CASE WHEN ? THEN 0 ELSE enabled END,disabled_at=CASE WHEN ? THEN ? ELSE disabled_at END,updated_at=? WHERE id=?"
+	args := []any{pf09MillisPtr(first), disable, disable, disabled, Millis(now), id}
+	if generation >= 0 {
+		query += " AND state_generation=?"
+		args = append(args, generation)
+	}
+	result, err := q.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("store: update webhook failure state: %w", err)
 	}
@@ -350,7 +363,17 @@ func SetWebhookFailureState(ctx context.Context, q Querier, id string, first *ti
 		return fmt.Errorf("store: count webhook failure state: %w", err)
 	}
 	if n == 0 {
-		return ErrNotFound
+		if generation < 0 {
+			return ErrNotFound
+		}
+		var count int
+		if err = q.QueryRowContext(ctx, `SELECT count(*) FROM webhooks WHERE id=?`, id).Scan(&count); err != nil {
+			return err
+		}
+		if count == 0 {
+			return ErrNotFound
+		}
+		return nil
 	}
 	if disable {
 		if _, err := q.ExecContext(ctx, "UPDATE webhook_events SET status='failed',updated_at=? WHERE webhook_id=? AND status='pending'", Millis(now), id); err != nil {
@@ -367,7 +390,7 @@ func pf09ScanWebhook(row interface{ Scan(...any) error }) (model.Webhook, error)
 	var workflows, events string
 	var first, disabled sql.NullInt64
 	var created, updated int64
-	if err := row.Scan(&v.ID, &v.Name, &v.URL, &secret, &enabled, &workflows, &events, &first, &disabled, &created, &updated); err != nil {
+	if err := row.Scan(&v.ID, &v.Name, &v.URL, &secret, &enabled, &workflows, &events, &first, &disabled, &created, &updated, &v.StateGeneration); err != nil {
 		return model.Webhook{}, fmt.Errorf("store: scan webhook: %w", err)
 	}
 	if secret.Valid {

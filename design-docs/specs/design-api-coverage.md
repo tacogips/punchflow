@@ -26,6 +26,12 @@ Single source of truth for which kickflow operation and webhook event punchflow 
 | Timestamps | JST with milliseconds `2006-01-02T15:04:05.000+09:00` using a fixed `+09:00` zone (no tzdata dependency). Date-only fields `YYYY-MM-DD`. Inputs accept the four documented formats | `internal/kftime` |
 | IDs | UUID v4 from `crypto/rand`. Path parameters for users, grades, teams, folders, routes, workflows, general masters and items accept the UUID or the `code` | `internal/store` |
 | Pagination | `page`/`perPage` (INF-03), headers `Link` (INF-01), `Page`, `Per-Page`, `Total`; body is a plain JSON array, `[]` when empty | `internal/httpx` |
+
+Ticket list query behavior follows the public query meanings: `authorTeamFullName` matches the slash-joined team hierarchy; `stepTitle` and `assigneeStatus=current` are limited to the ticket's current actionable step group. Task lists default to outstanding assignments, while an explicit `status[]` selection retains historical assignments for those statuses. These query paths are regression-tested with populated tickets (API-01..API-03).
+
+Ticket action controls in the web UI check all steps in the current parallel group and include active proxy assignments, matching the backend's one-call handling for a user's assignments across that group (INF-API-UI-14).
+
+User/API-authenticated mutation audit rows return `systemType: null`; only automated operations use `automation`. Route conditions resolve `GeneralMasterCode` and `GeneralMasterItemCode` and return full public metadata for both nested objects (API-04, API-15). General-master field removal deletes matching item inputs and stable input IDs in the same database transaction. Mutation validation enforces OpenAPI length limits for general masters, custom fields and items, teams and roles (API-12, API-13).
 | Sorting | INF-02 | `internal/httpx` |
 | Array query | `key[]=a&key[]=b`. For parameters typed "string or string[]" a bare `key=a` is also accepted. A bare repeated key for an array-only parameter returns `400 invalid_parameter` with message `Invalid request: value at root is not an array` | `internal/httpx` |
 | Auth | Bearer PAT / SAT with `X-Caller-Id`, or UI session cookie; see `design-auth-admin.md` | `internal/auth` |
@@ -142,7 +148,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 55 | getWorkflow | GET | /v1/workflows/{workflowId} | any | definitions.go | WorkflowDetail; integration fields null (DIV-03) |
 | 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; TicketWithStep without inputs/route; INF-02 |
 | 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21); `viewers[].userId` and `watcherUserId` (INF-NES-16) |
-| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-40; `subStatusIds[]` filters tasks as it does tickets (the list and its `Total` header are filtered) |
+| 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-40; `subStatusIds[]` filters tasks as it does tickets (the list and its `Total` header are filtered); explicit statuses retain historical assignments (API-03) |
 | 59 | getTicket | GET | /v1/tickets/{ticketId} | visible | tickets.go | TicketDetail incl. `actualApprover` |
 | 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, approver fields only) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); `slipItems` replace all rows (INF-75); `viewers[]` replaces the user viewers and `watcherUserId` subscribes a watcher (INF-NES-16) |
 | 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; per-section differential detail rows (INF-75); `ticket_updated` |
@@ -180,7 +186,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 93 | getComment | GET | /v1/tickets/{ticketId}/comments/{commentId} | visible | comments.go | |
 | 94 | updateComment | PATCH | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Attachments unchanged; `comment_updated` |
 | 95 | deleteComment | DELETE | /v1/tickets/{ticketId}/comments/{commentId} | visible + comment author (INF-37) | comments.go | Soft delete; `comment_updated` |
-| 96 | listAuditLogs | GET | /v1/auditLogs | audit | audit_logs.go | INF-29 |
+| 96 | listAuditLogs | GET | /v1/auditLogs | audit | audit_logs.go | INF-29; mutation `systemType` is null except for automation (API-04) |
 
 Path count check: the 57 distinct paths are the distinct values of the Path column. Handler file count: 15 files, none expected near 1000 lines; `tickets.go` must be split further if it approaches the limit.
 

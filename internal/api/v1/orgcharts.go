@@ -269,6 +269,5 @@ func (a *API) pf19ChartAudit(r *http.Request, q store.Querier, user, action, id 
 	data, _ := json.Marshal(map[string]string{"organizationChartId": id})
 	ip := httpx.ClientIP(r)
 	rid := httpx.RequestIDFrom(r.Context())
-	system := "api"
-	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &user, Action: action, Data: data, RemoteIP: &ip, RequestID: &rid, SystemType: &system, CreatedAt: time.Now()})
+	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &user, Action: action, Data: data, RemoteIP: &ip, RequestID: &rid, CreatedAt: time.Now()})
 }

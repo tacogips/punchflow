@@ -54,6 +54,9 @@ func pf20MergeMasterFields(ctx context.Context, q store.Querier, master string, 
 		if code == "" || seen[code] {
 			return nil, invalid("contains an invalid or duplicate field")
 		}
+		if err := pf20ValidateLength("fields", code, 100); err != nil {
+			return nil, err
+		}
 		seen[code] = true
 		field, exists := byCode[code]
 		if !exists {
@@ -86,6 +89,14 @@ func pf20MergeMasterFields(ctx context.Context, q store.Querier, master string, 
 		}
 		if field.Title == "" || !pf20Contains(model.MasterFieldTypes, field.FieldType) {
 			return nil, invalid("contains an invalid or duplicate field")
+		}
+		if err := pf20ValidateLength("fields", field.Title, 300); err != nil {
+			return nil, err
+		}
+		if field.Description != nil {
+			if err := pf20ValidateLength("fields", *field.Description, 10000); err != nil {
+				return nil, err
+			}
 		}
 		if (field.FieldType == model.MasterFieldTypeCheckbox || field.FieldType == model.MasterFieldTypePullDown) && len(field.Options) == 0 {
 			return nil, invalid("options are required for selection fields")

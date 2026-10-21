@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"punchflow/internal/auth"
 	"punchflow/internal/httpx"
@@ -100,11 +101,23 @@ func (a *API) createGeneralMaster(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name is required"))
 		return
 	}
+	if err := pf20ValidateLength("name", strings.TrimSpace(*b.Name), 300); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	x := model.GeneralMaster{ID: store.NewID(), Code: "master-" + store.NewID()[:8], Name: strings.TrimSpace(*b.Name), DefaultSortBy: model.MasterSortKeyName, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if b.Code != nil && strings.TrimSpace(*b.Code) != "" {
 		x.Code = strings.TrimSpace(*b.Code)
 	}
+	if err := pf20ValidateLength("code", x.Code, 100); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	if b.Description != nil {
+		if err := pf20ValidateLength("description", *b.Description, 10000); err != nil {
+			kferr.Write(w, err)
+			return
+		}
 		x.Description = b.Description
 	}
 	if b.DefaultSortBy != nil {
@@ -196,7 +209,19 @@ func (a *API) updateGeneralMaster(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name is required"))
 		return
 	}
+	if err := pf20ValidateLength("name", x.Name, 300); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	if err := pf20ValidateLength("code", x.Code, 100); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	if b.Description != nil {
+		if err := pf20ValidateLength("description", *b.Description, 10000); err != nil {
+			kferr.Write(w, err)
+			return
+		}
 		x.Description = b.Description
 	}
 	if b.DefaultSortBy != nil {
@@ -329,10 +354,18 @@ func (a *API) createGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name and inputs are required"))
 		return
 	}
+	if err := pf20ValidateLength("name", strings.TrimSpace(*b.Name), 100); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	now := time.Now().UTC()
 	x := model.GeneralMasterItem{ID: store.NewID(), GeneralMasterID: master, Code: "item-" + store.NewID()[:8], Name: strings.TrimSpace(*b.Name), CreatedAt: now, UpdatedAt: now}
 	if b.Code != nil && strings.TrimSpace(*b.Code) != "" {
 		x.Code = strings.TrimSpace(*b.Code)
+	}
+	if err := pf20ValidateLength("code", x.Code, 100); err != nil {
+		kferr.Write(w, err)
+		return
 	}
 	x.Description = b.Description
 	x.StartsOn = b.StartsOn.pointer()
@@ -425,6 +458,14 @@ func (a *API) updateGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name is required"))
 		return
 	}
+	if err := pf20ValidateLength("name", x.Name, 100); err != nil {
+		kferr.Write(w, err)
+		return
+	}
+	if err := pf20ValidateLength("code", x.Code, 100); err != nil {
+		kferr.Write(w, err)
+		return
+	}
 	if b.Description != nil {
 		x.Description = b.Description
 	}
@@ -456,6 +497,13 @@ func (a *API) updateGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, j)
+}
+
+func pf20ValidateLength(field, value string, max int) error {
+	if utf8.RuneCountInString(value) > max {
+		return kferr.ValidationFailed(map[string][]string{field: {"is too long (maximum is " + strconv.Itoa(max) + " characters)"}})
+	}
+	return nil
 }
 func (a *API) deleteGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 	if e := auth.Require(r, model.PermissionMaster); e != nil {
@@ -493,6 +541,17 @@ func pf20MasterFields(in *[]pf20MasterFieldBody, master string, now time.Time) (
 		f.Title = strings.TrimSpace(f.Title)
 		if f.Code == "" || f.Title == "" || seen[f.Code] || !pf20Contains(model.MasterFieldTypes, f.FieldType) {
 			return nil, kferr.ValidationFailed(map[string][]string{"fields": {"contains an invalid or duplicate field"}})
+		}
+		if err := pf20ValidateLength("fields", f.Code, 100); err != nil {
+			return nil, err
+		}
+		if err := pf20ValidateLength("fields", f.Title, 300); err != nil {
+			return nil, err
+		}
+		if f.Description != nil {
+			if err := pf20ValidateLength("fields", *f.Description, 10000); err != nil {
+				return nil, err
+			}
 		}
 		seen[f.Code] = true
 		if (f.FieldType == model.MasterFieldTypeCheckbox || f.FieldType == model.MasterFieldTypePullDown) && len(f.Options) == 0 {

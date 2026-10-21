@@ -542,8 +542,8 @@ func pf18Audit(r *http.Request, q store.Querier, userID, action, id string, fiel
 	if err != nil {
 		return err
 	}
-	ip, requestID, system := httpx.ClientIP(r), httpx.RequestIDFrom(r.Context()), "api"
-	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &userID, Action: action, Data: data, RemoteIP: &ip, RequestID: &requestID, SystemType: &system, CreatedAt: time.Now()})
+	ip, requestID := httpx.ClientIP(r), httpx.RequestIDFrom(r.Context())
+	return store.InsertAuditLog(r.Context(), q, model.AuditLog{UserID: &userID, Action: action, Data: data, RemoteIP: &ip, RequestID: &requestID, CreatedAt: time.Now()})
 }
 func pf18Contains(values []string, value string) bool {
 	for _, candidate := range values {

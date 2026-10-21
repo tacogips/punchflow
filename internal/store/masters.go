@@ -177,7 +177,65 @@ func pf20WriteMasterFields(ctx context.Context, q Querier, masterID string, fiel
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
+		if err = pf20RemoveDeletedFieldInputs(ctx, q, masterID, id); err != nil {
+			return err
+		}
 		if _, err = q.ExecContext(ctx, `DELETE FROM general_master_fields WHERE id=?`, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pf20RemoveDeletedFieldInputs removes values and stable input IDs that point
+// at a field being removed. It runs inside UpdateGeneralMaster's transaction.
+func pf20RemoveDeletedFieldInputs(ctx context.Context, q Querier, masterID, fieldID string) error {
+	rows, err := q.QueryContext(ctx, `SELECT id,inputs,input_ids FROM general_master_items WHERE general_master_id=?`, masterID)
+	if err != nil {
+		return err
+	}
+	type itemState struct{ id, inputs, inputIDs string }
+	items := []itemState{}
+	for rows.Next() {
+		var item itemState
+		if err = rows.Scan(&item.id, &item.inputs, &item.inputIDs); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		items = append(items, item)
+	}
+	if err = rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	for _, item := range items {
+		inputs := map[string]any{}
+		if err = json.Unmarshal([]byte(item.inputs), &inputs); err != nil {
+			return err
+		}
+		inputIDs := map[string]string{}
+		if err = json.Unmarshal([]byte(item.inputIDs), &inputIDs); err != nil {
+			return err
+		}
+		if _, exists := inputs[fieldID]; !exists {
+			if _, exists = inputIDs[fieldID]; !exists {
+				continue
+			}
+		}
+		delete(inputs, fieldID)
+		delete(inputIDs, fieldID)
+		inputJSON, marshalErr := json.Marshal(inputs)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		idsJSON, marshalErr := json.Marshal(inputIDs)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if _, err = q.ExecContext(ctx, `UPDATE general_master_items SET inputs=?,input_ids=? WHERE id=?`, string(inputJSON), string(idsJSON), item.id); err != nil {
 			return err
 		}
 	}

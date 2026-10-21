@@ -67,15 +67,30 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 		add("t.author_id=?", filter.AuthorID)
 	}
 	if filter.AuthorTeamFullName != "" {
-		add("EXISTS (SELECT 1 FROM teams tm WHERE tm.id=t.author_team_id AND tm.full_name=?)", filter.AuthorTeamFullName)
+		add(`EXISTS (
+			WITH RECURSIVE ancestors(id,parent_id,name,depth) AS (
+				SELECT id,parent_id,name,0 FROM teams WHERE id=t.author_team_id
+				UNION ALL
+				SELECT parent.id,parent.parent_id,parent.name,ancestors.depth+1
+				FROM teams parent JOIN ancestors ON parent.id=ancestors.parent_id
+			)
+			SELECT 1 FROM (SELECT group_concat(name,'/') AS full_name FROM (SELECT name FROM ancestors ORDER BY depth DESC))
+			WHERE full_name=?
+		)`, filter.AuthorTeamFullName)
 	}
 	if filter.TicketNumber != "" {
 		add("t.ticket_number=?", filter.TicketNumber)
 	}
 	if filter.Tasks {
 		assigneeWhere, values := taskAssigneeWhere("ta")
-		values = append(values, model.StepStatusInProgress)
-		add("EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.completed=0 AND ts.status=?)", values...)
+		// No explicit status means actionable outstanding assignments. Explicit
+		// historical statuses retain the caller's completed assignment rows.
+		if len(filter.Statuses) == 0 {
+			values = append(values, model.StepStatusInProgress)
+			add("EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.completed=0 AND ts.status=?)", values...)
+		} else {
+			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+")", values...)
+		}
 		if filter.AssignedToMeAtStart != nil {
 			assigneeWhere, values = taskAssigneeWhere("ta")
 			values = append(values, Millis(*filter.AssignedToMeAtStart))
@@ -87,7 +102,7 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 			add("EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND "+assigneeWhere+" AND ta.assigned_at<=?)", values...)
 		}
 	} else if filter.AssigneeUserID != "" {
-		clause := "EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id=t.id AND ta.user_id=?"
+		clause := "EXISTS (SELECT 1 FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id WHERE ta.ticket_id=t.id AND ta.user_id=?"
 		values := []any{filter.AssigneeUserID}
 		if len(filter.AssigneeStatuses) > 0 {
 			states := []string{}
@@ -108,7 +123,7 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 					case "all":
 						parts = append(parts, "1=1")
 					case "current":
-						parts = append(parts, "ta.completed=0")
+						parts = append(parts, "ta.completed=0 AND ts.status='in_progress' AND ts.step_order=t.current_step")
 					case "approved":
 						parts = append(parts, "ta.completed=1")
 					}
@@ -149,7 +164,7 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 		}
 	}
 	if filter.StepTitle != "" {
-		add("EXISTS (SELECT 1 FROM ticket_steps ts WHERE ts.ticket_id=t.id AND ts.title=?)", filter.StepTitle)
+		add("EXISTS (SELECT 1 FROM ticket_steps ts WHERE ts.ticket_id=t.id AND ts.title=? AND ts.status='in_progress' AND ts.step_order=t.current_step)", filter.StepTitle)
 	}
 	order := "t.created_at DESC"
 	orderArgs := []any{}

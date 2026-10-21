@@ -209,7 +209,7 @@ func (s *Service) pf09Record(ctx context.Context, ev model.WebhookDelivery, hook
 		if err := store.InsertWebhookAttempt(ctx, tx, attempt); err != nil {
 			return err
 		}
-		return store.SetWebhookFailureState(ctx, tx, hook.ID, first, disable, now)
+		return store.SetWebhookFailureStateAtGeneration(ctx, tx, hook.ID, first, disable, now, hook.StateGeneration)
 	})
 	if errors.Is(err, store.ErrNotFound) {
 		return errDeliveryGone
