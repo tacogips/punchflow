@@ -412,11 +412,23 @@ func Validate(s *Set) error {
 			}
 			for fi, f := range sec.FormFields {
 				fields[f.Code] = true
+				for wi, workflowCode := range f.SelectableTicketWorkflowCodes {
+					if !workflowCodes[workflowCode] {
+						add(FileWorkflows, fmt.Sprintf("%s.sectionList[%d].formFields[%d].selectableTicketWorkflowCodes[%d]", p, si, fi, wi), "unknown workflow code")
+					}
+				}
 				if !pf06Contains(model.FormFieldSizes, f.Size) {
 					add(FileWorkflows, fmt.Sprintf("%s.sectionList[%d].formFields[%d].size", p, si, fi), "invalid size")
 				}
 				if f.GeneralMasterCode != "" && !masterCodes[f.GeneralMasterCode] {
 					add(FileWorkflows, fmt.Sprintf("%s.sectionList[%d].formFields[%d].generalMasterCode", p, si, fi), "unknown general master code")
+				}
+			}
+			for fi, f := range sec.SlipFields {
+				for wi, workflowCode := range f.SelectableTicketWorkflowCodes {
+					if !workflowCodes[workflowCode] {
+						add(FileWorkflows, fmt.Sprintf("%s.sectionList[%d].slipFields[%d].selectableTicketWorkflowCodes[%d]", p, si, fi, wi), "unknown workflow code")
+					}
 				}
 			}
 		}

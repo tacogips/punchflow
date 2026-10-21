@@ -1,8 +1,65 @@
 package present
 
 import (
+	"encoding/json"
+	"punchflow/internal/store"
 	"testing"
 )
+
+func TestWorkflowPresenterResolvesTicketWorkflowChoicesAndSlipDefaults(t *testing.T) {
+	ctx, db := pf08DB(t)
+	q := db.Q()
+	definition, err := store.WorkflowDefByID(ctx, q, "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition.SectionList[0].FormFields[0].FieldType = "ticket"
+	definition.SectionList[0].FormFields[0].SelectableTicketWorkflowCodes = []string{"WF2"}
+	definition.SectionList[0].SlipFields[0].FieldType = "master"
+	definition.SectionList[0].SlipFields[0].GeneralMasterCode = "GM"
+	definition.SectionList[0].SlipFields[0].DefaultGeneralMasterItemCode = "I1"
+	definition.SectionList[0].SlipFields[0].SelectableTicketWorkflowCodes = []string{"WF2"}
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = q.ExecContext(ctx, `UPDATE workflows SET definition_json=? WHERE id='wf'`, string(encoded)); err != nil {
+		t.Fatal(err)
+	}
+	second := definition
+	second.ID, second.Code, second.Name = "wf2", "WF2", "Source"
+	encoded, err = json.Marshal(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = q.ExecContext(ctx, `INSERT INTO workflows(id,code,status,folder_id,definition_json,ticket_number_counter,created_at,updated_at) SELECT 'wf2','WF2','visible','f1',?,0,created_at,updated_at FROM workflows WHERE id='wf'`, string(encoded)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := WorkflowDetail(ctx, q, "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	section := got["sectionList"].([]any)[0].(map[string]any)
+	formField := section["formFields"].([]any)[0].(map[string]any)
+	choices := formField["selectableTicketWorkflows"].([]any)
+	if len(choices) != 1 {
+		t.Fatalf("ticket workflow choices=%v", choices)
+	}
+	choice := choices[0].(WorkflowJSON)
+	if choice["id"] != "wf2" || choice["code"] != "WF2" {
+		t.Fatalf("resolved ticket workflow=%v", choice)
+	}
+	if _, exists := choice["folder"]; exists {
+		t.Fatal("selectable ticket workflow unexpectedly contains folder")
+	}
+	slip := section["slipFields"].([]any)[0].(map[string]any)
+	if got := slip["defaultGeneralMasterItem"].(GeneralMasterItemJSON)["id"]; got != "it" {
+		t.Fatalf("detail default master item=%v", got)
+	}
+	if len(slip["selectableTicketWorkflows"].([]any)) != 1 {
+		t.Fatal("detail ticket workflow choices were not resolved")
+	}
+}
 
 func TestWorkflowPresenterContracts(t *testing.T) {
 	ctx, db := pf08DB(t)

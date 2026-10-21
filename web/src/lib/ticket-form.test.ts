@@ -3,7 +3,7 @@ import type { SectionListItem, TicketDetail, WorkflowDetail } from "../api/types
 import { toTicketInputs } from "./form-model";
 import {
   buildFormPayload, compareCondition, conditionValues, formStateFromTicket, goSprint, sectionConditionMet,
-  sectionViewable, slipRowInSection, slipRowsFromTicket,
+  defaultFieldValue, sectionViewable, slipRowInSection, slipRowsFromTicket,
 } from "./ticket-form";
 
 const always = () => true;
@@ -148,6 +148,14 @@ describe("new ticket defaults", () => {
 
     const existing = { ...ticket, inputs: [{ id: "stored", formFieldId: "radio", value: "rejected", formField: { code: "choice" } }] } as TicketDetail;
     expect(formStateFromTicket(defaults, existing).choice.value).toBe("rejected");
+  });
+
+  test("new detail row cells reuse scalar, date, multi-select, and master defaults", () => {
+    const today = defaultFieldValue({ id: "d", code: "today", name: "Today", fieldType: "date", useTodayForDefaultValue: true });
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(defaultFieldValue({ id: "r", code: "choice", name: "Choice", fieldType: "radio_button", defaultValue: "yes" })).toBe("yes");
+    expect(defaultFieldValue({ id: "m", code: "master", name: "Master", fieldType: "master", defaultGeneralMasterItem: { id: "default-item" } })).toBe("default-item");
+    expect(defaultFieldValue({ id: "multi", code: "multi", name: "Multi", fieldType: "user", multiple: true })).toEqual([]);
   });
 });
 

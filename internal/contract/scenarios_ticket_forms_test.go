@@ -88,6 +88,85 @@ func pf16PrepareExpenseWorkflow(t *testing.T, env *testutil.Env) {
 	}
 }
 
+func TestContractSelectableTicketWorkflowsAndDetailMasterDefault(t *testing.T) {
+	env := testutil.New(t)
+	workflowID, err := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for sectionIndex := range def.SectionList {
+		section := &def.SectionList[sectionIndex]
+		for fieldIndex := range section.FormFields {
+			if section.FormFields[fieldIndex].Code == "related" {
+				section.FormFields[fieldIndex].SelectableTicketWorkflowCodes = []string{"purchase-request"}
+			}
+		}
+		for fieldIndex := range section.SlipFields {
+			if section.SlipFields[fieldIndex].Code == "item" {
+				section.SlipFields[fieldIndex].FieldType = "master"
+				section.SlipFields[fieldIndex].GeneralMasterCode = "cost-centers"
+				section.SlipFields[fieldIndex].DefaultGeneralMasterItemCode = "cc-sales"
+				section.SlipFields[fieldIndex].SelectableTicketWorkflowCodes = []string{"purchase-request"}
+			}
+		}
+	}
+	def.SectionList[0].FormFields = append(def.SectionList[0].FormFields, model.FormField{
+		ID: store.NewID(), Code: "contract-source", Title: "Source ticket", FieldType: "ticket", Author: true, Size: "full", Orientation: "horizontal",
+		Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{},
+		SelectableTicketWorkflowCodes: []string{"purchase-request"},
+	})
+	raw, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=? WHERE id=?`, string(raw), workflowID); err != nil {
+		t.Fatal(err)
+	}
+	operations := map[string]apiv1.Operation{}
+	for _, operation := range apiv1.Operations() {
+		operations[operation.OperationID] = operation
+	}
+	operation := operations["getWorkflow"]
+	response := env.Do(t, testutil.Employee, http.MethodGet, "/v1/workflows/expense-claim", nil)
+	compiler := schemaCompiler(t, loadSpec(t))
+	pf26aCheck(t, operation, response, pf16ResponseSchema(t, compiler, operation), loadSpec(t))
+	var body struct {
+		SectionList []struct {
+			FormFields []struct {
+				Code    string           `json:"code"`
+				Choices []map[string]any `json:"selectableTicketWorkflows"`
+			} `json:"formFields"`
+			SlipFields []struct {
+				Code    string           `json:"code"`
+				Default map[string]any   `json:"defaultGeneralMasterItem"`
+				Choices []map[string]any `json:"selectableTicketWorkflows"`
+			} `json:"slipFields"`
+		} `json:"sectionList"`
+	}
+	response.JSON(t, &body)
+	var sourceChoice bool
+	var detailDefault, detailChoice bool
+	for _, section := range body.SectionList {
+		for _, field := range section.FormFields {
+			if field.Code == "contract-source" && len(field.Choices) == 1 && field.Choices[0]["code"] == "purchase-request" {
+				sourceChoice = true
+			}
+		}
+		for _, field := range section.SlipFields {
+			if field.Code == "item" && field.Default["code"] == "cc-sales" && len(field.Choices) == 1 && field.Choices[0]["code"] == "purchase-request" {
+				detailDefault, detailChoice = true, true
+			}
+		}
+	}
+	if !sourceChoice || !detailDefault || !detailChoice {
+		t.Fatalf("populated ticket/detail field metadata missing: %s", response.Body)
+	}
+}
+
 func pf16ResponseSchema(t *testing.T, compiler *jsonschema.Compiler, operation apiv1.Operation) *jsonschema.Schema {
 	t.Helper()
 	schema, err := compiler.Compile(responseSchemaURI(operation.Pattern, strings.ToLower(operation.Method)))

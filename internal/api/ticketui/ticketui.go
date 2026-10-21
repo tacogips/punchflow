@@ -129,7 +129,36 @@ func (a *API) listApplicationTeams(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidAccessToken())
 		return
 	}
-	ids, _, err := store.UserTeamIDs(r.Context(), a.d.DB.Q(), p.User.ID, 0, 10000)
+	userID := p.User.ID
+	if proxyID := r.URL.Query().Get("proxyClientUserId"); proxyID != "" && proxyID != userID {
+		resolvedProxyID, resolveErr := store.ResolveID(r.Context(), a.d.DB.Q(), "users", proxyID)
+		if resolveErr != nil {
+			kferr.Write(w, kferr.ResourceNotFound())
+			return
+		}
+		proxyID = resolvedProxyID
+		workflowID := r.URL.Query().Get("workflowId")
+		if workflowID == "" {
+			kferr.Write(w, kferr.ValidationFailed(map[string][]string{"workflowId": {"is required when selecting a proxy client"}}))
+			return
+		}
+		workflowID, err := store.ResolveID(r.Context(), a.d.DB.Q(), "workflows", workflowID)
+		if err != nil {
+			kferr.Write(w, kferr.ResourceNotFound())
+			return
+		}
+		registered, err := store.EngActiveProxyApplicant(r.Context(), a.d.DB.Q(), proxyID, userID, workflowID, kftime.FormatDate(a.d.Clock.Now()))
+		if err != nil {
+			kferr.Write(w, kferr.Internal())
+			return
+		}
+		if !registered {
+			kferr.Write(w, kferr.MissingPermission("proxy application is not registered for this workflow"))
+			return
+		}
+		userID = proxyID
+	}
+	ids, _, err := store.UserTeamIDs(r.Context(), a.d.DB.Q(), userID, 0, 10000)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
@@ -215,7 +244,11 @@ func (a *API) listWorkflowMasterItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids := make([]string, 0, len(rows))
+	today := kftime.FormatDate(a.d.Clock.Now())
 	for _, row := range rows {
+		if row.StartsOn != nil && *row.StartsOn > today || row.EndsOn != nil && *row.EndsOn < today {
+			continue
+		}
 		ids = append(ids, row.ID)
 	}
 	items, err := present.GeneralMasterItems(r.Context(), q, ids)

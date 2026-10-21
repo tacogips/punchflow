@@ -21,7 +21,17 @@ export default function TicketEdit() {
   const workflowId = () => chosenWorkflow() || str(obj(obj(ticket()).workflow).id);
   const [workflow] = createResource(workflowId, (id) => id ? apiFetch<WorkflowDetail>("GET", `/v1/workflows/${id}`) : Promise.resolve(undefined));
   const me = () => session()?.user;
-  const [teams] = createResource(() => me()?.id, async (id) => id ? apiFetch<Team[]>("GET", "/ui/api/application-teams") : []);
+  const [teams] = createResource(() => {
+    const clientID = proxyClientUserId();
+    return [me()?.id ?? "", clientID, workflowId()].join("|");
+  }, async (key) => {
+    const [userID, clientID, selectedWorkflowID] = key.split("|");
+    if (!userID) return [];
+    const query = new URLSearchParams();
+    if (clientID) query.set("proxyClientUserId", clientID);
+    if (clientID) query.set("workflowId", selectedWorkflowID);
+    return apiFetch<Team[]>("GET", `/ui/api/application-teams${query.size ? `?${query}` : ""}`);
+  });
   const [form, setForm] = createSignal<Record<string, FieldState>>({}); const [slips, setSlips] = createSignal<SlipRows>({});
   const [title, setTitle] = createSignal(""); const [teamId, setTeamId] = createSignal(""); const [proxyClientUserId, setProxyClientUserId] = createSignal("");
   const [approvers, setApprovers] = createSignal<Record<string, string>>({}); const [submissionComment, setSubmissionComment] = createSignal(""); const [errors, setErrors] = createSignal<Record<string, string[]>>({}); const [error, setError] = createSignal(""); const [busy, setBusy] = createSignal(false); const [initialized, setInitialized] = createSignal("");

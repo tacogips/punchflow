@@ -139,10 +139,21 @@ func pf14cReferenceExists(ctx context.Context, q store.Querier, field model.Form
 			return exists, err
 		}
 		// The default fixtures list "all" (not in the kickflow enum) to mean any status.
-		if len(field.AllowedTicketStatus) == 0 || pf14cOptionAllowed(field.AllowedTicketStatus, "all") {
+		if len(field.AllowedTicketStatus) > 0 && !pf14cOptionAllowed(field.AllowedTicketStatus, "all") && !pf14cOptionAllowed(field.AllowedTicketStatus, status) {
+			return false, nil
+		}
+		if len(field.SelectableTicketWorkflowCodes) == 0 {
 			return true, nil
 		}
-		return pf14cOptionAllowed(field.AllowedTicketStatus, status), nil
+		workflowID, exists, err := store.EngTicketWorkflowID(ctx, q, id)
+		if err != nil || !exists {
+			return exists, err
+		}
+		workflow, err := store.GetWorkflow(ctx, q, workflowID)
+		if err != nil {
+			return false, err
+		}
+		return pf14cOptionAllowed(field.SelectableTicketWorkflowCodes, workflow.Code), nil
 	case "master":
 		return store.EngMasterItemInMaster(ctx, q, id, field.GeneralMasterCode)
 	case "file":

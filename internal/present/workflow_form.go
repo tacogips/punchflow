@@ -98,6 +98,7 @@ func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipFi
 // sync.
 func pf08SlipFieldInContext(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
 	out := pf08SlipFieldWithCustomValidations(f, fields)
+	out["selectableTicketWorkflows"] = pf08SelectableTicketWorkflows(ctx, q, f.SelectableTicketWorkflowCodes)
 	if f.GeneralMasterCode == "" {
 		return out
 	}
@@ -113,6 +114,26 @@ func pf08SlipFieldInContext(ctx context.Context, q store.Querier, f model.SlipFi
 		return out
 	}
 	out["generalMaster"] = master
+	out["defaultGeneralMasterItem"] = pf08DefaultGeneralMasterItem(ctx, q, f.GeneralMasterCode, f.DefaultGeneralMasterItemCode)
+	return out
+}
+
+func pf08SelectableTicketWorkflows(ctx context.Context, q store.Querier, codes []string) []any {
+	out := make([]any, 0, len(codes))
+	for _, code := range codes {
+		id, err := store.ResolveID(ctx, q, "workflows", code)
+		if err != nil {
+			continue
+		}
+		workflow, err := Workflow(ctx, q, id)
+		if err == nil {
+			delete(workflow, "author")
+			delete(workflow, "versionAuthor")
+			delete(workflow, "folder")
+			delete(workflow, "categories")
+			out = append(out, workflow)
+		}
+	}
 	return out
 }
 
@@ -153,7 +174,7 @@ func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[
 	out["approverEditSetting"] = map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}
 	out["customValidations"] = []any{}
 	out["ticketCopySetting"] = nil
-	out["selectableTicketWorkflows"] = []any{}
+	out["selectableTicketWorkflows"] = pf08SelectableTicketWorkflows(ctx, q, f.SelectableTicketWorkflowCodes)
 	return out
 }
 

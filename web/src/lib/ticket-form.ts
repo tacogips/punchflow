@@ -33,7 +33,7 @@ function storedValue(input: Loose | undefined, fieldType: string, multiple: bool
   return value ?? null;
 }
 
-function defaultFieldValue(field: FormField): unknown {
+export function defaultFieldValue(field: FormField): unknown {
   const definition = obj(field);
   if (definition.useTodayForDefaultValue === true && field.fieldType === "date") {
     const today = new Date();

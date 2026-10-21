@@ -862,6 +862,10 @@
               "rejected",
               "archived",
               "denied"
+            ],
+            "selectableTicketWorkflowCodes": [
+              "expense-claim",
+              "purchase-request"
             ]
           },
           {

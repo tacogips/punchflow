@@ -165,6 +165,69 @@ func TestApplicationTeamsAndWorkflowMasterItemsAreAvailableToApplicants(t *testi
 	testutil.AssertError(t, env.Do(t, "", http.MethodGet, "/ui/api/application-teams", nil), http.StatusUnauthorized, "invalid_access_token")
 }
 
+func TestApplicationTeamsFollowAuthorizedProxyClient(t *testing.T) {
+	env := testutil.New(t)
+	proxyID, err := store.ResolveID(t.Context(), env.DB.Q(), "users", "sales-rep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientID, err := store.ResolveID(t.Context(), env.DB.Q(), "users", "ceo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflowID, err := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE proxy_applicants SET proxy_user_id=?,workflow_ids=? WHERE user_id=?`, proxyID, `["`+workflowID+`"]`, clientID); err != nil {
+		t.Fatal(err)
+	}
+	teams := env.Do(t, testutil.Employee, http.MethodGet, "/ui/api/application-teams?proxyClientUserId=ceo&workflowId=expense-claim", nil)
+	if teams.Status != http.StatusOK {
+		t.Fatalf("proxy application teams: %d %s", teams.Status, teams.Body)
+	}
+	var got []struct {
+		ID string `json:"id"`
+	}
+	teams.JSON(t, &got)
+	want, _, err := store.UserTeamIDs(t.Context(), env.DB.Q(), clientID, 0, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("proxy team count=%d want %d", len(got), len(want))
+	}
+	testutil.AssertError(t, env.Do(t, testutil.Manager, http.MethodGet, "/ui/api/application-teams?proxyClientUserId=ceo&workflowId=expense-claim", nil), http.StatusForbidden, "missing_permission")
+}
+
+func TestWorkflowMasterItemPickerHidesExpiredItems(t *testing.T) {
+	env := testutil.New(t)
+	masterID, err := store.ResolveID(t.Context(), env.DB.Q(), "general_masters", "cost-centers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredID, err := store.MasterItemIDByCode(t.Context(), env.DB.Q(), masterID, "cc-sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE general_master_items SET ends_on='2020-01-01' WHERE id=?`, expiredID); err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Employee, http.MethodGet, "/ui/api/workflows/expense-claim/form-fields/cost-center/master-items", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("master items: %d %s", response.Status, response.Body)
+	}
+	var items []struct {
+		ID string `json:"id"`
+	}
+	response.JSON(t, &items)
+	for _, item := range items {
+		if item.ID == expiredID {
+			t.Fatalf("expired item %s remains selectable", expiredID)
+		}
+	}
+}
+
 func TestCancelApprovalEndpoint(t *testing.T) {
 	env := testutil.New(t)
 	id := createTicket(t, env)

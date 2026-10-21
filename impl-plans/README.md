@@ -82,6 +82,7 @@ The session 467 plans are archived; `active/` holds the final dispatch manifest.
 | [engine-lifecycle-review-fixes](./completed/engine-lifecycle-review-fixes.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-webhooks.md` |
 | [workflow-configuration-review-fixes](./completed/workflow-configuration-review-fixes.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-docs/specs/design-api-coverage.md` |
 | [r4-routing-conditions-nominations](./completed/r4-routing-conditions-nominations.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-docs/specs/notes.md` |
+| [r6-ticket-reference-ui](./completed/r6-ticket-reference-ui.md) | 2026-10-21 | `design-docs/specs/design-approval-engine.md`, `design-docs/specs/architecture.md` |
 
 ## Phase Dependencies (for impl-exec-auto)
 

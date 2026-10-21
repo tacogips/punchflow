@@ -46,6 +46,18 @@ func EngTicketStatus(ctx context.Context, q Querier, id string) (string, bool, e
 	return ticket.Status, true, nil
 }
 
+func EngTicketWorkflowID(ctx context.Context, q Querier, ticketID string) (string, bool, error) {
+	var workflowID string
+	err := q.QueryRowContext(ctx, `SELECT workflow_id FROM tickets WHERE id=?`, ticketID).Scan(&workflowID)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("store: load engine ticket workflow: %w", err)
+	}
+	return workflowID, true, nil
+}
+
 func EngMasterItemInMaster(ctx context.Context, q Querier, itemID, masterCode string) (bool, error) {
 	var masterID string
 	err := q.QueryRowContext(ctx, `SELECT id FROM general_masters WHERE code=?`, masterCode).Scan(&masterID)

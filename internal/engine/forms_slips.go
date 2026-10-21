@@ -15,7 +15,7 @@ func slipAsFormField(f model.SlipField) model.FormField {
 		Options: f.Options, RegexpFormat: f.RegexpFormat, Formula: f.Formula, DefaultValue: f.DefaultValue,
 		MinValue: f.MinValue, MaxValue: f.MaxValue, MinLength: f.MinLength, MaxLength: f.MaxLength, DecimalDigit: f.DecimalDigit,
 		Delimited: f.Delimited, Hidden: f.Hidden, ReadonlyOnUI: f.ReadonlyOnUI, Multiple: f.Multiple, AutoLink: f.AutoLink,
-		AllowedExtensions: f.AllowedExtensions, AllowedTicketStatus: f.AllowedTicketStatus, GeneralMasterCode: f.GeneralMasterCode,
+		AllowedExtensions: f.AllowedExtensions, AllowedTicketStatus: f.AllowedTicketStatus, SelectableTicketWorkflowCodes: f.SelectableTicketWorkflowCodes, GeneralMasterCode: f.GeneralMasterCode,
 	}
 }
 
