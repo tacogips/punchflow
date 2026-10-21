@@ -62,7 +62,8 @@ func pf08FormFieldWithCustomValidations(ctx context.Context, q store.Querier, f 
 			if ok {
 				fieldJSON = pf08FormField(ctx, q, field)
 			}
-			conditions = append(conditions, map[string]any{"id": condition.ID, "symbol": condition.Symbol, "value": condition.Value, "formField": fieldJSON, "generalMasterItem": nil, "grade": nil, "team": nil})
+			masterItem, grade, team := pf08CustomValidationResources(ctx, q, condition.GeneralMasterCode, condition.GeneralMasterItemCode, condition.GradeCode, condition.TeamCode)
+			conditions = append(conditions, map[string]any{"id": condition.ID, "symbol": condition.Symbol, "value": condition.Value, "formField": fieldJSON, "generalMasterItem": masterItem, "grade": grade, "team": team})
 		}
 		validations = append(validations, map[string]any{"id": validation.ID, "combinationType": validation.CombinationType, "errorMessage": validation.ErrorMessage, "fields": conditions})
 	}
@@ -70,7 +71,7 @@ func pf08FormFieldWithCustomValidations(ctx context.Context, q store.Querier, f 
 	return out
 }
 
-func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipField) map[string]any {
+func pf08SlipFieldWithCustomValidations(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
 	out := pf08SlipField(f)
 	byCode := make(map[string]model.SlipField, len(fields))
 	for _, field := range fields {
@@ -85,7 +86,8 @@ func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipFi
 			if ok {
 				fieldJSON = pf08SlipField(field)
 			}
-			conditions = append(conditions, map[string]any{"id": condition.ID, "symbol": condition.Symbol, "value": condition.Value, "slipField": fieldJSON, "generalMasterItem": nil, "grade": nil, "team": nil})
+			masterItem, grade, team := pf08CustomValidationResources(ctx, q, condition.GeneralMasterCode, condition.GeneralMasterItemCode, condition.GradeCode, condition.TeamCode)
+			conditions = append(conditions, map[string]any{"id": condition.ID, "symbol": condition.Symbol, "value": condition.Value, "slipField": fieldJSON, "generalMasterItem": masterItem, "grade": grade, "team": team})
 		}
 		validations = append(validations, map[string]any{"id": validation.ID, "combinationType": validation.CombinationType, "errorMessage": validation.ErrorMessage, "fields": conditions})
 	}
@@ -97,7 +99,7 @@ func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipFi
 // depends on the current database, keeping workflow and ticket definitions in
 // sync.
 func pf08SlipFieldInContext(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
-	out := pf08SlipFieldWithCustomValidations(f, fields)
+	out := pf08SlipFieldWithCustomValidations(ctx, q, f, fields)
 	out["selectableTicketWorkflows"] = pf08SelectableTicketWorkflows(ctx, q, f.SelectableTicketWorkflowCodes)
 	out["generalMasterSearchFilters"] = pf08SlipMasterFilters(f.GeneralMasterSearchFilters)
 	if f.GeneralMasterCode == "" {

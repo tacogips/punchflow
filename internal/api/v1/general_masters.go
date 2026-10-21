@@ -101,6 +101,10 @@ func (a *API) createGeneralMaster(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name is required"))
 		return
 	}
+	if e := pf20CheckGeneralMasterQuota(r.Context(), a.d.DB.Q(), pf20MasterFieldCount(b.Fields), true); e != nil {
+		kferr.Write(w, e)
+		return
+	}
 	if err := pf20ValidateLength("name", strings.TrimSpace(*b.Name), 300); err != nil {
 		kferr.Write(w, err)
 		return
@@ -248,6 +252,10 @@ func (a *API) updateGeneralMaster(w http.ResponseWriter, r *http.Request) {
 			kferr.Write(w, e)
 			return
 		}
+		if e = pf20CheckGeneralMasterQuota(r.Context(), a.d.DB.Q(), len(converted), false); e != nil {
+			kferr.Write(w, e)
+			return
+		}
 		fs = &converted
 	}
 	if e = store.UpdateGeneralMaster(r.Context(), a.d.DB, x, fs); e != nil {
@@ -358,6 +366,15 @@ func (a *API) createGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.Name == nil || strings.TrimSpace(*b.Name) == "" || b.Inputs == nil {
 		kferr.Write(w, kferr.InvalidParameter("name and inputs are required"))
+		return
+	}
+	var itemCount int
+	if e = a.d.DB.Q().QueryRowContext(r.Context(), `SELECT count(*) FROM general_master_items WHERE general_master_id=?`, master).Scan(&itemCount); e != nil {
+		kferr.Write(w, kferr.Internal())
+		return
+	}
+	if itemCount >= 100000 {
+		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"items": {"must not exceed 100000 items per general master"}}))
 		return
 	}
 	if err := pf20ValidateLength("name", strings.TrimSpace(*b.Name), 100); err != nil {
@@ -512,6 +529,14 @@ func pf20ValidateLength(field, value string, max int) error {
 	}
 	return nil
 }
+
+func pf20MasterFieldCount(fields *[]pf20MasterFieldBody) int {
+	if fields == nil {
+		return 0
+	}
+	return len(*fields)
+}
+
 func (a *API) deleteGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 	if e := auth.Require(r, model.PermissionMaster); e != nil {
 		kferr.Write(w, e)
@@ -680,7 +705,18 @@ func pf20ValidateMasterValue(f model.GeneralMasterField, v any) error {
 			return invalid()
 		}
 	default:
-		if _, ok := v.(string); !ok {
+		value, ok := v.(string)
+		if !ok {
+			return invalid()
+		}
+		limit := 0
+		switch f.FieldType {
+		case model.MasterFieldTypeText:
+			limit = 300
+		case model.MasterFieldTypeTextLong:
+			limit = 10000
+		}
+		if limit > 0 && utf8.RuneCountInString(value) > limit {
 			return invalid()
 		}
 	}

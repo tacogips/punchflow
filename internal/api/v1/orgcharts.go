@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"punchflow/internal/auth"
 	"punchflow/internal/httpx"
@@ -64,7 +65,7 @@ func (a *API) createOrganizationChart(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name is required"))
 		return
 	}
-	if *b.Name == "" || len(*b.Name) > 300 {
+	if *b.Name == "" || utf8.RuneCountInString(*b.Name) > 300 {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"is required and must be at most 300 characters"}}))
 		return
 	}
@@ -145,7 +146,7 @@ func (a *API) updateOrganizationChart(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("name is required"))
 		return
 	}
-	if *b.Name == "" || len(*b.Name) > 300 {
+	if *b.Name == "" || utf8.RuneCountInString(*b.Name) > 300 {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"name": {"is required and must be at most 300 characters"}}))
 		return
 	}

@@ -23,7 +23,14 @@ func TestProxyApplicantsCRUDAndValidation(t *testing.T) {
 	if list.Header.Get("Page") != "1" || list.Header.Get("Per-Page") != "1" || list.Header.Get("Total") != "1" {
 		t.Fatalf("pagination headers: %v", list.Header)
 	}
-	body := map[string]any{"userId": env.UserID(t, "sales-rep"), "proxyUserId": env.UserID(t, "assistant"), "workflowIds": []string{"expense-claim", "EXPENSE-CLAIM"}}
+	workflowID, err := store.WorkflowIDByCode(t.Context(), env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := env.Do(t, testutil.Admin, http.MethodPost, "/v1/proxyApplicants", map[string]any{"userId": "sales-rep", "proxyUserId": env.UserID(t, "assistant")}); got.Status != http.StatusBadRequest {
+		t.Fatalf("business-code proxy IDs status=%d body=%s, want 400", got.Status, got.Body)
+	}
+	body := map[string]any{"userId": env.UserID(t, "sales-rep"), "proxyUserId": env.UserID(t, "assistant"), "workflowIds": []string{workflowID}}
 	created := env.Do(t, testutil.Admin, http.MethodPost, "/v1/proxyApplicants", body)
 	if created.Status != http.StatusOK {
 		t.Fatalf("create status=%d body=%s", created.Status, created.Body)
@@ -31,6 +38,9 @@ func TestProxyApplicantsCRUDAndValidation(t *testing.T) {
 	var value map[string]any
 	created.JSON(t, &value)
 	id := value["id"].(string)
+	if got := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/proxyApplicants/"+id, map[string]any{"workflowIds": []string{"expense-claim"}}); got.Status != http.StatusBadRequest {
+		t.Fatalf("workflow code in patch status=%d body=%s, want 400", got.Status, got.Body)
+	}
 	workflows, _ := value["workflows"].([]any)
 	if len(workflows) != 1 {
 		t.Fatalf("deduplicated workflows=%v", workflows)

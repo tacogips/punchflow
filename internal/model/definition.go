@@ -258,10 +258,14 @@ type FormCustomValidation struct {
 
 // FormCustomValidationField identifies a form field condition by fixture code.
 type FormCustomValidationField struct {
-	ID            string  `json:"id"`
-	FormFieldCode string  `json:"formFieldCode"`
-	Symbol        string  `json:"symbol"`
-	Value         *string `json:"value"`
+	ID                    string  `json:"id"`
+	FormFieldCode         string  `json:"formFieldCode"`
+	Symbol                string  `json:"symbol"`
+	Value                 *string `json:"value"`
+	GeneralMasterCode     string  `json:"generalMasterCode,omitempty"`
+	GeneralMasterItemCode string  `json:"generalMasterItemCode,omitempty"`
+	GradeCode             string  `json:"gradeCode,omitempty"`
+	TeamCode              string  `json:"teamCode,omitempty"`
 }
 
 // SlipCustomValidation describes a validation attached to a detail field.
@@ -274,10 +278,14 @@ type SlipCustomValidation struct {
 
 // SlipCustomValidationField identifies a detail field condition by fixture code.
 type SlipCustomValidationField struct {
-	ID            string  `json:"id"`
-	SlipFieldCode string  `json:"slipFieldCode"`
-	Symbol        string  `json:"symbol"`
-	Value         *string `json:"value"`
+	ID                    string  `json:"id"`
+	SlipFieldCode         string  `json:"slipFieldCode"`
+	Symbol                string  `json:"symbol"`
+	Value                 *string `json:"value"`
+	GeneralMasterCode     string  `json:"generalMasterCode,omitempty"`
+	GeneralMasterItemCode string  `json:"generalMasterItemCode,omitempty"`
+	GradeCode             string  `json:"gradeCode,omitempty"`
+	TeamCode              string  `json:"teamCode,omitempty"`
 }
 
 type ConditionField struct {

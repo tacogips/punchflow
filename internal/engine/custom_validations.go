@@ -13,8 +13,12 @@ func (n *normalizer) validateCustomFields(inputs []model.TicketInput, slips []mo
 	for _, input := range inputs {
 		if field, ok := n.idx.fieldByID[input.FormFieldID]; ok {
 			if !n.opts.Blocked[n.idx.fieldSection[field.ID]] {
-				formValues[input.FormFieldID] = input.Value
-				formValues[field.Code] = input.Value
+				value := input.Value
+				if pf14ReferenceField(field.FieldType) && len(input.RefIDs) > 0 {
+					value = input.RefIDs
+				}
+				formValues[input.FormFieldID] = value
+				formValues[field.Code] = value
 			}
 		}
 	}
@@ -28,7 +32,7 @@ func (n *normalizer) validateCustomFields(inputs []model.TicketInput, slips []mo
 				formValues[field.ID] = value
 			}
 			for _, validation := range field.CustomValidations {
-				if pf12CustomValidationMatches(validation.CombinationType, validation.Fields, func(code string) (any, bool) {
+				if n.formCustomValidationMatches(validation, func(code string) (any, bool) {
 					value, ok := formValues[code]
 					return value, ok
 				}) {
@@ -55,12 +59,15 @@ func (n *normalizer) validateCustomFields(inputs []model.TicketInput, slips []mo
 				value, ok = row.Inputs[field.Code]
 			}
 			if ok {
+				if pf14ReferenceField(field.FieldType) {
+					value = pf12ReferenceIDs(value)
+				}
 				values[field.ID], values[field.Code] = value, value
 			}
 		}
 		for _, field := range section.SlipFields {
 			for _, validation := range field.CustomValidations {
-				if pf12SlipCustomValidationMatches(validation.CombinationType, validation.Fields, func(code string) (any, bool) {
+				if n.slipCustomValidationMatches(validation, func(code string) (any, bool) {
 					value, ok := values[code]
 					return value, ok
 				}) {
@@ -71,6 +78,22 @@ func (n *normalizer) validateCustomFields(inputs []model.TicketInput, slips []mo
 	}
 }
 
+func (n *normalizer) formCustomValidationMatches(validation model.FormCustomValidation, value func(string) (any, bool)) bool {
+	return pf12MatchResourceConditions(validation.CombinationType, len(validation.Fields), func(i int) bool {
+		condition := validation.Fields[i]
+		actual, _ := value(condition.FormFieldCode)
+		return n.resourceConditionMatches(actual, condition.Symbol, condition.Value, condition.GeneralMasterCode, condition.GeneralMasterItemCode, condition.GradeCode, condition.TeamCode)
+	})
+}
+
+func (n *normalizer) slipCustomValidationMatches(validation model.SlipCustomValidation, value func(string) (any, bool)) bool {
+	return pf12MatchResourceConditions(validation.CombinationType, len(validation.Fields), func(i int) bool {
+		condition := validation.Fields[i]
+		actual, _ := value(condition.SlipFieldCode)
+		return n.resourceConditionMatches(actual, condition.Symbol, condition.Value, condition.GeneralMasterCode, condition.GeneralMasterItemCode, condition.GradeCode, condition.TeamCode)
+	})
+}
+
 func pf12CustomValidationMatches(combination string, fields []model.FormCustomValidationField, value func(string) (any, bool)) bool {
 	conditions := make([]model.ConditionField, 0, len(fields))
 	for _, field := range fields {
@@ -79,18 +102,6 @@ func pf12CustomValidationMatches(combination string, fields []model.FormCustomVa
 			expected = *field.Value
 		}
 		conditions = append(conditions, model.ConditionField{Variable: field.FormFieldCode, Symbol: field.Symbol, Value: expected})
-	}
-	return pf12MatchConditions(conditions, combination, value)
-}
-
-func pf12SlipCustomValidationMatches(combination string, fields []model.SlipCustomValidationField, value func(string) (any, bool)) bool {
-	conditions := make([]model.ConditionField, 0, len(fields))
-	for _, field := range fields {
-		var expected any
-		if field.Value != nil {
-			expected = *field.Value
-		}
-		conditions = append(conditions, model.ConditionField{Variable: field.SlipFieldCode, Symbol: field.Symbol, Value: expected})
 	}
 	return pf12MatchConditions(conditions, combination, value)
 }

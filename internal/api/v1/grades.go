@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -179,7 +180,7 @@ func (a *API) updateGrade(w http.ResponseWriter, r *http.Request) {
 	}
 	if value, ok := raw["code"]; ok {
 		var code string
-		if json.Unmarshal(value, &code) != nil || len([]rune(code)) > 100 {
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) || json.Unmarshal(value, &code) != nil || len([]rune(code)) > 100 {
 			kferr.Write(w, kferr.InvalidParameter("Invalid code"))
 			return
 		}

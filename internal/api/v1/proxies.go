@@ -116,6 +116,10 @@ func (a *API) pf19CreateProxy(w http.ResponseWriter, r *http.Request, applicant 
 		kferr.Write(w, kferr.InvalidParameter("userId and proxyUserId are required"))
 		return
 	}
+	if !store.IsUUID(b.UserID) || !store.IsUUID(b.ProxyUserID) || !pf19ProxyWorkflowIDsAreUUIDs(b.WorkflowIDs) {
+		kferr.Write(w, kferr.InvalidParameter("userId, proxyUserId, and workflowIds must contain UUIDs"))
+		return
+	}
 	resolvedUser, resolveErr := store.ResolveID(r.Context(), a.d.DB.Q(), "users", b.UserID)
 	if resolveErr != nil {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"userId": {"must reference an existing user"}}))
@@ -207,6 +211,10 @@ func (a *API) pf19UpdateProxy(w http.ResponseWriter, r *http.Request, applicant 
 	var b pf19ProxyPatch
 	if err = httpx.DecodeJSON(r, &b); err != nil {
 		kferr.Write(w, err)
+		return
+	}
+	if (b.UserID != "" && !store.IsUUID(b.UserID)) || (b.ProxyUserID != "" && !store.IsUUID(b.ProxyUserID)) || (b.WorkflowIDs != nil && !pf19ProxyWorkflowIDsAreUUIDs(b.WorkflowIDs)) {
+		kferr.Write(w, kferr.InvalidParameter("userId, proxyUserId, and workflowIds must contain UUIDs"))
 		return
 	}
 	now := time.Now()
@@ -453,6 +461,15 @@ func (a *API) pf19NormalizeProxy(r *http.Request, q store.Querier, b pf19ProxyBo
 		return model.ProxyApplicant{}, kferr.ValidationFailed(map[string][]string{"proxyUserId": {"pair already exists"}})
 	}
 	return model.ProxyApplicant{UserID: uid, ProxyUserID: pid, StartsOn: b.StartsOn, EndsOn: b.EndsOn, WorkflowIDs: workflows}, nil
+}
+
+func pf19ProxyWorkflowIDsAreUUIDs(ids []string) bool {
+	for _, id := range ids {
+		if !store.IsUUID(id) {
+			return false
+		}
+	}
+	return true
 }
 func (a *API) pf19ProxyAudit(r *http.Request, q store.Querier, user string, applicant bool, verb, id string) error {
 	kind := "proxyApprover"

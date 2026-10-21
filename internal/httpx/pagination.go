@@ -36,6 +36,9 @@ func ParsePage(r *http.Request) (Page, error) {
 	if p.PerPage < 1 || p.PerPage > 100 {
 		return Page{}, kferr.InvalidParameter("Invalid perPage")
 	}
+	if p.Page-1 > math.MaxInt/p.PerPage {
+		return Page{}, kferr.InvalidParameter("Invalid page")
+	}
 	return p, nil
 }
 

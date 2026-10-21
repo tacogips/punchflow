@@ -589,6 +589,10 @@ func (a *API) deleteTeamMembers(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvalidParameter("userIds must contain between 1 and 10 entries"))
 		return
 	}
+	if pf19HasDuplicateStrings(b.UserIDs) {
+		kferr.Write(w, kferr.InvalidParameter("userIds must not contain duplicates"))
+		return
+	}
 	p, _ := auth.FromContext(r.Context())
 	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		members, er := store.GetTeamMemberships(r.Context(), tx, id)
@@ -600,6 +604,9 @@ func (a *API) deleteTeamMembers(w http.ResponseWriter, r *http.Request) {
 			uid, er := store.ResolveID(r.Context(), tx, "users", raw)
 			if er != nil {
 				return kferr.ResourceNotFound()
+			}
+			if remove[uid] {
+				return kferr.InvalidParameter("userIds must not contain duplicates")
 			}
 			remove[uid] = true
 		}

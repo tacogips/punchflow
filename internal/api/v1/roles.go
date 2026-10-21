@@ -35,6 +35,17 @@ type pf21RoleUpdateBody struct {
 	PermissionList *[]pf21RolePermissionBody `json:"permissionList"`
 }
 
+func pf19HasDuplicateStrings(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			return true
+		}
+		seen[value] = struct{}{}
+	}
+	return false
+}
+
 func (a *API) listRoles(w http.ResponseWriter, r *http.Request) {
 	if err := auth.Require(r, model.PermissionRole); err != nil {
 		kferr.Write(w, err)
@@ -270,6 +281,10 @@ func (a *API) createRoleMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(body.UserIDs) == 0 || len(body.UserIDs) > 10 {
 		kferr.Write(w, kferr.InvalidParameter("userIds must contain between 1 and 10 values"))
+		return
+	}
+	if pf19HasDuplicateStrings(body.UserIDs) {
+		kferr.Write(w, kferr.InvalidParameter("userIds must not contain duplicates"))
 		return
 	}
 	principal, _ := auth.FromContext(r.Context())

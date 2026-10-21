@@ -244,11 +244,16 @@ Ticket `status` enum: `draft`, `in_progress`, `completed`, `rejected`, `archived
 | User status | `invited`, `activated`, `suspended`, `deactivated` | [User](#schema-user).status |
 | User type | `normal`, `assistant` | User.userType |
 | User custom field type | `text`, `textLong`, `number`, `integer`, `checkbox`, `pullDown`, `date` (note camelCase here) | User.customFields.fieldType |
+
 | Admin role permission | `tenant`, `billing`, `integration`, `security`, `audit`, `stats`, `workflow`, `route`, `pipeline`, `workflow_misc`, `user`, `team`, `role`, `master`, `master_read`, `ticket_read`, `ticket_write`, `label`, `automation` | RoleDetail.permissionList.permission |
 | Audit log system type | `automation`, `null` | [AuditLog](#schema-auditlog).systemType |
 | Audit log `action` | free string; values not documented (inferred: dotted or snake_case action names) | AuditLog.action |
 
 ---
+
+### General master limits
+
+Kickflow's help center specifies up to 30 general masters and 10 custom fields per master for standard plans, or 100 masters and 30 fields per master for enterprise. Each master supports up to 100,000 items. General-master short-text custom fields accept 300 characters; long-text fields accept 10,000 characters. These limits are recorded as inference `INF-V9-API-02` because the public REST schema does not encode tenant-plan quotas.
 
 ## 2. Endpoint index
 
