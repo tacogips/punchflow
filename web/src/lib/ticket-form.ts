@@ -15,10 +15,22 @@ export type SlipRows = Record<string, Record<string, FieldState>[]>;
 /** Key under which a slip section's rows are kept in editor state. */
 export const slipKey = (section: SectionListItem): string => section.code ?? section.id;
 
-/** Extracts the editable value of a stored ticket input or slip cell. */
-function storedValue(input: Loose | undefined): unknown {
+/** Converts the presenter-shaped value into the identifiers accepted by writes. */
+function storedValue(input: Loose | undefined, fieldType: string, multiple: boolean): unknown {
   if (!input) return null;
-  return input.value ?? input.generalMasterItemId ?? input.userId ?? input.teamId ?? input.ticketId ?? input.files ?? null;
+  if (fieldType === "file") return arr(input.attachments).map((attachment) => str(obj(attachment).signedId)).filter(Boolean);
+  let value = input.value;
+  if (value == null) value = input.generalMasterItemId ?? input.userId ?? input.teamId ?? input.ticketId ?? null;
+  if (["master", "general_master", "general_master_item", "user", "team", "ticket"].includes(fieldType)) {
+    const ids = arr(value).map((record) => {
+      const item = obj(record);
+      return str(item.id ?? item.signedId) || record;
+    });
+    if (Array.isArray(value)) return multiple ? ids : ids[0] ?? null;
+    return multiple ? value == null || value === "" ? [] : [value] : value;
+  }
+  if (fieldType === "datetime" && typeof value === "string") return value.replace(" ", "T");
+  return value ?? null;
 }
 
 /** Restores form-field state from a stored ticket (or empty state for a new one). */
@@ -27,7 +39,7 @@ export function formStateFromTicket(workflow: WorkflowDetail, ticket?: TicketDet
   const inputs = arr(ticket?.inputs).map(obj);
   for (const section of workflow.sectionList ?? []) for (const field of section.formFields ?? []) {
     const input = inputs.find((item) => item.formFieldId === field.id || item.formFieldCode === field.code || obj(item.formField).code === field.code);
-    state[field.code] = { code: field.code, fieldType: field.fieldType, value: storedValue(input) };
+    state[field.code] = { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value: storedValue(input, field.fieldType, field.multiple === true) };
   }
   return state;
 }
@@ -53,7 +65,7 @@ export function slipRowsFromTicket(workflow: WorkflowDetail, ticket?: TicketDeta
       const cells = arr(obj(row).inputs).map(obj);
       return Object.fromEntries((section.slipFields ?? []).map((field) => {
         const cell = cells.find((item) => item.slipFieldId === field.id || item.slipFieldCode === field.code || obj(item.slipField).code === field.code);
-        return [field.code, { code: field.code, fieldType: field.fieldType, value: storedValue(cell) }];
+        return [field.code, { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value: storedValue(cell, field.fieldType, field.multiple === true) }];
       }));
     });
   }
@@ -126,22 +138,62 @@ export function conditionValues(inputs: TicketInputBody[]): Record<string, unkno
   return values;
 }
 
-/**
- * Reports whether a section is displayed. Only conditional form sections are
- * evaluated; their `conditionFields` combine with `combinationType` (`any`
- * needs one match, anything else needs all). A condition field whose form
- * field was not submitted never matches, as on the backend.
- */
+function customExpression(expression: string, matches: boolean[]): boolean {
+  const tokens = expression.match(/[A-J]|&&|\|\||[()]/g) ?? [];
+  if (tokens.join("").replace(/\s/g, "") !== expression.replace(/\s/g, "")) return false;
+  let position = 0;
+  const parseAtom = (): boolean | undefined => {
+    if (tokens[position] === "(") {
+      position++;
+      const value = parseOr();
+      if (tokens[position] !== ")") return undefined;
+      position++;
+      return value;
+    }
+    const letter = tokens[position++];
+    if (!letter || !/^[A-J]$/.test(letter)) return undefined;
+    const index = letter.charCodeAt(0) - 65;
+    return index < matches.length ? matches[index] : undefined;
+  };
+  const parseAnd = (): boolean | undefined => {
+    let value = parseAtom();
+    if (value === undefined) return undefined;
+    while (tokens[position] === "&&") {
+      position++;
+      const right = parseAtom();
+      if (right === undefined) return undefined;
+      value = value && right;
+    }
+    return value;
+  };
+  const parseOr = (): boolean | undefined => {
+    let value = parseAnd();
+    if (value === undefined) return undefined;
+    while (tokens[position] === "||") {
+      position++;
+      const right = parseAnd();
+      if (right === undefined) return undefined;
+      value = value || right;
+    }
+    return value;
+  };
+  const result = parseOr();
+  return result !== undefined && position === tokens.length && result;
+}
+
+/** Evaluates form-section conditions in field order using the backend A-J grammar. */
 export function sectionConditionMet(section: SectionListItem, values: Record<string, unknown>): boolean {
   const raw = section as unknown as Loose;
   if (section.sectionType !== "form" || raw.conditional !== true) return true;
   const fields = arr(raw.conditionFields).map(obj);
   if (fields.length === 0) return true;
-  const matched = fields.filter((field) => {
+  const matches = fields.map((field) => {
     const code = str(obj(field.formField).code);
     if (!code || !Object.prototype.hasOwnProperty.call(values, code)) return false;
     return compareCondition(values[code], str(field.symbol), field.value ?? null);
-  }).length;
+  });
+  if (raw.combinationType === "custom") return customExpression(str(raw.combinationExpression), matches);
+  const matched = matches.filter(Boolean).length;
   return raw.combinationType === "any" ? matched > 0 : matched === fields.length;
 }
 

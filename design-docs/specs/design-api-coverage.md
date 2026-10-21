@@ -31,6 +31,8 @@ Ticket list query behavior follows the public query meanings: `authorTeamFullNam
 
 Ticket action controls in the web UI check all steps in the current parallel group and include active proxy assignments, matching the backend's one-call handling for a user's assignments across that group (INF-API-UI-14).
 
+The ticket editor restores reference fields from the cached-record arrays in ticket `value`, writes the corresponding IDs with the field's single/multiple cardinality, and restores uploaded files from `attachments[].signedId` (INF-UI-R4-10). It converts datetime-local control values to and from kickflow's `YYYY-MM-DD HH:mm` format (INF-UI-R4-11). Conditional sections evaluate custom A-J expressions with the same ordering, parentheses, and boolean precedence as the backend (INF-UI-R4-12).
+
 User/API-authenticated mutation audit rows return `systemType: null`; only automated operations use `automation`. Route conditions resolve `GeneralMasterCode` and `GeneralMasterItemCode` and return full public metadata for both nested objects (API-04, API-15). General-master field removal deletes matching item inputs and stable input IDs in the same database transaction. Mutation validation enforces OpenAPI length limits for general masters, custom fields and items, teams and roles (API-12, API-13).
 | Sorting | INF-02 | `internal/httpx` |
 | Array query | `key[]=a&key[]=b`. For parameters typed "string or string[]" a bare `key=a` is also accepted. A bare repeated key for an array-only parameter returns `400 invalid_parameter` with message `Invalid request: value at root is not an array` | `internal/httpx` |

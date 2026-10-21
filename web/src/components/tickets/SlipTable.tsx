@@ -13,7 +13,7 @@ export default function SlipTable(props: {
   setRows: Setter<SlipRows>;
   errors?: Record<string, string[]>;
 }) {
-  const add = () => props.setRows((rows) => ({ ...rows, [props.code]: [...(rows[props.code] ?? []), Object.fromEntries(props.fields.map((field) => [field.code, { code: field.code, fieldType: field.fieldType, value: null }]))] }));
+  const add = () => props.setRows((rows) => ({ ...rows, [props.code]: [...(rows[props.code] ?? []), Object.fromEntries(props.fields.map((field) => [field.code, { code: field.code, fieldType: field.fieldType, multiple: field.multiple === true, value: null }]))] }));
   const remove = (index: number) => props.setRows((rows) => ({ ...rows, [props.code]: (rows[props.code] ?? []).filter((_, i) => i !== index) }));
   const rowAccessor = (index: number): Accessor<Record<string, FieldState>> => () => props.rows()[props.code]?.[index] ?? {};
   const setRow = (index: number): Setter<Record<string, FieldState>> => (value) => {

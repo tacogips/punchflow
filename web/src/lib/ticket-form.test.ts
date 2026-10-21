@@ -13,11 +13,18 @@ const workflow: WorkflowDetail = {
     { id: "sec-form", sectionType: "form", title: "Form", formFields: [
       { id: "f-amount", code: "amount", name: "Amount", fieldType: "number" },
       { id: "f-kind", code: "kind", name: "Kind", fieldType: "pull_down" },
+      { id: "f-user", code: "owner", name: "Owner", fieldType: "user" },
+      { id: "f-team", code: "teams", name: "Teams", fieldType: "team", multiple: true },
+      { id: "f-master", code: "category", name: "Category", fieldType: "master" },
+      { id: "f-file", code: "document", name: "Document", fieldType: "file" },
+      { id: "f-datetime", code: "meeting", name: "Meeting", fieldType: "datetime" },
     ] },
     { id: "sec-items", code: "items", sectionType: "slip", title: "Items", slipFields: [
       { id: "s-desc", code: "desc", name: "Description", fieldType: "text" },
-      { id: "s-master", code: "account", name: "Account", fieldType: "master" },
+      { id: "s-master", code: "account", name: "Account", fieldType: "master", multiple: true },
       { id: "s-file", code: "receipt", name: "Receipt", fieldType: "file" },
+      { id: "s-user", code: "reviewer", name: "Reviewer", fieldType: "user" },
+      { id: "s-ticket", code: "related", name: "Related", fieldType: "ticket", multiple: true },
       { id: "s-calc", code: "tax", name: "Tax", fieldType: "calculation" },
       { id: "s-check", code: "approved", name: "Approved", fieldType: "text", approver: true },
     ] },
@@ -28,18 +35,23 @@ const workflow: WorkflowDetail = {
 };
 
 // Shape returned by GET /v1/tickets/{id} (internal/present/ticket_detail_inputs.go).
-const cell = (slipFieldId: string, value: unknown) => ({ id: `c-${slipFieldId}`, slipFieldId, value, attachments: [], slipField: { id: slipFieldId } });
+const cell = (slipFieldId: string, value: unknown, extras: Record<string, unknown> = {}) => ({ id: `c-${slipFieldId}`, slipFieldId, value, attachments: [], slipField: { id: slipFieldId }, ...extras });
 const ticket: TicketDetail = {
   id: "t1", ticketNumber: null, title: "Trip", status: "draft", steps: [], route: null,
   author: { id: "u-author" },
   inputs: [
     { id: "i1", formFieldId: "f-amount", value: "1200", formField: { id: "f-amount", code: "amount" } },
     { id: "i2", formFieldId: "f-kind", value: "item-travel", formField: { id: "f-kind", code: "kind" } },
+    { id: "i3", formFieldId: "f-user", value: [{ id: "u-1", name: "Ada" }], users: [{ id: "u-1", name: "Ada" }], formField: { id: "f-user", code: "owner" }, attachments: [] },
+    { id: "i4", formFieldId: "f-team", value: [{ id: "team-1", name: "Finance" }, { id: "team-2", name: "Legal" }], teams: [{ id: "team-1", name: "Finance" }, { id: "team-2", name: "Legal" }], formField: { id: "f-team", code: "teams" }, attachments: [] },
+    { id: "i5", formFieldId: "f-master", value: [{ id: "gm-1", name: "Travel" }], generalMasterItems: [{ id: "gm-1", name: "Travel" }], formField: { id: "f-master", code: "category" }, attachments: [] },
+    { id: "i6", formFieldId: "f-file", value: null, formField: { id: "f-file", code: "document" }, attachments: [{ signedId: "signed-doc" }] },
+    { id: "i7", formFieldId: "f-datetime", value: "2026-10-21 10:30", formField: { id: "f-datetime", code: "meeting" }, attachments: [] },
   ],
   slipItems: [
-    { id: "r1", slipSectionId: "sec-items", position: 0, inputs: [cell("s-desc", "Taxi"), cell("s-master", "acc-1"), cell("s-file", ["file-1", "file-2"]), cell("s-calc", 100), cell("s-check", "ok")] },
+    { id: "r1", slipSectionId: "sec-items", position: 0, inputs: [cell("s-desc", "Taxi"), cell("s-master", [{ id: "acc-1", name: "Travel" }], { generalMasterItems: [{ id: "acc-1", name: "Travel" }] }), cell("s-file", null, { attachments: [{ signedId: "file-1" }, { signedId: "file-2" }] }), cell("s-user", [{ id: "u-reviewer" }], { users: [{ id: "u-reviewer" }] }), cell("s-ticket", [{ id: "t-related" }], { inputTickets: [{ id: "t-related" }] }), cell("s-calc", 100), cell("s-check", "ok")] },
     { id: "r2", slipSectionId: "sec-trips", position: 0, inputs: [cell("t-dest", "Osaka")] },
-    { id: "r3", slipSectionId: "sec-items", position: 1, inputs: [cell("s-desc", "Hotel"), cell("s-master", null), cell("s-file", null), cell("s-calc", null), cell("s-check", null)] },
+    { id: "r3", slipSectionId: "sec-items", position: 1, inputs: [cell("s-desc", "Hotel"), cell("s-master", []), cell("s-file", null), cell("s-user", []), cell("s-ticket", []), cell("s-calc", null), cell("s-check", null)] },
   ],
   ticketSections: [
     { id: "sec-form", sectionId: "sec-form", viewable: true },
@@ -52,8 +64,10 @@ describe("restoring a stored ticket", () => {
   test("matches detail rows by slipSectionId and keeps every cell value", () => {
     const rows = slipRowsFromTicket(workflow, ticket);
     expect(rows.items.map((row) => row.desc.value)).toEqual(["Taxi", "Hotel"]);
-    expect(rows.items[0].account.value).toBe("acc-1");
+    expect(rows.items[0].account.value).toEqual(["acc-1"]);
     expect(rows.items[0].receipt.value).toEqual(["file-1", "file-2"]);
+    expect(rows.items[0].reviewer.value).toBe("u-reviewer");
+    expect(rows.items[0].related.value).toEqual(["t-related"]);
     expect(rows.items[0].approved.value).toBe("ok");
     expect(rows.trips.map((row) => row.dest.value)).toEqual(["Osaka"]);
   });
@@ -70,20 +84,32 @@ describe("restoring a stored ticket", () => {
     const state = formStateFromTicket(workflow, ticket);
     expect(state.amount.value).toBe("1200");
     expect(state.kind.value).toBe("item-travel");
+    expect(state.owner.value).toBe("u-1");
+    expect(state.teams.value).toEqual(["team-1", "team-2"]);
+    expect(state.category.value).toBe("gm-1");
+    expect(state.document.value).toEqual(["signed-doc"]);
+    expect(state.meeting.value).toBe("2026-10-21T10:30");
   });
 
   test("an unchanged author edit round-trip resubmits every stored row", () => {
     const payload = buildFormPayload(workflow, formStateFromTicket(workflow, ticket), slipRowsFromTicket(workflow, ticket), { viewable: always, approver: false });
-    expect(payload.inputs).toEqual([{ formFieldCode: "amount", value: "1200" }, { formFieldCode: "kind", value: "item-travel" }]);
+    expect(payload.inputs).toEqual([
+      { formFieldCode: "amount", value: "1200" }, { formFieldCode: "kind", value: "item-travel" },
+      { formFieldCode: "owner", userId: "u-1" }, { formFieldCode: "teams", teamId: ["team-1", "team-2"] },
+      { formFieldCode: "category", generalMasterItemId: "gm-1" }, { formFieldCode: "document", files: ["signed-doc"] },
+      { formFieldCode: "meeting", value: "2026-10-21 10:30" },
+    ]);
     expect(payload.slipItems).toEqual([
       { slipSectionId: "sec-items", inputs: [
-        { slipFieldCode: "desc", value: "Taxi" }, { slipFieldCode: "account", generalMasterItemId: "acc-1" },
-        { slipFieldCode: "receipt", files: ["file-1", "file-2"] }, { slipFieldCode: "tax", value: null },
+        { slipFieldCode: "desc", value: "Taxi" }, { slipFieldCode: "account", generalMasterItemId: ["acc-1"] },
+        { slipFieldCode: "receipt", files: ["file-1", "file-2"] }, { slipFieldCode: "reviewer", userId: "u-reviewer" },
+        { slipFieldCode: "related", ticketId: ["t-related"] }, { slipFieldCode: "tax", value: null },
         { slipFieldCode: "approved", value: "ok" },
       ] },
       { slipSectionId: "sec-items", inputs: [
-        { slipFieldCode: "desc", value: "Hotel" }, { slipFieldCode: "account", generalMasterItemId: null },
-        { slipFieldCode: "receipt", files: [] }, { slipFieldCode: "tax", value: null }, { slipFieldCode: "approved", value: null },
+        { slipFieldCode: "desc", value: "Hotel" }, { slipFieldCode: "account", generalMasterItemId: [] },
+        { slipFieldCode: "receipt", files: [] }, { slipFieldCode: "reviewer", userId: null },
+        { slipFieldCode: "related", ticketId: [] }, { slipFieldCode: "tax", value: null }, { slipFieldCode: "approved", value: null },
       ] },
       { slipSectionId: "sec-trips", inputs: [{ slipFieldCode: "dest", value: "Osaka" }] },
     ]);
@@ -134,7 +160,11 @@ describe("section view restrictions", () => {
     state.amount.value = "10"; state.salary.value = "999";
     const viewable = (section: SectionListItem) => sectionViewable(section, undefined, { userId: "u1" });
     const payload = buildFormPayload(restrictedWorkflow, state, {}, { viewable, approver: false });
-    expect(payload.inputs).toEqual([{ formFieldCode: "amount", value: "10" }, { formFieldCode: "kind", value: null }]);
+    expect(payload.inputs).toEqual([
+      { formFieldCode: "amount", value: "10" }, { formFieldCode: "kind", value: null },
+      { formFieldCode: "owner", userId: null }, { formFieldCode: "teams", teamId: [] },
+      { formFieldCode: "category", generalMasterItemId: null }, { formFieldCode: "document", files: [] }, { formFieldCode: "meeting", value: null },
+    ]);
   });
 });
 
@@ -158,6 +188,15 @@ describe("conditional sections", () => {
     expect(sectionConditionMet(conditional("custom", fields), { amount: "999", kind: "item-travel" })).toBe(false);
   });
 
+  test("custom expressions use ordered A-J references, parentheses, and backend precedence", () => {
+    const fields = [field("amount", "equal", "yes"), field("kind", "equal", "yes"), field("missing", "equal", "yes")];
+    const values = { amount: "yes", kind: "no", missing: "no" };
+    expect(sectionConditionMet({ ...conditional("custom", fields), combinationExpression: "A || B && C" } as SectionListItem, values)).toBe(true);
+    expect(sectionConditionMet({ ...conditional("custom", fields), combinationExpression: "(A || B) && C" } as SectionListItem, values)).toBe(false);
+    expect(sectionConditionMet({ ...conditional("custom", fields), combinationExpression: "B || C" } as SectionListItem, values)).toBe(false);
+    expect(sectionConditionMet({ ...conditional("custom", fields), combinationExpression: "A &&" } as SectionListItem, values)).toBe(false);
+  });
+
   test("an unsubmitted or unresolved condition field never matches", () => {
     expect(sectionConditionMet(conditional("all", [field("missing", "is_empty", null)]), {})).toBe(false);
     expect(sectionConditionMet(conditional("any", [{ id: "g", symbol: "equal", value: "x", formField: null }]), { x: "x" })).toBe(false);
@@ -167,7 +206,7 @@ describe("conditional sections", () => {
     const state = formStateFromTicket(workflow);
     state.amount.value = "";
     const values = conditionValues(toTicketInputs(workflow, state));
-    expect(values).toEqual({ amount: null, kind: null });
+    expect(values).toEqual({ amount: null, kind: null, owner: null, teams: [], category: null, document: null, meeting: null });
     expect(sectionConditionMet(conditional("all", [field("amount", "is_empty", null)]), values)).toBe(true);
     state.kind.value = "item-travel";
     expect(sectionConditionMet(conditional("all", [field("kind", "not_equal", "item-travel")]), conditionValues(toTicketInputs(workflow, state)))).toBe(false);
