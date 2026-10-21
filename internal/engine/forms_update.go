@@ -8,6 +8,13 @@ import (
 	"punchflow/internal/store"
 )
 
+func pf16StringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 // pf14cApplyFormEdit applies the inputs/slipItems of an update to a stored
 // ticket. partial selects the /form PATCH contract (per-field and
 // per-detail-section differential update); otherwise inputs replace the whole
@@ -54,6 +61,7 @@ func (e *Engine) pf14cApplyFormEdit(ctx context.Context, tx *store.Tx, a Actor, 
 	opts := formOpts{
 		Full: in.Status != nil && *in.Status == model.TicketStatusInProgress, Partial: partial, Approver: approver,
 		Blocked: blocked, Supplied: supplied, ExistingInputs: existingInputs, ExistingSlips: existingSlips,
+		AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot,
 	}
 	slipValues := []SlipItemInput{}
 	if in.SlipItems != nil {
@@ -81,7 +89,7 @@ func (e *Engine) pf14cRevalidateForSubmit(ctx context.Context, tx *store.Tx, a A
 	if err != nil {
 		return nil, err
 	}
-	opts := formOpts{Full: true, Blocked: blocked, ExistingInputs: existingInputs, ExistingSlips: existingSlips}
+	opts := formOpts{Full: true, Blocked: blocked, ExistingInputs: existingInputs, ExistingSlips: existingSlips, AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot}
 	stored := pf14cInputsFromRows(def, existingInputs)
 	res, err := pf14NormalizeForm(ctx, tx, t.ID, def, stored, nil, opts, store.Millis(now))
 	if err != nil {

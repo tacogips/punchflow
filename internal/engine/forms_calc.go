@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 
 	"punchflow/internal/formula"
 	"punchflow/internal/model"
+	"punchflow/internal/store"
 )
 
 // calcDef is the part of a calculation field the evaluator needs.
@@ -38,6 +40,7 @@ type calcRun struct {
 	parsed    map[string]*formula.Expr
 	badParse  map[string]bool
 	changed   bool
+	metadata  map[string]any
 }
 
 const (
@@ -52,10 +55,33 @@ const (
 // errors; runtime failures such as division by zero or non-numeric operands
 // leave the value null.
 func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketSlipItem) (*string, bool) {
-	r := &calcRun{n: n, formVals: map[string]any{}, formCalc: map[string]calcDef{}, formState: map[string]int{}, parsed: map[string]*formula.Expr{}, badParse: map[string]bool{}}
+	r := &calcRun{n: n, formVals: map[string]any{}, formCalc: map[string]calcDef{}, formState: map[string]int{}, parsed: map[string]*formula.Expr{}, badParse: map[string]bool{}, metadata: map[string]any{}}
+	if n.opts.AuthorID != "" {
+		if user, err := store.GetUser(n.ctx, n.q, n.opts.AuthorID); err == nil {
+			r.metadata["author"] = calcUserJSON(user)
+		}
+	}
+	if n.opts.ProxyClientID != nil {
+		if user, err := store.GetUser(n.ctx, n.q, *n.opts.ProxyClientID); err == nil {
+			r.metadata["proxyClientUser"] = calcUserJSON(user)
+		}
+	} else {
+		r.metadata["proxyClientUser"] = "null"
+	}
+	if len(n.opts.AuthorTeamJSON) != 0 {
+		var team map[string]any
+		if json.Unmarshal(n.opts.AuthorTeamJSON, &team) == nil {
+			r.metadata["authorTeam"] = string(n.opts.AuthorTeamJSON)
+		}
+	}
 	for i := range inputs {
 		if f, ok := n.idx.fieldByID[inputs[i].FormFieldID]; ok {
-			r.formVals[f.Code] = inputs[i].Value
+			// Calculations run with the editing actor's view. Restricted values
+			// remain stored on the ticket but are absent from this environment.
+			if n.opts.Blocked[n.idx.fieldSection[f.ID]] {
+				continue
+			}
+			r.formVals[f.Code] = n.calcReferenceValue(f.FieldType, inputs[i].RefIDs, inputs[i].Value)
 		}
 	}
 	for _, section := range n.def.SectionList {
@@ -95,6 +121,58 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 		}
 	}
 	return r.title(), r.changed
+}
+
+func (n *normalizer) calcReferenceValue(fieldType string, ids []string, value any) any {
+	if len(ids) == 0 {
+		return value
+	}
+	records := make([]any, 0, len(ids))
+	for _, id := range ids {
+		var record any
+		switch fieldType {
+		case "master":
+			item, err := store.GetGeneralMasterItem(n.ctx, n.q, id)
+			if err != nil {
+				continue
+			}
+			record = map[string]any{"id": item.ID, "code": item.Code, "name": item.Name, "description": item.Description, "inputs": item.Inputs}
+		case "user":
+			user, err := store.GetUser(n.ctx, n.q, id)
+			if err != nil {
+				continue
+			}
+			record = json.RawMessage(calcUserJSON(user))
+		case "team":
+			team, err := store.GetTeam(n.ctx, n.q, id)
+			if err != nil {
+				continue
+			}
+			fullName, err := store.TeamFullName(n.ctx, n.q, id)
+			if err != nil {
+				continue
+			}
+			record = map[string]any{"id": team.ID, "name": team.Name, "fullName": fullName, "code": team.Code}
+		default:
+			return value
+		}
+		records = append(records, record)
+	}
+	raw, err := json.Marshal(records)
+	if err != nil {
+		return value
+	}
+	return string(raw)
+}
+
+func calcUserJSON(user model.User) string {
+	fullName := strings.TrimSpace(user.LastName + " " + user.FirstName)
+	value := map[string]any{"id": user.ID, "firstName": user.FirstName, "lastName": user.LastName, "fullName": fullName, "email": user.Email, "code": user.Code, "customFields": user.CustomFields}
+	if user.EmployeeID != nil {
+		value["employeeId"] = *user.EmployeeID
+	}
+	raw, _ := json.Marshal(value)
+	return string(raw)
 }
 
 func (r *calcRun) title() *string {
@@ -162,6 +240,9 @@ func (r *calcRun) evalFormula(code, src string, env formula.Env, row *slipRowRef
 }
 
 func (r *calcRun) known(name string, row *slipRowRef) bool {
+	if _, ok := r.metadata[name]; ok {
+		return true
+	}
 	if row != nil {
 		if _, ok := rowField(row.section, name); ok {
 			return true
@@ -273,13 +354,16 @@ func (r *calcRun) cell(sr *slipRowRef, f model.SlipField) any {
 		return r.slipValue(sr, f)
 	}
 	v, _ := slipCell(*sr.row, f)
-	return v
+	return r.n.calcReferenceValue(f.FieldType, pf14StringsOf(v), v)
 }
 
 type formScope struct{ r *calcRun }
 
 func (s formScope) Lookup(name string) (any, bool) {
 	r := s.r
+	if value, ok := r.metadata[name]; ok {
+		return value, true
+	}
 	if f, ok := r.n.idx.fieldByCode[name]; ok {
 		if cd, isCalc := r.formCalc[f.Code]; isCalc {
 			return r.formValue(cd), true

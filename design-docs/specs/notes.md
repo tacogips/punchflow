@@ -220,6 +220,15 @@ Session 464 wave-A findings, carried into session 465 at checkpoint `ea385c7`. E
 
 ### Intentional divergences from kickflow
 
+### Ticket values, calculations, and uploads (2026-10-21)
+
+| ID | Decision | Evidence |
+|---|---|---|
+| INF-VAL-01 | Reference input values are resolved cached-record arrays and file input values are null; internal reference IDs remain in storage for routing, formula evaluation, and attachment association. Detail cells follow the same wire representation. | 2022-11-11 developer changelog; ticket input guide (`https://developer.kickflow.com/guide/ticketInput/`) |
+| INF-VAL-02 | Calculations use the editing actor's section visibility. Restricted stored input values are retained, but omitted from calculation lookup and therefore behave as empty inputs. | Section restrictions FAQ 47269820740761 (`https://support.kickflow.com/api/v2/help_center/ja/articles/47269820740761.json`) |
+| INF-VAL-03 | Uploads accept the documented global extension list and file fields may narrow that list through `allowedExtensions`. Extension matching is case-insensitive. | Attachment restrictions FAQ 360053857093 (`https://support.kickflow.com/api/v2/help_center/ja/articles/360053857093.json`); case-insensitive matching is an implementation inference |
+| INF-VAL-04 | Formula context exposes author, proxy client and author team JSON records; reference selections are represented as JSON arrays for `json_lookup`, including within detail-row calculations. | Formula FAQ 360053280013 and general-master formula FAQ 10738484258841 (`https://support.kickflow.com/api/v2/help_center/ja/articles/360053280013.json`, `https://support.kickflow.com/api/v2/help_center/ja/articles/10738484258841.json`) |
+
 These are scope cuts, not inferences. Each is visible to API clients only as a constant value.
 
 | ID | Divergence | Visible effect |

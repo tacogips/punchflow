@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -145,7 +146,18 @@ func pf14cReferenceExists(ctx context.Context, q store.Querier, field model.Form
 	case "master":
 		return store.EngMasterItemInMaster(ctx, q, id, field.GeneralMasterCode)
 	case "file":
-		return store.EngSignedFileExists(ctx, q, id)
+		file, err := store.FileBySignedID(ctx, q, id)
+		if err != nil {
+			if err == store.ErrNotFound {
+				return false, nil
+			}
+			return false, err
+		}
+		if len(field.AllowedExtensions) == 0 {
+			return true, nil
+		}
+		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(file.Filename)), ".")
+		return pf14cOptionAllowed(field.AllowedExtensions, ext), nil
 	default:
 		return false, nil
 	}

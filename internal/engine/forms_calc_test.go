@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"testing"
 
 	"punchflow/internal/model"
@@ -105,6 +106,130 @@ func TestCalculationFieldsAreEvaluated(t *testing.T) {
 	}
 	if got := pf16FormValue(t, e, id, "total"); got != 600.0 {
 		t.Errorf("total after client override=%v want 600", got)
+	}
+}
+
+func TestFormulaMetadataAvailableInFormAndDetailContexts(t *testing.T) {
+	e := pf14Setup(t)
+	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			for j := range def.SectionList[i].FormFields {
+				if def.SectionList[i].FormFields[j].Code == "total" {
+					def.SectionList[i].FormFields[j].Formula = pf16Formula(`json_lookup($author, "$.fullName")`)
+				}
+			}
+			for j := range def.SectionList[i].SlipFields {
+				if def.SectionList[i].SlipFields[j].Code == "subtotal" {
+					def.SectionList[i].SlipFields[j].Formula = pf16Formula(`json_lookup($authorTeam, "$.name")`)
+				}
+			}
+		}
+	})
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, pf16Base), []SlipItemInput{pf16Row("lines", map[string]any{"qty": 1, "unit-price": 1})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pf16FormValue(t, e, id, "total"); got != "User Sales" {
+		t.Fatalf("author formula value=%v", got)
+	}
+	def := pf16Def(t, e, "expense-claim")
+	rows := pf16Slips(t, e, id)
+	if got := pf16Cell(t, def, rows[0], "subtotal"); got != "Sales" {
+		t.Fatalf("authorTeam formula value=%v", got)
+	}
+}
+
+func TestFormulaCanLookupSelectedMasterCache(t *testing.T) {
+	e := pf14Setup(t)
+	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			for j := range def.SectionList[i].FormFields {
+				if def.SectionList[i].FormFields[j].Code == "total" {
+					def.SectionList[i].FormFields[j].Formula = pf16Formula(`json_lookup(${cost-center}, "$[0].code")`)
+				}
+			}
+		}
+	})
+	itemID := pf14cMasterItemID(t, e, "cost-centers", "cc-eng")
+	inputs := pf16Inputs(t, e, map[string]any{"amount": "100", "purpose": "trip", "cost-center": itemID})
+	_, fields := pf14FormDefinition(t, e, "expense-claim")
+	encoded, _ := json.Marshal(itemID)
+	for i := range inputs {
+		if inputs[i].FormFieldID == fields["cost-center"] {
+			inputs[i].GeneralMasterItemID = encoded
+			inputs[i].Value = nil
+		}
+	}
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, inputs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pf16FormValue(t, e, id, "total"); got != "cc-eng" {
+		t.Fatalf("master json_lookup=%v, want cc-eng", got)
+	}
+}
+
+func TestBlockedStoredValuesArePreservedButEmptyForCalculations(t *testing.T) {
+	e := pf14Setup(t)
+	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
+		var total model.FormField
+		for i := range def.SectionList {
+			fields := def.SectionList[i].FormFields[:0]
+			for _, field := range def.SectionList[i].FormFields {
+				if field.Code == "total" {
+					total = field
+				} else {
+					fields = append(fields, field)
+				}
+			}
+			def.SectionList[i].FormFields = fields
+		}
+		def.SectionList = append(def.SectionList, model.WorkflowSection{ID: "calc-section", Code: "calc", Title: "Calc", SectionType: model.SectionTypeForm, FormFields: []model.FormField{total}})
+	})
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, pf16Base), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := pf16Def(t, e, "expense-claim")
+	var blockedSection string
+	for _, section := range def.SectionList {
+		for _, field := range section.FormFields {
+			if field.Code == "amount" {
+				blockedSection = section.ID
+			}
+		}
+	}
+	rows := mustTicketInputs(t, e, id)
+	result, err := pf14NormalizeForm(e.ctx, e.db.Q(), id, def, nil, nil, formOpts{Blocked: map[string]bool{blockedSection: true}, ExistingInputs: rows}, store.Millis(e.clock.Now()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var amount any
+	for _, input := range result.Inputs {
+		if input.FormFieldID == func() string {
+			for _, s := range def.SectionList {
+				for _, f := range s.FormFields {
+					if f.Code == "amount" {
+						return f.ID
+					}
+				}
+			}
+			return ""
+		}() {
+			amount = input.Value
+		}
+	}
+	if amount != "100" {
+		t.Fatalf("stored restricted amount=%v want preserved 100", amount)
+	}
+	for _, input := range result.Inputs {
+		for _, section := range def.SectionList {
+			for _, f := range section.FormFields {
+				if f.Code == "total" && input.FormFieldID == f.ID && input.Value != nil {
+					t.Fatalf("calculation read blocked amount: total=%v", input.Value)
+				}
+			}
+		}
 	}
 }
 

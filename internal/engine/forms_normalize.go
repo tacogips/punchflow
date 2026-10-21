@@ -43,6 +43,9 @@ type formOpts struct {
 	// ExistingInputs and ExistingSlips are the stored values before this edit.
 	ExistingInputs []model.TicketInput
 	ExistingSlips  []model.TicketSlipItem
+	AuthorID       string
+	ProxyClientID  *string
+	AuthorTeamJSON []byte
 }
 
 // formResult is the normalized outcome.

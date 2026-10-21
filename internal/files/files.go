@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +24,23 @@ import (
 )
 
 const pf23DefaultMaxBytes int64 = 50 << 20
+
+// kickflowAllowedExtensions is the upload-wide extension allowlist documented
+// by help-center article 360053857093.
+var kickflowAllowedExtensions = map[string]struct{}{
+	"ai": {}, "bmp": {}, "csv": {}, "doc": {}, "docm": {}, "docx": {}, "dwg": {}, "eml": {},
+	"gif": {}, "heic": {}, "heif": {}, "htm": {}, "html": {}, "jpeg": {}, "jpg": {}, "json": {},
+	"key": {}, "lzh": {}, "mp4": {}, "mpe": {}, "mpeg": {}, "mpg": {}, "msg": {}, "rpt": {},
+	"numbers": {}, "pages": {}, "pdf": {}, "png": {}, "ppt": {}, "pptm": {}, "pptx": {}, "rtf": {},
+	"svg": {}, "tar": {}, "text": {}, "tif": {}, "tiff": {}, "tsv": {}, "txt": {}, "webm": {},
+	"webp": {}, "xdw": {}, "xfp": {}, "xlam": {}, "xls": {}, "xlsm": {}, "xlsx": {}, "zip": {},
+}
+
+func allowedUploadFilename(filename string) bool {
+	ext := strings.TrimPrefix(strings.ToLower(path.Ext(filepath.Base(filename))), ".")
+	_, ok := kickflowAllowedExtensions[ext]
+	return ok
+}
 
 type Store struct {
 	dir      string
@@ -44,6 +62,9 @@ func New(dataDir string, key []byte, baseURL string, clock kftime.Clock, maxByte
 	return s
 }
 func (s *Store) Save(ctx context.Context, q store.Querier, uploaderID, filename, contentType string, r io.Reader) (model.File, error) {
+	if !allowedUploadFilename(filename) {
+		return model.File{}, fmt.Errorf("files: unsupported file extension")
+	}
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
 		return model.File{}, fmt.Errorf("files: create storage directory: %w", err)
 	}

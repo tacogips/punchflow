@@ -121,6 +121,14 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 
 	workflowID, _ := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
 	salesTeamID, _ := store.ResolveID(t.Context(), env.DB.Q(), "teams", "sales")
+	costCenterID, err := store.ResolveID(t.Context(), env.DB.Q(), "general_masters", "cost-centers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	costCenterItemID, err := store.MasterItemIDByCode(t.Context(), env.DB.Q(), costCenterID, "cc-sales")
+	if err != nil {
+		t.Fatal(err)
+	}
 	fields := map[string]string{}
 	slipFields := map[string]string{}
 	var linesSection string
@@ -165,7 +173,7 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 			{"formFieldId": fields["amount"], "value": 100},
 			{"formFieldId": fields["purpose"], "value": "detail rows"},
 			{"formFieldId": fields["expense-date"], "value": "2026-01-01"},
-			{"formFieldId": fields["cost-center"], "value": nil},
+			{"formFieldId": fields["cost-center"], "generalMasterItemId": costCenterItemID},
 			{"formFieldId": fields["receipt"], "files": []string{uploaded.SignedID}},
 			{"formFieldId": fields["total"], "value": nil},
 		},
@@ -209,6 +217,16 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 		field, _ := in["formField"].(map[string]any)
 		attachments, _ := in["attachments"].([]any)
 		switch field["code"] {
+		case "cost-center":
+			value, ok := in["value"].([]any)
+			if !ok || len(value) != 1 {
+				t.Errorf("master input value=%T %v, want one cached record", in["value"], in["value"])
+				break
+			}
+			record, ok := value[0].(map[string]any)
+			if !ok || record["code"] != "cc-sales" {
+				t.Errorf("master input cached record=%v, want code cc-sales", value[0])
+			}
 		case "receipt":
 			if len(attachments) != 1 {
 				t.Errorf("receipt attachments=%v want one", attachments)

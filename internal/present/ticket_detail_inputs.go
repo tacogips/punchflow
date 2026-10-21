@@ -119,7 +119,22 @@ func formInputJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 			}
 		}
 	}
-	return map[string]any{"id": in.ID, "formFieldId": in.FormFieldID, "value": in.Value, "formField": field, "generalMasterItems": resolved.general, "users": resolved.users, "teams": resolved.teams, "inputTickets": resolved.tickets, "attachments": attachments}, nil
+	value := in.Value
+	if fieldModel != nil {
+		switch fieldModel.FieldType {
+		case "master":
+			value = resolved.general
+		case "user":
+			value = resolved.users
+		case "team":
+			value = resolved.teams
+		case "ticket":
+			value = resolved.tickets
+		case "file":
+			value = nil
+		}
+	}
+	return map[string]any{"id": in.ID, "formFieldId": in.FormFieldID, "value": value, "formField": field, "generalMasterItems": resolved.general, "users": resolved.users, "teams": resolved.teams, "inputTickets": resolved.tickets, "attachments": attachments}, nil
 }
 
 func slipFieldInTicket(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
@@ -186,8 +201,21 @@ func slipCellJSON(ctx context.Context, q store.Querier, row model.TicketSlipItem
 			return nil, err
 		}
 	}
+	publicValue := value
+	switch f.FieldType {
+	case "master", "general_master", "general_master_item":
+		publicValue = resolved.general
+	case "user":
+		publicValue = resolved.users
+	case "team":
+		publicValue = resolved.teams
+	case "ticket":
+		publicValue = resolved.tickets
+	case "file":
+		publicValue = nil
+	}
 	return map[string]any{
-		"id": stableUUID(row.ID, f.ID), "slipFieldId": f.ID, "value": value, "createdAt": pf08Time(row.CreatedAt), "updatedAt": pf08Time(row.UpdatedAt),
+		"id": stableUUID(row.ID, f.ID), "slipFieldId": f.ID, "value": publicValue, "createdAt": pf08Time(row.CreatedAt), "updatedAt": pf08Time(row.UpdatedAt),
 		"generalMasterItems": resolved.general, "users": resolved.users, "teams": resolved.teams, "inputTickets": resolved.tickets,
 		"attachments": attachments, "slipField": slipFieldInTicket(ctx, q, f, fields),
 	}, nil

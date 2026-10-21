@@ -66,7 +66,15 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		return "", nil, err
 	}
 	id := store.NewID()
-	form, err := pf14NormalizeForm(ctx, tx, id, def, inputs, slips, formOpts{Full: full, SlipMode: slipReplaceAll, Blocked: blocked}, store.Millis(now))
+	teamSnapshotName, err := store.TeamFullName(ctx, tx, authorTeam.ID)
+	if err != nil {
+		return "", nil, err
+	}
+	teamJSON, err := json.Marshal(map[string]string{"id": authorTeam.ID, "name": authorTeam.Name, "fullName": teamSnapshotName, "code": authorTeam.Code})
+	if err != nil {
+		return "", nil, err
+	}
+	form, err := pf14NormalizeForm(ctx, tx, id, def, inputs, slips, formOpts{Full: full, SlipMode: slipReplaceAll, Blocked: blocked, AuthorID: a.UserID, ProxyClientID: in.ProxyClientUserID, AuthorTeamJSON: teamJSON}, store.Millis(now))
 	if err != nil {
 		return "", nil, err
 	}
@@ -74,14 +82,7 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		in.Title = form.Title
 	}
 	inputs = pf14cInputsFromRows(def, form.Inputs)
-	snapshotName, err := store.TeamFullName(ctx, tx, authorTeam.ID)
-	if err != nil {
-		return "", nil, err
-	}
-	snapshot, err := json.Marshal(map[string]string{"id": authorTeam.ID, "name": authorTeam.Name, "fullName": snapshotName, "code": authorTeam.Code})
-	if err != nil {
-		return "", nil, err
-	}
+	snapshot := teamJSON
 	author := a.UserID
 	t := model.Ticket{ID: id, WorkflowID: workflow.ID, Status: in.Status, AuthorID: &author, AuthorTeamID: &authorTeam.ID, AuthorTeamSnapshot: snapshot, ProxyClientUserID: in.ProxyClientUserID, Title: in.Title, ForcedPublicType: model.ForcedPublicTypeFollowWorkflow, CreatedAt: now, UpdatedAt: now}
 	if err = pf14Number(ctx, tx, &t, def, now, numberingEventCreated); err != nil {

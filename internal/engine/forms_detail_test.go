@@ -1,12 +1,37 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
 )
+
+func TestSubmitRevalidatesMasterAndMultipleDetailReferences(t *testing.T) {
+	e := pf14Setup(t)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		master := pf16SlipField("master-ref", "master")
+		master.GeneralMasterCode = "cost-centers"
+		multiple := pf16SlipField("multi-ref", "master")
+		multiple.GeneralMasterCode = "cost-centers"
+		multiple.Multiple = true
+		pf16Section(def, "lines").SlipFields = append(pf16Section(def, "lines").SlipFields, master, multiple)
+	})
+	first := pf14cMasterItemID(t, e, "cost-centers", "cc-eng")
+	second := pf14cMasterItemID(t, e, "cost-centers", "cc-sales")
+	firstJSON, _ := json.Marshal(first)
+	multipleJSON, _ := json.Marshal([]string{first, second})
+	row := pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 1})
+	row.Inputs = append(row.Inputs,
+		SlipFieldInput{SlipFieldCode: "master-ref", GeneralMasterItemID: firstJSON},
+		SlipFieldInput{SlipFieldCode: "multi-ref", GeneralMasterItemID: multipleJSON},
+	)
+	if _, err := pf16Create(e, "sales-rep", model.TicketStatusInProgress, pf16Inputs(t, e, pf16Base), []SlipItemInput{row}); err != nil {
+		t.Fatalf("submission rejected valid master references: %v", err)
+	}
+}
 
 var pf16Base = map[string]any{"amount": "100", "purpose": "trip"}
 

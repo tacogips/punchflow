@@ -278,12 +278,7 @@ func (n *normalizer) checkRequiredCells(rows []model.TicketSlipItem) {
 				continue
 			}
 			if exists {
-				field := model.FormField{
-					Code: f.Code, FieldType: f.FieldType, Options: f.Options,
-					RegexpFormat: f.RegexpFormat, MinValue: f.MinValue, MaxValue: f.MaxValue,
-					MinLength: f.MinLength, MaxLength: f.MaxLength, DecimalDigit: f.DecimalDigit,
-					AllowedExtensions: f.AllowedExtensions, AllowedTicketStatus: f.AllowedTicketStatus,
-				}
+				field := slipAsFormField(f)
 				if err := pf14ValidateValue(field, v); err != nil {
 					n.fail(f.Code, err.Error())
 					continue

@@ -37,6 +37,9 @@ func pf16Attachments(t *testing.T, e *pf14TestEnv, id string) map[string][]strin
 	for _, raw := range detail["inputs"].([]any) {
 		in := raw.(map[string]any)
 		field := in["formField"].(map[string]any)
+		if field["code"] == "receipt" && in["value"] != nil {
+			t.Errorf("file input value=%v want null", in["value"])
+		}
 		for _, a := range in["attachments"].([]any) {
 			code := fmt.Sprint(field["code"])
 			out[code] = append(out[code], a.(map[string]any)["signedId"].(string))
@@ -45,6 +48,9 @@ func pf16Attachments(t *testing.T, e *pf14TestEnv, id string) map[string][]strin
 	for _, raw := range detail["slipItems"].([]any) {
 		for _, c := range raw.(map[string]any)["inputs"].([]any) {
 			cell := c.(map[string]any)
+			if cell["slipField"].(map[string]any)["code"] == "photo" && cell["value"] != nil {
+				t.Errorf("file detail value=%v want null", cell["value"])
+			}
 			for _, a := range cell["attachments"].([]any) {
 				code := "slip:" + fmt.Sprint(cell["slipField"].(map[string]any)["code"])
 				out[code] = append(out[code], a.(map[string]any)["signedId"].(string))
@@ -73,6 +79,7 @@ func TestFileInputsRoundTripAsAttachments(t *testing.T) {
 			for j := range def.SectionList[i].FormFields {
 				if def.SectionList[i].FormFields[j].Code == "receipt" {
 					def.SectionList[i].FormFields[j].Multiple = true
+					def.SectionList[i].FormFields[j].AllowedExtensions = []string{"txt"}
 				}
 			}
 		}
@@ -80,6 +87,28 @@ func TestFileInputsRoundTripAsAttachments(t *testing.T) {
 	for _, id := range []string{"sig-a", "sig-b", "sig-c"} {
 		pf16InsertFile(t, e, id)
 	}
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			for j := range def.SectionList[i].FormFields {
+				if def.SectionList[i].FormFields[j].Code == "receipt" {
+					def.SectionList[i].FormFields[j].AllowedExtensions = []string{"pdf"}
+				}
+			}
+		}
+	})
+	_, rejectErr := pf16Create(e, "sales-rep", model.TicketStatusDraft, append(pf16Inputs(t, e, pf16Base, "receipt"), pf16FileInput(t, e, "receipt", "sig-a")), nil)
+	if rejectErr == nil {
+		t.Fatal("file field accepted a disallowed extension")
+	}
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			for j := range def.SectionList[i].FormFields {
+				if def.SectionList[i].FormFields[j].Code == "receipt" {
+					def.SectionList[i].FormFields[j].AllowedExtensions = []string{"txt"}
+				}
+			}
+		}
+	})
 	inputs := pf16Inputs(t, e, pf16Base, "receipt")
 	inputs = append(inputs, pf16FileInput(t, e, "receipt", "sig-a"))
 	row := pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 1})

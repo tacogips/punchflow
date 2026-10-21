@@ -84,3 +84,16 @@ func TestSaveRejectsOversize(t *testing.T) {
 		t.Fatal("oversize upload succeeded")
 	}
 }
+
+func TestSaveRejectsUnsupportedExtension(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	fileStore := New(t.TempDir(), []byte("key"), "", kftime.SystemClock{}, 1024)
+	if _, err := fileStore.Save(ctx, db.Q(), "uploader", "payload.exe", "application/octet-stream", strings.NewReader("x")); err == nil {
+		t.Fatal("unsupported upload extension succeeded")
+	}
+}
