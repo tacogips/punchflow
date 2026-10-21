@@ -90,3 +90,16 @@ type TicketCustomApprover struct {
 	RouteStepCode string   `json:"routeStepCode"`
 	UserIDs       []string `json:"userIds"`
 }
+
+// TicketIsPublic reports the effective public status of a ticket from its
+// forced public type and the workflow-level publicTicket setting.
+func TicketIsPublic(forcedPublicType string, workflowPublic bool) bool {
+	switch forcedPublicType {
+	case ForcedPublicTypeForcedPublic:
+		return true
+	case ForcedPublicTypeForcedPrivate:
+		return false
+	default:
+		return workflowPublic
+	}
+}

@@ -10,8 +10,9 @@ import (
 	"punchflow/internal/store"
 )
 
-func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def model.WorkflowDef, inputs []FieldInput, approvers []ApproverInput, nowTime int64) error {
-	values := pf14InputValues(def, inputs)
+// pf14SelectRouteCode picks the route code for the given form values by walking
+// the workflow's route conditions in order.
+func pf14SelectRouteCode(def model.WorkflowDef, values map[string]any) (string, error) {
 	routeCode := def.RouteCode
 	matchedBranch := false
 	for _, condition := range def.RouteConditions {
@@ -27,12 +28,26 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 		}
 		matchedBranch = true
 		if condition.ErrorMessage != nil && *condition.ErrorMessage != "" {
-			return kferr.ValidationFailed(map[string][]string{"base": {*condition.ErrorMessage}})
+			return "", kferr.ValidationFailed(map[string][]string{"base": {*condition.ErrorMessage}})
 		}
 		if condition.RouteCode != nil {
 			routeCode = *condition.RouteCode
 			break
 		}
+	}
+	return routeCode, nil
+}
+
+// pf14BuildRoute materializes the route steps for a submitted ticket and then
+// runs the shared advancement routine (pf14Advance), so skipped groups and
+// steps that need no user action are traversed immediately. After it returns
+// the ticket is either waiting on the first actionable group or, when nothing
+// is left to do, already completed; callers must check ticket.Status.
+func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def model.WorkflowDef, inputs []FieldInput, approvers []ApproverInput, nowTime int64) error {
+	values := pf14InputValues(def, inputs)
+	routeCode, err := pf14SelectRouteCode(def, values)
+	if err != nil {
+		return err
 	}
 	routeID, err := store.RouteIDByCode(ctx, tx, routeCode)
 	if err != nil {
@@ -127,24 +142,8 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	if len(groups) == 0 {
 		return kferr.ValidationFailed(map[string][]string{"route": {"has no steps"}})
 	}
-	min := 0
-	for group := range groups {
-		if min == 0 || group < min {
-			min = group
-		}
-	}
-	ticket.CurrentStep = min
-	for _, s := range groups[min] {
-		if s.Status == model.StepStatusSkipped {
-			continue
-		}
-		s.Status = model.StepStatusInProgress
-		s.UpdatedAt = store.Time(nowTime)
-		if err = store.EngUpdateStep(ctx, tx, s); err != nil {
-			return err
-		}
-	}
-	return nil
+	ticket.CurrentStep = 0
+	return e.pf14Advance(ctx, tx, ticket, store.Time(nowTime))
 }
 
 func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket *model.Ticket, step model.RouteStep, values map[string]any, approvers []ApproverInput) ([]string, error) {
@@ -167,12 +166,14 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 			}
 		}
 	case model.StepTypeAuthorCustomizable:
-		for _, v := range approvers {
-			if v.RouteStepCode == step.Code {
-				for _, id := range v.UserIDs {
-					add(id)
-				}
-			}
+		// Nominations are persisted by pf14BuildRoute (submission payload) or
+		// by an earlier draft save, so both sources are read from the store.
+		custom, err := store.EngCustomApprovers(ctx, tx, ticket.ID, step.Code)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range custom {
+			add(id)
 		}
 	case model.StepTypeAssigneeCustomizable:
 		custom, err := store.EngCustomApprovers(ctx, tx, ticket.ID, step.Code)
@@ -184,20 +185,11 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 		}
 	case model.StepTypeTeam, model.StepTypeDynamicTeam:
 		for _, target := range step.Targets {
-			teamID := ""
-			if target.TeamCode != "" {
-				chart, err := store.ActiveOrgChartID(ctx, tx)
-				if err != nil {
-					return nil, err
-				}
-				teamID, err = store.TeamIDByCode(ctx, tx, chart, target.TeamCode)
-				if err != nil {
-					continue
-				}
-			} else if target.Variable != "" {
-				teamID = fmt.Sprint(values[target.Variable])
+			teamIDs, err := pf14TargetTeams(ctx, tx, target, values)
+			if err != nil {
+				return nil, err
 			}
-			if teamID != "" {
+			for _, teamID := range teamIDs {
 				members, err := store.EngUsersByTeam(ctx, tx, teamID, target.Descendants)
 				if err != nil {
 					return nil, err
@@ -228,15 +220,12 @@ func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket 
 		}
 	case model.StepTypeDynamicUser:
 		for _, target := range step.Targets {
-			if v, ok := values[target.Variable]; ok {
-				switch val := v.(type) {
-				case string:
-					add(val)
-				case []any:
-					for _, x := range val {
-						add(fmt.Sprint(x))
-					}
-				}
+			userIDs, err := pf14ResolveUserRefs(ctx, tx, pf14VariableRefs(values, target.Variable))
+			if err != nil {
+				return nil, err
+			}
+			for _, id := range userIDs {
+				add(id)
 			}
 		}
 	case model.StepTypeManager:
@@ -313,7 +302,7 @@ func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *mode
 	}
 	matched := 0
 	for _, field := range fields {
-		actual, ok := values[field.Variable]
+		actual, ok := pf14VariableValue(values, field.Variable)
 		switch field.FieldKey {
 		case model.StepConditionFieldKeyAuthorTeam:
 			if ticket.AuthorTeamID == nil {
@@ -378,7 +367,7 @@ func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *mode
 			}
 			continue
 		case model.StepConditionFieldKeyTextVariable, model.StepConditionFieldKeyNumberVariable, model.StepConditionFieldKeyCheckboxVariable, model.StepConditionFieldKeyGeneralMasterVariable:
-			actual, ok = values[field.Variable]
+			actual, ok = pf14VariableValue(values, field.Variable)
 		}
 		operator := field.Symbol
 		if field.FieldKey == model.StepConditionFieldKeyCheckboxVariable && operator == "equal" {
@@ -404,7 +393,7 @@ func pf14bUserMatchesTargets(ctx context.Context, tx *store.Tx, userID, teamID s
 	return len(targets) == 0, nil
 }
 
-func pf14bUserMatchesGrade(ctx context.Context, tx *store.Tx, userID, teamID string, symbol *string, gradeCodes []string) (bool, error) {
+func pf14bUserMatchesGrade(ctx context.Context, tx store.Querier, userID, teamID string, symbol *string, gradeCodes []string) (bool, error) {
 	if symbol == nil || *symbol == "" {
 		return true, nil
 	}
@@ -504,40 +493,34 @@ func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Tic
 	ids := []string{}
 	seen := map[string]bool{}
 	for _, target := range step.Targets {
-		teamID := ""
-		if target.TeamCode != "" {
-			chart, err := store.ActiveOrgChartID(ctx, tx)
-			if err != nil {
-				return nil, err
-			}
-			teamID, err = store.TeamIDByCode(ctx, tx, chart, target.TeamCode)
-			if err != nil {
-				continue
-			}
-		} else if target.Variable != "" {
-			teamID = fmt.Sprint(values[target.Variable])
-		} else if ticket.AuthorTeamID != nil {
-			teamID = *ticket.AuthorTeamID
-		}
-		team, err := store.GetTeam(ctx, tx, teamID)
-		if err != nil || team.ParentID == nil {
-			continue
-		}
-		members, err := store.EngUsersByTeam(ctx, tx, *team.ParentID, false)
+		teamIDs, err := pf14TargetTeams(ctx, tx, target, values)
 		if err != nil {
 			return nil, err
 		}
-		for _, id := range members {
-			if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+		if target.TeamCode == "" && target.Variable == "" && ticket.AuthorTeamID != nil {
+			teamIDs = []string{*ticket.AuthorTeamID}
+		}
+		for _, teamID := range teamIDs {
+			team, err := store.GetTeam(ctx, tx, teamID)
+			if err != nil || team.ParentID == nil {
 				continue
 			}
-			matches, er := pf14bUserMatchesGrade(ctx, tx, id, *team.ParentID, target.GradeSymbol, target.GradeCodes)
-			if er != nil {
-				return nil, er
+			members, err := store.EngUsersByTeam(ctx, tx, *team.ParentID, false)
+			if err != nil {
+				return nil, err
 			}
-			if matches && !seen[id] {
-				seen[id] = true
-				ids = append(ids, id)
+			for _, id := range members {
+				if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+					continue
+				}
+				matches, er := pf14bUserMatchesGrade(ctx, tx, id, *team.ParentID, target.GradeSymbol, target.GradeCodes)
+				if er != nil {
+					return nil, er
+				}
+				if matches && !seen[id] {
+					seen[id] = true
+					ids = append(ids, id)
+				}
 			}
 		}
 	}

@@ -28,50 +28,6 @@ func (e *Engine) pf14Guard(ctx context.Context, q store.Querier, a Actor, id str
 	}
 	return t, nil
 }
-func (e *Engine) pf14CanView(ctx context.Context, q store.Querier, a Actor, id string) error {
-	t, err := store.EngLoadTicket(ctx, q, id)
-	if err != nil {
-		return kferr.ResourceNotFound()
-	}
-	if t.AuthorID != nil && *t.AuthorID == a.UserID {
-		return nil
-	}
-	if a.Permissions[model.PermissionTicketRead] {
-		return nil
-	}
-	def, err := store.WorkflowDefByID(ctx, q, t.WorkflowID)
-	if err != nil {
-		return err
-	}
-	if allowed, err := pf14WorkflowViewer(ctx, q, a, t, def); err != nil {
-		return err
-	} else if allowed {
-		return nil
-	}
-	steps, err := store.EngTicketSteps(ctx, q, id)
-	if err != nil {
-		return err
-	}
-	for _, s := range steps {
-		assignees, err := store.EngStepAssignees(ctx, q, s.ID)
-		if err != nil {
-			return err
-		}
-		for _, as := range assignees {
-			if as.UserID == a.UserID {
-				return nil
-			}
-			ok, err := store.EngActiveProxyApprovers(ctx, q, as.UserID, a.UserID, t.WorkflowID, kftime.FormatDate(e.clock.Now()))
-			if err != nil {
-				return err
-			}
-			if ok {
-				return nil
-			}
-		}
-	}
-	return kferr.InvisibleTicket()
-}
 func (e *Engine) pf14CanAct(ctx context.Context, tx *store.Tx, a Actor, t model.Ticket) ([]model.TicketStep, []int, error) {
 	if t.Status != model.TicketStatusInProgress {
 		return nil, nil, kferr.InvalidState("Ticket is not in progress")
@@ -228,12 +184,15 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 		return nil, err
 	}
 	now := e.clock.Now()
-	anyApprove := false
+	// The webhook event follows the action type of the step the actor acted on,
+	// whether or not that step reached its approval threshold (WH-01/PF-02).
+	actedApprove, actedConfirm := false, false
 	for _, step := range active {
 		assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
 		if err != nil {
 			return nil, err
 		}
+		acted := false
 		for i := range assignees {
 			as := &assignees[i]
 			if as.Completed {
@@ -241,6 +200,7 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 			}
 			proxy := as.UserID != a.UserID
 			if !proxy {
+				acted = true
 				as.Completed = true
 				as.CompletedAt = &now
 				as.ActualApproverID = &a.UserID
@@ -254,6 +214,7 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 					return nil, err
 				}
 				if ok {
+					acted = true
 					as.Completed = true
 					as.CompletedAt = &now
 					as.ActualApproverID = &a.UserID
@@ -262,6 +223,13 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 						return nil, err
 					}
 				}
+			}
+		}
+		if acted {
+			if step.ActionType == model.ActionTypeApprove {
+				actedApprove = true
+			} else {
+				actedConfirm = true
 			}
 		}
 		completed := 0
@@ -291,20 +259,25 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 			if err = store.EngUpdateStep(ctx, tx, step); err != nil {
 				return nil, err
 			}
-			if step.ActionType == model.ActionTypeApprove {
-				anyApprove = true
-			}
 		}
 	}
 	if err = e.pf14Advance(ctx, tx, &t, now); err != nil {
 		return nil, err
 	}
-	kind := model.WebhookEventTicketConfirmed
-	if anyApprove {
-		kind = model.WebhookEventTicketApproved
+	events := []model.WebhookEvent{}
+	if actedApprove || !actedConfirm {
+		events = append(events, pf14Event(model.WebhookEventTicketApproved, id, a.UserID))
 	}
-	events := []model.WebhookEvent{pf14Event(kind, id, a.UserID)}
+	if actedConfirm {
+		events = append(events, pf14Event(model.WebhookEventTicketConfirmed, id, a.UserID))
+	}
 	if t.Status == model.TicketStatusCompleted {
+		if err = pf14Number(ctx, tx, &t, def, now, numberingEventCompleted); err != nil {
+			return nil, err
+		}
+		if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
+			return nil, err
+		}
 		events = append(events, pf14Event(model.WebhookEventTicketCompleted, id, a.UserID))
 	}
 	if comment != nil && *comment != "" {

@@ -31,7 +31,7 @@ func TicketSummary(ctx context.Context, q store.Querier, id string) (TicketSumma
 	if x.ForcedPublicType == "" {
 		x.ForcedPublicType = model.ForcedPublicTypeFollowWorkflow
 	}
-	public := x.ForcedPublicType == model.ForcedPublicTypeForcedPublic || (x.ForcedPublicType == model.ForcedPublicTypeFollowWorkflow && wf["publicTicket"] == true)
+	public := model.TicketIsPublic(x.ForcedPublicType, wf["publicTicket"] == true)
 	var snapshot any
 	if len(x.AuthorTeamSnapshot) != 0 {
 		if err = json.Unmarshal(x.AuthorTeamSnapshot, &snapshot); err != nil {

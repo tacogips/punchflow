@@ -67,7 +67,7 @@ func pf14ConditionMatch(fields []model.ConditionField, combination string, value
 	for _, field := range fields {
 		actual, ok := values[field.FieldKey]
 		if !ok {
-			actual, ok = values[field.Variable]
+			actual, ok = pf14VariableValue(values, field.Variable)
 		}
 		if ok && pf14Compare(actual, field.Symbol, field.Value) {
 			matched++

@@ -43,21 +43,8 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if !member {
 		return "", nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
 	}
-	if !def.AvailableToEveryone && len(def.AvailableTeams) > 0 {
-		allowed := false
-		for _, team := range def.AvailableTeams {
-			id, er := store.TeamIDByCode(ctx, tx, mustActiveChart(ctx, tx), team.TeamCode)
-			if er == nil {
-				ok, er := store.EngUserIsActiveMember(ctx, tx, a.UserID, id)
-				if er != nil {
-					return "", nil, er
-				}
-				allowed = allowed || ok
-			}
-		}
-		if !allowed {
-			return "", nil, kferr.TicketCreateRestricted()
-		}
+	if err = pf14CheckApplicable(ctx, tx, a.UserID, def, authorTeam.ID); err != nil {
+		return "", nil, err
 	}
 	full := in.Status == model.TicketStatusInProgress
 	inputs, slips := []FieldInput{}, []SlipItemInput{}
@@ -85,6 +72,9 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	}
 	author := a.UserID
 	t := model.Ticket{ID: id, WorkflowID: workflow.ID, Status: in.Status, AuthorID: &author, AuthorTeamID: &authorTeam.ID, AuthorTeamSnapshot: snapshot, ProxyClientUserID: in.ProxyClientUserID, Title: in.Title, ForcedPublicType: model.ForcedPublicTypeFollowWorkflow, CreatedAt: now, UpdatedAt: now}
+	if err = pf14Number(ctx, tx, &t, def, now, numberingEventCreated); err != nil {
+		return "", nil, err
+	}
 	if err = store.EngInsertTicket(ctx, tx, t); err != nil {
 		return "", nil, err
 	}
@@ -95,23 +85,20 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		return "", nil, err
 	}
 	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketCreated, id, a.UserID)}
-	if full {
-		if err = e.pf14BuildRoute(ctx, tx, &t, def, inputs, in.Approvers, store.Millis(now)); err != nil {
+	if !full {
+		if err = pf14SaveAuthorNominations(ctx, tx, id, def, in.Approvers); err != nil {
 			return "", nil, err
 		}
-		if def.TicketNumberingTiming == "opened" {
-			if err = pf14Number(ctx, tx, &t, def, now); err != nil {
-				return "", nil, err
-			}
-		}
-		t.OpenedAt = &now
-		t.UpdatedAt = now
-		if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
-			return "", nil, err
-		}
-		events = append(events, pf14Event(model.WebhookEventTicketOpened, id, a.UserID))
+		return id, events, nil
 	}
-	return id, events, nil
+	if err = e.pf14BuildRoute(ctx, tx, &t, def, inputs, in.Approvers, store.Millis(now)); err != nil {
+		return "", nil, err
+	}
+	submitted, err := pf14FinishSubmission(ctx, tx, &t, def, a.UserID, now)
+	if err != nil {
+		return "", nil, err
+	}
+	return id, append(events, submitted...), nil
 }
 
 func pf14cValidateProxyClient(ctx context.Context, q store.Querier, actorID, clientID, workflowID, date string) error {
@@ -148,12 +135,4 @@ func pf14ValidateCreateCompleteness(def model.WorkflowDef, inputs []FieldInput) 
 		}
 	}
 	return nil
-}
-
-func mustActiveChart(ctx context.Context, tx *store.Tx) string {
-	id, err := store.ActiveOrgChartID(ctx, tx)
-	if err != nil {
-		return ""
-	}
-	return id
 }
