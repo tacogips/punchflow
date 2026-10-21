@@ -194,6 +194,8 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 
 Path count check: the 57 distinct paths are the distinct values of the Path column. Handler file count: 15 files, none expected near 1000 lines; `tickets.go` must be split further if it approaches the limit.
 
+Punchflow UI helpers remain under `/ui/api/`: `POST /ui/api/tickets/{ticketId}/submit` accepts an optional submission comment, `POST /ui/api/tickets/{ticketId}/cancel-approval` accepts an optional cancellation comment, and `POST /ui/api/tickets/{ticketId}/assignees` requires `ticketStepId` and `userId` to select an active step in the current parallel group. These controls are not kickflow REST endpoints (INF-R5-06, INF-R5-07).
+
 ### Webhook event matrix (13 events)
 
 All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads use `TicketDetail` with a webhook-specific policy: restricted form values and resolved references are redacted while field definitions remain (INF-SEC-02). Comment payloads are `{comment: Comment, ticket: TicketWithStep}`. Emission happens inside the same database transaction as the state change (outbox, see `design-webhooks.md`). Tests live in `internal/engine/events_test.go` (which events, in which order) and `internal/webhook/*_test.go` (delivery, signature, retries).
@@ -211,7 +213,7 @@ All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads u
 | 9 | ticket_completed | approveTicket that completes the last group; a submission (createTicket / updateTicket) whose route needs no user action | Actor | ticket | After #5/#6 or after #4 (INF-11, INF-72) |
 | 10 | ticket_withdrawn | withdrawTicket | Actor | ticket | |
 | 11 | ticket_archived | archiveTicket; deleteUser (#5) and deleteTeam (#38) for each archived unfinished ticket | Actor | ticket | INF-79, INF-LIFE-API-05 |
-| 12 | comment_created | createComment; comments attached to approve/reject/deny (INF-22) | Comment author | comment + ticket | |
+| 12 | comment_created | createComment; comments attached to approve/reject/deny (INF-22); optional comments on UI submission and approval cancellation (INF-R5-07) | Comment author | comment + ticket | After the submission lifecycle events or cancellation `ticket_updated` event |
 | 13 | comment_updated | updateComment, deleteComment | Actor | comment + ticket | Delete payload has `deletedAt` set (INF-30) |
 
 The admin API can also enqueue any of the 13 event types for an existing ticket/comment on demand ("fire event", see `design-webhooks.md`), which uses the same payload builders.

@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"strings"
+
 	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
@@ -83,6 +85,24 @@ func (e *Engine) Create(ctx context.Context, tx *store.Tx, a Actor, in CreateInp
 }
 func (e *Engine) Update(ctx context.Context, tx *store.Tx, a Actor, ticketID string, in UpdateInput) ([]model.WebhookEvent, error) {
 	return e.pf14Update(ctx, tx, a, ticketID, in)
+}
+
+// Submit applies a UI submission comment after the ordinary REST submission
+// state transition, keeping the comment in the same transaction.
+func (e *Engine) Submit(ctx context.Context, tx *store.Tx, a Actor, ticketID string, comment *string) ([]model.WebhookEvent, error) {
+	status := model.TicketStatusInProgress
+	events, err := e.pf14Update(ctx, tx, a, ticketID, UpdateInput{Status: &status})
+	if err != nil {
+		return nil, err
+	}
+	if comment == nil || strings.TrimSpace(*comment) == "" {
+		return events, nil
+	}
+	_, commentEvents, err := e.pf14AddComment(ctx, tx, a, ticketID, *comment, nil)
+	if err != nil {
+		return nil, err
+	}
+	return append(events, commentEvents...), nil
 }
 func (e *Engine) UpdateForm(ctx context.Context, tx *store.Tx, a Actor, ticketID string, in FormPatch) ([]model.WebhookEvent, error) {
 	return e.pf14UpdateForm(ctx, tx, a, ticketID, in)

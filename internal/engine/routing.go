@@ -83,12 +83,29 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	if route.Status != model.RouteStatusVisible {
 		return kferr.ValidationFailed(map[string][]string{"route": {"is unavailable"}})
 	}
+	for _, nomination := range approvers {
+		var selected *model.RouteStep
+		for i := range route.Steps {
+			if route.Steps[i].Code == nomination.RouteStepCode && route.Steps[i].StepType == model.StepTypeAuthorCustomizable {
+				selected = &route.Steps[i]
+				break
+			}
+		}
+		if selected == nil {
+			return kferr.InvalidParameter("Applicant nominations are only allowed for author-customizable steps")
+		}
+		for _, userID := range nomination.UserIDs {
+			if err = pf14bValidateNominee(ctx, tx, userID, selected.Targets, values); err != nil {
+				return err
+			}
+		}
+	}
 	// INF-SEC-05: route selection uses applicant-visible values, while approval
 	// step conditions and dynamic targets always treat restricted fields as empty.
 	stepValues := pf14RouteStepValues(def, values)
 	ticket.RouteID = &routeID
 	for _, custom := range approvers {
-		if err = store.EngInsertCustomApprovers(ctx, tx, ticket.ID, custom.RouteStepCode, custom.UserIDs); err != nil {
+		if err = store.EngInsertCustomApprovers(ctx, tx, ticket.ID, custom.RouteStepCode, pf14UniqueUserIDs(custom.UserIDs)); err != nil {
 			return err
 		}
 	}
@@ -105,6 +122,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 			}
 		}
 		skip := step.RouteStepCondition != nil && (step.RouteStepCondition.ConditionType == model.StepConditionTypeConditionalSkip && conditionMatches || step.RouteStepCondition.ConditionType == model.StepConditionTypeConditional && !conditionMatches)
+		executionSkip := skip
 		fb := false
 		result := ""
 		userIDs, er := e.pf14ResolveAssignees(ctx, tx, ticket, step, stepValues, approvers)
@@ -116,7 +134,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 			if step.MinCustomAssignees != nil {
 				minCustomAssignees = *step.MinCustomAssignees
 			}
-			if len(userIDs) < minCustomAssignees {
+			if len(pf14UniqueUserIDs(userIDs)) < minCustomAssignees {
 				return kferr.ValidationFailed(map[string][]string{"base": {"custom approver is required"}})
 			}
 			if len(userIDs) == 0 {
@@ -145,7 +163,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 		}
 		// Kickflow's manager route has one final self-approval fallback after
 		// manager searches and the configured fallback produce no candidate.
-		if len(userIDs) == 0 && step.StepType == model.StepTypeManager && step.AllowSelfApproval && ticket.AuthorID != nil {
+		if len(userIDs) == 0 && !executionSkip && step.StepType == model.StepTypeManager && step.AllowSelfApproval && ticket.AuthorID != nil {
 			userIDs = []string{*ticket.AuthorID}
 			skip = false
 		}

@@ -26,7 +26,7 @@ type CustomStepInput struct {
 // AssignCurrentApprover lets a ticket administrator add a distinct active user
 // to the current approval step, including one that already has assignments
 // (INF-NUM-06).
-func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Actor, ticketID, userID string) ([]model.WebhookEvent, error) {
+func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Actor, ticketID, ticketStepID, userID string) ([]model.WebhookEvent, error) {
 	t, err := e.pf15Guard(ctx, tx, a, ticketID)
 	if err != nil {
 		return nil, err
@@ -45,12 +45,14 @@ func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Acto
 	if err != nil {
 		return nil, err
 	}
-	currentSteps := make([]model.TicketStep, 0)
+	var target *model.TicketStep
 	for _, step := range steps {
 		if step.StepOrder != t.CurrentStep || step.Status != model.StepStatusInProgress {
 			continue
 		}
-		currentSteps = append(currentSteps, step)
+		if step.ID == ticketStepID {
+			target = &step
+		}
 		assignees, er := store.EngStepAssignees(ctx, tx, step.ID)
 		if er != nil {
 			return nil, er
@@ -61,12 +63,11 @@ func (e *Engine) AssignCurrentApprover(ctx context.Context, tx *store.Tx, a Acto
 			}
 		}
 	}
-	if len(currentSteps) == 0 {
+	if target == nil {
 		return nil, kferr.InvalidState("The current step is not active")
 	}
-	step := currentSteps[0]
 	now := e.clock.Now()
-	assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: ticketID, UserID: userID, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
+	assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: target.ID, TicketID: ticketID, UserID: userID, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
 	if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
 		return nil, err
 	}

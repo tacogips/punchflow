@@ -142,6 +142,7 @@ func pf14SaveAuthorNominations(ctx context.Context, tx *store.Tx, ticketID strin
 		if len(userIDs) != len(nomination.UserIDs) {
 			return kferr.ValidationFailed(map[string][]string{"approvers": {"contains an unknown user"}})
 		}
+		userIDs = pf14UniqueUserIDs(userIDs)
 		if route == nil {
 			for _, id := range userIDs {
 				if err = pf14bValidateNominee(ctx, tx, id, nil, values); err != nil {
@@ -154,4 +155,20 @@ func pf14SaveAuthorNominations(ctx context.Context, tx *store.Tx, ticketID strin
 		}
 	}
 	return nil
+}
+
+func pf14UniqueUserIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	unique := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	return unique
 }

@@ -10,7 +10,7 @@ import (
 
 func pf15Cancel(e *pf14TestEnv, actor, id string) ([]model.WebhookEvent, error) {
 	return pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
-		return e.engine.CancelApproval(e.ctx, tx, e.actor(actor), id)
+		return e.engine.CancelApproval(e.ctx, tx, e.actor(actor), id, nil)
 	})
 }
 

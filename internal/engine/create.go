@@ -39,14 +39,18 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if authorTeam.ApproveOnly {
 		return "", nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
 	}
-	member, err := store.EngUserIsActiveMember(ctx, tx, a.UserID, authorTeam.ID)
+	applicantID := a.UserID
+	if in.ProxyClientUserID != nil {
+		applicantID = *in.ProxyClientUserID
+	}
+	member, err := store.EngUserIsActiveMember(ctx, tx, applicantID, authorTeam.ID)
 	if err != nil {
 		return "", nil, err
 	}
 	if !member {
 		return "", nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
 	}
-	if err = pf14CheckApplicable(ctx, tx, a.UserID, def, authorTeam.ID); err != nil {
+	if err = pf14CheckApplicable(ctx, tx, applicantID, def, authorTeam.ID); err != nil {
 		return "", nil, err
 	}
 	full := in.Status == model.TicketStatusInProgress
@@ -139,6 +143,17 @@ func pf14cValidateProxyClient(ctx context.Context, q store.Querier, actorID, cli
 		return fmt.Errorf("engine: validate proxy client status: %w", err)
 	}
 	if !registered || !active {
+		return kferr.ValidationFailed(map[string][]string{"proxyClientUserId": {"is invalid"}})
+	}
+	return nil
+}
+
+func pf14cValidateExistingProxyClient(ctx context.Context, q store.Querier, clientID string) error {
+	active, err := store.EngUserActive(ctx, q, clientID)
+	if err != nil {
+		return fmt.Errorf("engine: validate existing proxy client status: %w", err)
+	}
+	if !active {
 		return kferr.ValidationFailed(map[string][]string{"proxyClientUserId": {"is invalid"}})
 	}
 	return nil

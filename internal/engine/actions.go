@@ -163,10 +163,10 @@ func pf14CheckNextCustomApprovers(ctx context.Context, tx *store.Tx, t model.Tic
 		if routeStep.MinCustomAssignees != nil {
 			minimum = *routeStep.MinCustomAssignees
 		}
-		if len(approvers) < minimum {
+		if len(pf14UniqueUserIDs(approvers)) < minimum {
 			return kferr.AssignmentRequiredBeforeApprove()
 		}
-		if len(approvers) == 0 && minimum == 0 {
+		if len(pf14UniqueUserIDs(approvers)) == 0 && minimum == 0 {
 			for _, step := range steps {
 				if step.StepOrder != nextOrder || step.RouteStepCode == nil || *step.RouteStepCode != routeStep.Code {
 					continue

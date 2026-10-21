@@ -61,6 +61,7 @@ var operations = [...]Operation{
 	{Name: "attachTicketLabel", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/labels", Handle: (*API).attachLabel},
 	{Name: "detachTicketLabel", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/labels/{labelId}", Handle: (*API).detachLabel},
 	{Name: "cancelTicketApproval", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/cancel-approval", Handle: (*API).cancelApproval},
+	{Name: "submitTicket", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/submit", Handle: (*API).submitTicket},
 	{Name: "raiseTicket", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/raise", Handle: (*API).raise},
 	{Name: "addTicketCustomStep", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/custom-steps", Handle: (*API).addCustomStep},
 	{Name: "removeTicketCustomStep", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/custom-steps/{stepId}", Handle: (*API).removeCustomStep},
@@ -147,8 +148,32 @@ func (a *API) detachLabel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) cancelApproval(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Comment *string `json:"comment"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := httpx.DecodeJSON(r, &body); err != nil {
+			kferr.Write(w, err)
+			return
+		}
+	}
 	a.act(w, r, "ticket.cancel_approval", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
-		return a.d.Engine.CancelApproval(ctx, tx, actor, id)
+		return a.d.Engine.CancelApproval(ctx, tx, actor, id, body.Comment)
+	})
+}
+
+func (a *API) submitTicket(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Comment *string `json:"comment"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := httpx.DecodeJSON(r, &body); err != nil {
+			kferr.Write(w, err)
+			return
+		}
+	}
+	a.act(w, r, "ticket.submit", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
+		return a.d.Engine.Submit(ctx, tx, actor, id, body.Comment)
 	})
 }
 
@@ -186,14 +211,15 @@ func (a *API) removeCustomStep(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) assignCurrentApprover(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID string `json:"userId"`
+		TicketStepID string `json:"ticketStepId"`
+		UserID       string `json:"userId"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		kferr.Write(w, err)
 		return
 	}
 	a.act(w, r, "ticket.assign_current_approver", func(ctx context.Context, tx *store.Tx, actor engine.Actor, id string) ([]model.WebhookEvent, error) {
-		return a.d.Engine.AssignCurrentApprover(ctx, tx, actor, id, body.UserID)
+		return a.d.Engine.AssignCurrentApprover(ctx, tx, actor, id, body.TicketStepID, body.UserID)
 	})
 }
 

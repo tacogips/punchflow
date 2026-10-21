@@ -20,7 +20,11 @@ func pf14cCreate(t *testing.T, e *pf14TestEnv, workflowCode, actorCode string, v
 	inputs := pf14CompleteInputs(fields, values)
 	teamID := e.team("sales")
 	if actorCode == "assistant" {
-		if err = e.db.Q().QueryRowContext(e.ctx, `SELECT m.team_id FROM team_memberships m JOIN teams t ON t.id=m.team_id JOIN organization_charts c ON c.id=t.organization_chart_id WHERE m.user_id=? AND c.current=1 ORDER BY m.team_id LIMIT 1`, e.user(actorCode)).Scan(&teamID); err != nil {
+		applicationUser := e.user(actorCode)
+		if proxyClientID != nil {
+			applicationUser = *proxyClientID
+		}
+		if err = e.db.Q().QueryRowContext(e.ctx, `SELECT m.team_id FROM team_memberships m JOIN teams t ON t.id=m.team_id JOIN organization_charts c ON c.id=t.organization_chart_id WHERE m.user_id=? AND c.current=1 ORDER BY m.team_id LIMIT 1`, applicationUser).Scan(&teamID); err != nil {
 			return "", err
 		}
 	}

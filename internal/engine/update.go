@@ -62,7 +62,24 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 			if team.ApproveOnly {
 				return nil, kferr.ValidationFailed(map[string][]string{"authorTeamId": {"is invalid"}})
 			}
-			member, er := store.EngUserIsActiveMember(ctx, tx, a.UserID, team.ID)
+			applicantID := a.UserID
+			if t.ProxyClientUserID != nil {
+				applicantID = *t.ProxyClientUserID
+			}
+			if len(in.ProxyClientUserID) > 0 {
+				if string(in.ProxyClientUserID) == "null" {
+					applicantID = a.UserID
+				} else {
+					var requestedProxyClientID *string
+					if er = json.Unmarshal(in.ProxyClientUserID, &requestedProxyClientID); er != nil {
+						return nil, kferr.InvalidParameter("Invalid proxy client")
+					}
+					if requestedProxyClientID != nil {
+						applicantID = *requestedProxyClientID
+					}
+				}
+			}
+			member, er := store.EngUserIsActiveMember(ctx, tx, applicantID, team.ID)
 			if er != nil {
 				return nil, er
 			}
@@ -86,7 +103,12 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 			}
 		}
 		if proxy != nil {
-			if err = pf14cValidateProxyClient(ctx, tx, a.UserID, *proxy, t.WorkflowID, kftime.FormatDate(now)); err != nil {
+			if t.ProxyClientUserID != nil && *t.ProxyClientUserID == *proxy {
+				err = pf14cValidateExistingProxyClient(ctx, tx, *proxy)
+			} else {
+				err = pf14cValidateProxyClient(ctx, tx, a.UserID, *proxy, t.WorkflowID, kftime.FormatDate(now))
+			}
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -94,7 +116,7 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		hasUpdate = true
 	}
 	if !approver && t.ProxyClientUserID != nil {
-		if err = pf14cValidateProxyClient(ctx, tx, a.UserID, *t.ProxyClientUserID, t.WorkflowID, kftime.FormatDate(now)); err != nil {
+		if err = pf14cValidateExistingProxyClient(ctx, tx, *t.ProxyClientUserID); err != nil {
 			return nil, err
 		}
 	}
@@ -309,8 +331,12 @@ func pf14IsSubmission(current string, requested *string) bool {
 // to its first actionable group, or to completion when no user action is
 // needed. The application restriction is re-checked at this point.
 func (e *Engine) pf14cSubmit(ctx context.Context, tx *store.Tx, a Actor, t *model.Ticket, def model.WorkflowDef, nominated *[]ApproverInput, now time.Time) error {
+	applicantID := a.UserID
+	if t.ProxyClientUserID != nil {
+		applicantID = *t.ProxyClientUserID
+	}
 	if t.AuthorTeamID != nil {
-		if err := pf14CheckApplicable(ctx, tx, a.UserID, def, *t.AuthorTeamID); err != nil {
+		if err := pf14CheckApplicable(ctx, tx, applicantID, def, *t.AuthorTeamID); err != nil {
 			return err
 		}
 		team, err := store.GetTeam(ctx, tx, *t.AuthorTeamID)
@@ -388,7 +414,8 @@ func pf14cCustomizeAssignees(ctx context.Context, tx *store.Tx, t model.Ticket, 
 				return err
 			}
 		}
-		if err = store.EngInsertCustomApprovers(ctx, tx, t.ID, v.RouteStepCode, v.UserIDs); err != nil {
+		uniqueUserIDs := pf14UniqueUserIDs(v.UserIDs)
+		if err = store.EngInsertCustomApprovers(ctx, tx, t.ID, v.RouteStepCode, uniqueUserIDs); err != nil {
 			return err
 		}
 		existing, err := store.EngStepAssignees(ctx, tx, step.ID)
@@ -399,7 +426,7 @@ func pf14cCustomizeAssignees(ctx context.Context, tx *store.Tx, t model.Ticket, 
 		for _, assignee := range existing {
 			present[assignee.UserID] = true
 		}
-		for _, userID := range v.UserIDs {
+		for _, userID := range uniqueUserIDs {
 			if _, err = store.GetUser(ctx, tx, userID); err != nil {
 				return kferr.ValidationFailed(map[string][]string{"approvers": {"contains an unknown user"}})
 			}

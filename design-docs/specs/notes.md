@@ -314,6 +314,18 @@ These are scope cuts, not inferences. Each is visible to API clients only as a c
 | INF-RTE-07 | Approval-only teams are ineligible application teams both when a ticket is created and when a draft/rejected ticket is submitted. | Team setting article 360044982853; create and submission regressions. |
 | INF-RTE-08 | An active proxy-applicant registration with an empty workflow list is unrestricted; date bounds still apply. | Proxy settings article 360045038013; regression creates on an otherwise-unlisted workflow. |
 
+### Round-5 routing, proxy application, recovery, and comments (INF-R5-*)
+
+| ID | Inference / compatibility decision | Evidence |
+|---|---|---|
+| INF-R5-01 | Nomination minimums count distinct user IDs. Repeated IDs do not satisfy a minimum requiring additional users and are stored once. | Route manual article 360044982933; applicant/previous-approver nomination tests. |
+| INF-R5-02 | Manager self-approval is the final assignee fallback only when route execution conditions allow the step to run; it does not reactivate a conditionally skipped step. | Execution-condition article 360044982933 and manager fallback article 4414502375577; conditional-skip regression. |
+| INF-R5-03 | During proxy application, application-team membership and workflow eligibility use the proxy client (the applicant represented by the application); the submitting proxy remains the ticket author. | Application procedure article 360044547694, official schema `authorTeamId`/`proxyClientUserId`, and proxy-application regression. |
+| INF-R5-04 | Editing proxy-applicant registration settings affects new tickets. An existing ticket keeps its proxy-client entitlement while that client remains active; selecting a different client and creating a ticket still require a current matching registration. | Proxy settings article 360045038013 and proxy registration article 1500003077661; existing-draft edit and submit regression. |
+| INF-R5-05 | Applicant-supplied `approvers` may target only `author_customizable` steps, including direct in-progress creation; `assignee_customizable` nominations are reserved for the preceding approver. | Official schema `createTicket.approvers`, route nomination article 360044982933, and direct-application regression. |
+| INF-R5-06 | Administrator recovery identifies the specific `ticketStepId` to receive the added approver; it must be an active step in the ticket's current parallel group. | Recovery procedure article 28410770323737; later-parallel-step UI API regression. |
+| INF-R5-07 | Submission and approval cancellation accept optional comments through punchflow `/ui/api` controls. A stored comment emits `comment_created` after submission lifecycle events or after `ticket_updated` for cancellation, and requires `commentingEnabled`. | Comment article 39425902443545, cancellation article 45346362606617, webhook reference, and action-comment regressions. |
+
 ### Sharing, organization charts, and administrative cleanup (INF-SHR-*)
 
 | ID | Inference / compatibility decision | Evidence |

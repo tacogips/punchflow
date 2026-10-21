@@ -12,7 +12,8 @@ export default function ControlsBar(props: {
   controls: TicketControls;
   steps: { stepOrder?: unknown; title?: unknown }[];
   busy?: boolean;
-  onCancelApproval: () => void;
+  commentingEnabled?: boolean;
+  onCancelApproval: (comment?: string) => void;
   onRaise: (to?: number) => void;
   onAddStep: (body: CustomStepBody) => void;
 }) {
@@ -20,6 +21,7 @@ export default function ControlsBar(props: {
   const [open, setOpen] = createSignal(false);
   const [form, setForm] = createSignal<CustomStepForm>(emptyForm());
   const [problem, setProblem] = createSignal("");
+  const [cancelComment, setCancelComment] = createSignal("");
   const patch = (change: Partial<CustomStepForm>) => setForm((current) => ({ ...current, ...change }));
   const submit = (event: Event) => {
     event.preventDefault();
@@ -31,7 +33,7 @@ export default function ControlsBar(props: {
   };
   const chosenTarget = () => target() === "" ? props.controls.raiseTargetStepOrders[0] : Number(target());
   return <Show when={hasAnyControl(props.controls)}><section class="action-bar controls-bar" aria-label="Approval controls">
-    <Show when={props.controls.cancelApproval}><button type="button" disabled={props.busy} onClick={() => props.onCancelApproval()}>Cancel my approval</button></Show>
+    <Show when={props.controls.cancelApproval}><Show when={props.commentingEnabled}><label>Cancellation comment <textarea value={cancelComment()} onInput={(event) => setCancelComment(event.currentTarget.value)} /></label></Show><button type="button" disabled={props.busy} onClick={() => { props.onCancelApproval(cancelComment() || undefined); setCancelComment(""); }}>Cancel my approval</button></Show>
     <Show when={props.controls.raise}>
       <Show when={props.controls.raiseTargetStepOrders.length > 1}>
         <label>Raise to <select value={target()} onChange={(event) => setTarget(event.currentTarget.value)}><For each={props.controls.raiseTargetStepOrders}>{(order) => <option value={order}>{raiseTargetLabel(order, props.steps)}</option>}</For></select></label>

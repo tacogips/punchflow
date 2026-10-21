@@ -9,6 +9,14 @@ import (
 )
 
 func createTicket(t *testing.T, env *testutil.Env) string {
+	return createTicketAmount(t, env, 5000)
+}
+
+func createTicketAmount(t *testing.T, env *testutil.Env, amount int) string {
+	return createTicketStatus(t, env, "in_progress", amount)
+}
+
+func createTicketStatus(t *testing.T, env *testutil.Env, status string, amount int) string {
 	t.Helper()
 	workflowID, err := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
 	if err != nil {
@@ -37,9 +45,9 @@ func createTicket(t *testing.T, env *testutil.Env) string {
 		}
 	}
 	response := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
-		"status": "in_progress", "workflowId": workflowID, "authorTeamId": teamID, "title": "ticket UI test",
+		"status": status, "workflowId": workflowID, "authorTeamId": teamID, "title": "ticket UI test",
 		"inputs": []map[string]any{
-			{"formFieldId": fields["amount"], "value": 5000},
+			{"formFieldId": fields["amount"], "value": amount},
 			{"formFieldId": fields["purpose"], "value": "ticket UI test"},
 			{"formFieldId": fields["expense-date"], "value": "2026-01-01"},
 			{"formFieldId": fields["cost-center"], "generalMasterItemId": itemID},
@@ -144,6 +152,33 @@ func TestCancelApprovalEndpoint(t *testing.T) {
 	}
 	if response = env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+id+"/approve", nil); response.Status != http.StatusOK {
 		t.Fatalf("approve again: %d %s", response.Status, response.Body)
+	}
+}
+
+func TestSubmitAndCancelApprovalAcceptUIComments(t *testing.T) {
+	env := testutil.New(t)
+	draftID := createTicketStatus(t, env, "draft", 5000)
+	submissionComment := "Submitted with this note"
+	response := env.Do(t, testutil.Employee, http.MethodPost, "/ui/api/tickets/"+draftID+"/submit", map[string]any{"comment": submissionComment})
+	if response.Status != http.StatusOK {
+		t.Fatalf("submit with comment: %d %s", response.Status, response.Body)
+	}
+	var stored string
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT body FROM comments WHERE ticket_id=?`, draftID).Scan(&stored); err != nil || stored != submissionComment {
+		t.Fatalf("submission comment=%q err=%v", stored, err)
+	}
+
+	activeID := createTicket(t, env)
+	if response = env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+activeID+"/approve", nil); response.Status != http.StatusOK {
+		t.Fatalf("approve before cancellation: %d %s", response.Status, response.Body)
+	}
+	cancelComment := "Reopen with this note"
+	response = env.Do(t, testutil.Manager, http.MethodPost, "/ui/api/tickets/"+activeID+"/cancel-approval", map[string]any{"comment": cancelComment})
+	if response.Status != http.StatusOK {
+		t.Fatalf("cancel with comment: %d %s", response.Status, response.Body)
+	}
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT body FROM comments WHERE ticket_id=?`, activeID).Scan(&stored); err != nil || stored != cancelComment {
+		t.Fatalf("cancellation comment=%q err=%v", stored, err)
 	}
 }
 
@@ -256,8 +291,10 @@ func TestAssignCurrentApproverAddsDistinctUsersToAssignedCurrentStep(t *testing.
 		t.Fatal(err)
 	}
 	var suspendedAssigneeID string
+	var activeStepID string
 	for _, step := range steps {
 		if step.StepOrder == 1 && step.Status == "in_progress" {
+			activeStepID = step.ID
 			// A suspended original assignee remains attached while an active
 			// replacement is added (Help Center articles 28410770323737 and
 			// 43509621580313; INF-NUM-06).
@@ -269,8 +306,11 @@ func TestAssignCurrentApproverAddsDistinctUsersToAssignedCurrentStep(t *testing.
 			}
 		}
 	}
+	if activeStepID == "" {
+		t.Fatal("active step not found")
+	}
 	for _, userCode := range []string{"accountant", "ceo"} {
-		response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"userId": env.UserID(t, userCode)})
+		response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"ticketStepId": activeStepID, "userId": env.UserID(t, userCode)})
 		if response.Status != http.StatusOK {
 			t.Fatalf("assign current approver %s status=%d body=%s", userCode, response.Status, response.Body)
 		}
@@ -330,7 +370,7 @@ func TestAssignCurrentApproverFillsMultiApprovalStepIncrementally(t *testing.T) 
 		t.Fatal(err)
 	}
 	for _, userCode := range []string{"accountant", "ceo"} {
-		response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"userId": env.UserID(t, userCode)})
+		response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{"ticketStepId": activeStepID, "userId": env.UserID(t, userCode)})
 		if response.Status != http.StatusOK {
 			t.Fatalf("assign multi-approval user %s status=%d body=%s", userCode, response.Status, response.Body)
 		}
@@ -341,5 +381,43 @@ func TestAssignCurrentApproverFillsMultiApprovalStepIncrementally(t *testing.T) 
 	}
 	if len(assignees) != 2 {
 		t.Fatalf("multi-approval assignees=%+v, want both distinct users", assignees)
+	}
+}
+
+func TestAssignCurrentApproverTargetsSelectedParallelStep(t *testing.T) {
+	env := testutil.New(t)
+	ticketID := createTicketAmount(t, env, 100000)
+	if response := env.Do(t, testutil.Manager, http.MethodPost, "/v1/tickets/"+ticketID+"/approve", nil); response.Status != http.StatusOK {
+		t.Fatalf("advance to parallel group: %d %s", response.Status, response.Body)
+	}
+	steps, err := store.EngTicketSteps(t.Context(), env.DB.Q(), ticketID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := []string{}
+	for _, step := range steps {
+		if step.StepOrder == 2 && step.Status == "in_progress" {
+			active = append(active, step.ID)
+		}
+	}
+	if len(active) != 2 {
+		t.Fatalf("active parallel steps=%v, want two", active)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/tickets/"+ticketID+"/assignees", map[string]any{
+		"ticketStepId": active[1], "userId": env.UserID(t, "engineer"),
+	})
+	if response.Status != http.StatusOK {
+		t.Fatalf("assign selected parallel step: %d %s", response.Status, response.Body)
+	}
+	assignees, err := store.EngStepAssignees(t.Context(), env.DB.Q(), active[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, assignee := range assignees {
+		found = found || assignee.UserID == env.UserID(t, "engineer")
+	}
+	if !found {
+		t.Fatalf("selected step %s assignees=%+v", active[1], assignees)
 	}
 }

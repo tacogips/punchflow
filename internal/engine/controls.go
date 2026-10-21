@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 
 	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
@@ -155,7 +156,7 @@ func (e *Engine) pf15CancelTarget(ctx context.Context, q store.Querier, a Actor,
 
 // CancelApproval withdraws the caller's latest approval so the step becomes
 // current again and the caller may act on it anew.
-func (e *Engine) CancelApproval(ctx context.Context, tx *store.Tx, a Actor, id string) ([]model.WebhookEvent, error) {
+func (e *Engine) CancelApproval(ctx context.Context, tx *store.Tx, a Actor, id string, comment *string) ([]model.WebhookEvent, error) {
 	t, err := e.pf15Guard(ctx, tx, a, id)
 	if err != nil {
 		return nil, err
@@ -221,7 +222,15 @@ func (e *Engine) CancelApproval(ctx context.Context, tx *store.Tx, a Actor, id s
 	if err = store.EngUpdateTicket(ctx, tx, t); err != nil {
 		return nil, err
 	}
-	return []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, id, a.UserID)}, nil
+	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketUpdated, id, a.UserID)}
+	if comment != nil && strings.TrimSpace(*comment) != "" {
+		_, commentEvents, commentErr := e.pf14AddComment(ctx, tx, a, id, *comment, nil)
+		if commentErr != nil {
+			return nil, commentErr
+		}
+		events = append(events, commentEvents...)
+	}
+	return events, nil
 }
 
 // pf15RaiseTargets lists later groups that authorize raising: the actor is an

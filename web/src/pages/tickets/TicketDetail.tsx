@@ -23,16 +23,18 @@ function TicketContent(props: {
   busy: boolean;
   error: string;
   controls: TicketControls;
-  onCancelApproval: () => void;
+  onCancelApproval: (comment?: string) => void;
   onRaise: (to?: number) => void;
   onAddStep: (body: CustomStepBody) => void;
   onRemoveStep: (stepId: string) => void;
-  onAssignCurrentApprover: (userId: string) => void;
+  onAssignCurrentApprover: (ticketStepId: string, userId: string) => void;
   onSetHold: (assigneeId: string, pending: boolean) => void;
   onAction: (name: "approve" | "reject" | "deny" | "withdraw" | "archive" | "edit", data?: { comment?: string; to?: number }) => void;
   onChanged: () => void;
 }) {
-  const t = props.ticket; const workflow = obj(t.workflow); const subStatus = () => (t.subStatus ?? null) as SubStatus | null; const labels = () => (Array.isArray(t.labels) ? t.labels : []) as Label[]; const author = obj(t.author); const currentSession = session(); const [replacementUserId, setReplacementUserId] = createSignal("");
+  const t = props.ticket; const workflow = obj(t.workflow); const subStatus = () => (t.subStatus ?? null) as SubStatus | null; const labels = () => (Array.isArray(t.labels) ? t.labels : []) as Label[]; const author = obj(t.author); const currentSession = session(); const [replacementUserId, setReplacementUserId] = createSignal(""); const [replacementStepId, setReplacementStepId] = createSignal("");
+  const activeCurrentSteps = () => arr(t.steps).map(obj).filter((step) => Number(step.stepOrder) === Number(t.currentStep) && step.status === "in_progress");
+  const selectedStepId = () => replacementStepId() || str(activeCurrentSteps()[0]?.id);
   return <>
     <header class="page-header"><div><h1>{str(t.ticketNumber) || str(t.title) || "Ticket"}</h1><p>{str(t.title)} · {str(workflow.name)}</p></div><span class={`status status-${t.status}`}>{t.status.replaceAll("_", " ")}</span><WatchToggle ticketId={t.id} /></header>
     <Show when={subStatus()}><p class="sub-status" aria-label="Sub-status"><span class="sub-status-badge">{subStatus()!.name}</span>
@@ -40,9 +42,10 @@ function TicketContent(props: {
     <Show when={props.error}><p role="alert">{props.error}</p></Show>
     <dl class="ticket-metadata"><dt>Author</dt><dd>{userLabel(author) || "Unknown"}</dd><dt>Created</dt><dd>{formatJst(str(t.createdAt) || null)}</dd><dt>Updated</dt><dd>{formatJst(str(t.updatedAt) || null)}</dd><dt>Opened</dt><dd>{formatJst(str(t.openedAt) || null)}</dd><dt>Current step</dt><dd>{String(t.currentStep ?? "—")}</dd></dl>
     <Show when={currentSession}><ActionBar ticket={t} me={{ id: currentSession!.user.id, permissions: currentSession!.permissions }} busy={props.busy} onAction={props.onAction} /></Show>
-    <Show when={currentSession}><ControlsBar controls={props.controls} steps={(t.steps ?? []) as { stepOrder?: unknown; title?: unknown }[]} busy={props.busy} onCancelApproval={props.onCancelApproval} onRaise={props.onRaise} onAddStep={props.onAddStep} /></Show>
-    <Show when={currentSession?.permissions.includes("ticket_write") && t.status === "in_progress"}><form class="action-bar" onSubmit={(event) => { event.preventDefault(); if (replacementUserId().trim()) { props.onAssignCurrentApprover(replacementUserId().trim()); setReplacementUserId(""); } }}>
-      <label>Add approver to an empty current step <input value={replacementUserId()} onInput={(event) => setReplacementUserId(event.currentTarget.value)} placeholder="Active user ID" /></label>
+    <Show when={currentSession}><ControlsBar controls={props.controls} steps={(t.steps ?? []) as { stepOrder?: unknown; title?: unknown }[]} busy={props.busy} commentingEnabled={workflow.commentingEnabled !== false} onCancelApproval={props.onCancelApproval} onRaise={props.onRaise} onAddStep={props.onAddStep} /></Show>
+    <Show when={currentSession?.permissions.includes("ticket_write") && t.status === "in_progress"}><form class="action-bar" onSubmit={(event) => { event.preventDefault(); if (selectedStepId() && replacementUserId().trim()) { props.onAssignCurrentApprover(selectedStepId(), replacementUserId().trim()); setReplacementUserId(""); } }}>
+      <label>Current step <select value={selectedStepId()} onChange={(event) => setReplacementStepId(event.currentTarget.value)}><For each={activeCurrentSteps()}>{(step) => <option value={str(step.id)}>{str(step.title) || str(step.id)}</option>}</For></select></label>
+      <label>Add approver <input value={replacementUserId()} onInput={(event) => setReplacementUserId(event.currentTarget.value)} placeholder="Active user ID" /></label>
       <button type="submit" disabled={props.busy || !replacementUserId().trim()}>Add approver</button>
     </form></Show>
     <TicketLabels ticketId={t.id} labels={labels()} onChanged={props.onChanged} />
@@ -73,11 +76,11 @@ export default function TicketDetail() {
     catch (cause) { setError(cause instanceof Error ? cause.message : failure); }
     finally { setBusy(false); }
   };
-  const cancelApproval = () => void control(() => apiFetch("POST", uiTicketPath(params.id, "/cancel-approval")), "Unable to cancel the approval");
+  const cancelApproval = (comment?: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/cancel-approval"), comment ? { comment } : undefined), "Unable to cancel the approval");
   const raise = (to?: number) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/raise"), to === undefined ? undefined : { to }), "Unable to raise the ticket");
   const addStep = (body: CustomStepBody) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/custom-steps"), body), "Unable to add the step");
   const removeStep = (stepId: string) => void control(() => apiFetch("DELETE", uiTicketPath(params.id, `/custom-steps/${encodeURIComponent(stepId)}`)), "Unable to remove the step");
-  const assignCurrentApprover = (userId: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/assignees"), { userId }), "Unable to add the approver");
+  const assignCurrentApprover = (ticketStepId: string, userId: string) => void control(() => apiFetch("POST", uiTicketPath(params.id, "/assignees"), { ticketStepId, userId }), "Unable to add the approver");
   const setHold = (assigneeId: string, pending: boolean) => void control(() => apiFetch("POST", uiTicketPath(params.id, `/assignees/${encodeURIComponent(assigneeId)}/pending`), { pending }), "Unable to update the approval hold");
   const action = async (name: "approve" | "reject" | "deny" | "withdraw" | "archive" | "edit", data?: { comment?: string; to?: number }) => {
     if (name === "edit") return;

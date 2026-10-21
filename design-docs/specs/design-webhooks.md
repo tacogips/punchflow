@@ -51,7 +51,7 @@ Events are produced by the engine (and the UI API) in this order within one acti
 | User deletion | one `ticket_archived` per archived authored ticket, attributed to the acting administrator; affected approver steps remain unresolved and do not emit completion | INF-79, INF-LIFE-API-06 |
 | Team deletion | one `ticket_archived` per unfinished ticket authored from the deleted team, attributed to the acting administrator | INF-LIFE-API-05 |
 | UI control operations: cancel approval, add/remove custom step, attach/detach label | `ticket_updated` (one per real change) | Raise is audited but emits no webhook event (INF-66) |
-| Comment create / update / delete, or a comment sent with approve/reject/deny | `comment_created` / `comment_updated` | After the action event (INF-22) |
+| Comment create / update / delete, or a comment sent with approve/reject/deny, UI submission, or UI approval cancellation | `comment_created` / `comment_updated` | After the action event (INF-22, INF-R5-07) |
 
 ### Payload and headers
 

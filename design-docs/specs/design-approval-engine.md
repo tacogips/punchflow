@@ -139,7 +139,9 @@ Condition operators (`equal`, `not_equal`, `greater_than(_or_equal)`, `less_than
 
 Restricted fields remain available to route-condition selection under the applicant context. In the separate route-step context used for execution conditions, dynamic user/team assignment and fallback resolution they are present as known-empty values, so `is_empty` and `is_not_empty` conditions evaluate consistently (INF-SEC-05, INF-RTE-01). Applicant-team condition codes resolve against the active organization chart; master conditions resolve selected item IDs to the configured master/item codes and compare multiple selections by membership. `other_variable` conditions use the same variable lookup as other form-backed route conditions (INF-RTE-02).
 
-Applicant and previous-approver nominations reject inactive users and users outside configured team/grade targets. Explicit previous-approver nominations enforce `minCustomAssignees`; zero allows an empty nomination and skips that step, while a positive minimum requires that many users. An omitted previous-step nomination remains available for runtime approver customization (INF-RTE-03, INF-RTE-04). Manager steps with self-approval enabled assign the applicant after manager search and configured fallbacks yield no candidate (INF-RTE-05). Advancement and send-back share step entry, including team assignment refresh and sharing synchronization (INF-RTE-06). Approval-only teams cannot be selected as the application team at creation or submission (INF-RTE-07).
+Applicant and previous-approver nominations reject inactive users and users outside configured team/grade targets. Applicant submissions may nominate only `author_customizable` steps; `assignee_customizable` steps are reserved for the preceding approver, including on direct in-progress creation (INF-R5-05). Nomination minimums count distinct user IDs (INF-R5-01). Explicit previous-approver nominations enforce `minCustomAssignees`; zero allows an empty nomination and skips that step, while a positive minimum requires that many distinct users. An omitted previous-step nomination remains available for runtime approver customization (INF-RTE-03, INF-RTE-04). Manager steps with self-approval enabled assign the applicant after manager search and configured fallbacks yield no candidate, but cannot override an execution-condition skip (INF-RTE-05, INF-R5-02). Advancement and send-back share step entry, including team assignment refresh and sharing synchronization (INF-RTE-06). Approval-only teams cannot be selected as the application team at creation or submission (INF-RTE-07).
+
+Proxy applications validate the selected application team and workflow eligibility against `proxyClientUserId`, while the proxy remains `author` (INF-R5-03). The ticket's existing proxy-client entitlement survives later registration edits while the client remains active; new tickets and changed client selections still require a matching current registration (INF-R5-04).
 
 | stepType | Assignees |
 |---|---|
@@ -192,7 +194,9 @@ Standard ticket numbers use the workflow counter unless `ticketNumberKey` is con
 
 `GET /ui/api/tickets/{id}/controls` returns the same eligibility as booleans (`cancelApproval`, `raise` + `raiseTargetStepOrders`, `addCustomStep` + `customStepInsertAfter`, `removableCustomStepIds`) so the UI shows only valid buttons. Raised steps count as finished for progression (`pf15StepDone`), and the assignment check before approving matches the next group to route steps by step code because custom steps shift ticket step orders away from route orders. Every UI API mutation writes an audit log (`ticket.label_attach`, `ticket.label_detach`, `ticket.cancel_approval`, `ticket.raise`, `ticket.add_custom_step`, `ticket.remove_custom_step`).
 
-`POST /ui/api/tickets/{id}/assignees` lets a `ticket_write` administrator add a distinct active user to an active step in the current group, even when the step already has assignments. Existing suspended assignments are retained, and duplicate assignments are rejected (INF-NUM-06). Raising still has no webhook event, but local approval-request notifications are generated independently for the newly current approvers (INF-LIFE-R3-16).
+`POST /ui/api/tickets/{id}/assignees` lets a `ticket_write` administrator add a distinct active user to the specified `ticketStepId` in the current group, even when the step already has assignments. The selected ID must identify an active step in that group. Existing suspended assignments are retained, and duplicate assignments are rejected (INF-NUM-06, INF-R5-06). Raising still has no webhook event, but local approval-request notifications are generated independently for the newly current approvers (INF-LIFE-R3-16).
+
+`POST /ui/api/tickets/{id}/submit` submits a draft or rejected ticket and accepts an optional `comment`; `POST /ui/api/tickets/{id}/cancel-approval` also accepts an optional `comment`. Both controls use ordinary comment storage and emit `comment_created` after their lifecycle event(s), and reject non-empty comments when `commentingEnabled` is false (INF-R5-07). Public REST create/update payloads do not gain these UI-only comment fields.
 
 ### Assignee holds
 
@@ -204,7 +208,7 @@ Standard ticket numbers use the workflow counter unless `ticketNumberKey` is con
 
 ### Comments with actions
 
-`comment` on approve/reject/deny: forbidden when `commentingEnabled` is false (`422 validation_failed`, `errors.comment`), required when the matching `commentingRequiredOn*` is true (`422 validation_failed`, `errors.comment`). Stored as a normal comment authored by the actor (INF-22).
+`comment` on approve/reject/deny: forbidden when `commentingEnabled` is false (`422 validation_failed`, `errors.comment`), required when the matching `commentingRequiredOn*` is true (`422 validation_failed`, `errors.comment`). Stored as a normal comment authored by the actor (INF-22). UI submission and cancellation comments use the same storage and event helper but remain on `/ui/api` (INF-R5-07).
 
 ### Proxy application
 

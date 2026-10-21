@@ -28,7 +28,7 @@ export default function TicketEdit() {
   });
   const [form, setForm] = createSignal<Record<string, FieldState>>({}); const [slips, setSlips] = createSignal<SlipRows>({});
   const [title, setTitle] = createSignal(""); const [teamId, setTeamId] = createSignal(""); const [proxyClientUserId, setProxyClientUserId] = createSignal("");
-  const [approvers, setApprovers] = createSignal<Record<string, string>>({}); const [errors, setErrors] = createSignal<Record<string, string[]>>({}); const [error, setError] = createSignal(""); const [busy, setBusy] = createSignal(false); const [initialized, setInitialized] = createSignal("");
+  const [approvers, setApprovers] = createSignal<Record<string, string>>({}); const [submissionComment, setSubmissionComment] = createSignal(""); const [errors, setErrors] = createSignal<Record<string, string[]>>({}); const [error, setError] = createSignal(""); const [busy, setBusy] = createSignal(false); const [initialized, setInitialized] = createSignal("");
   createEffect(() => {
     const definition = workflow(); const existing = ticket(); const key = `${workflowId()}:${existing?.id ?? "new"}`;
     if (!definition || initialized() === key) return;
@@ -51,7 +51,8 @@ export default function TicketEdit() {
     const formPayload: Record<string, unknown> = { ...buildFormPayload(definition, form(), slips(), { viewable: canView, approver: approverEdit() }) };
     const approversPayload = buildApprovers(approvers());
     const payload: Record<string, unknown> = params.id && approverEdit() ? formPayload : {
-      status, workflowId: workflowId(), authorTeamId: teamId(), proxyClientUserId: proxyClientUserId() || null,
+      ...(status === "draft" ? { status: ticket()?.status === "rejected" ? "rejected" : "draft" } : params.id ? {} : { status: "draft" }),
+      workflowId: workflowId(), authorTeamId: teamId(), proxyClientUserId: proxyClientUserId() || null,
       title: title().trim() || null, ...formPayload,
       ...(params.id ? (approversPayload.length ? { approvers: approversPayload } : {}) : { approvers: approversPayload }),
     };
@@ -59,6 +60,9 @@ export default function TicketEdit() {
       const saved = params.id
         ? await apiFetch<TicketDetail>("PATCH", `/v1/tickets/${params.id}`, payload)
         : await apiFetch<TicketDetail>("POST", "/v1/tickets", payload);
+      if (status === "in_progress" && !approverEdit()) {
+        await apiFetch("POST", `/ui/api/tickets/${saved.id}/submit`, submissionComment().trim() ? { comment: submissionComment().trim() } : undefined);
+      }
       if (status === "draft") window.location.assign(`/tickets/${saved.id}`);
       else window.location.assign(`/tickets/${saved.id}`);
     } catch (cause) {
@@ -83,6 +87,7 @@ export default function TicketEdit() {
             </Show>
           </section></Show>}</For>
           <For each={routeSteps().filter((step) => obj(step).stepType === "author_customizable")}>{(step) => { const code = str(obj(step).code); return <label>Approvers for {str(obj(step).title) || code}<input value={approvers()[code] ?? ""} onInput={(event) => setApprovers((current) => ({ ...current, [code]: event.currentTarget.value }))} placeholder="User IDs separated by commas" /></label>; }}</For>
+          <Show when={!approverEdit() && obj(workflow()).commentingEnabled !== false}><label>Submission comment<textarea value={submissionComment()} onInput={(event) => setSubmissionComment(event.currentTarget.value)} /></label></Show>
           <Show when={errors().base?.length}><ul class="field-errors"><For each={errors().base}>{(message) => <li>{message}</li>}</For></ul></Show>
           <div class="form-actions"><Show when={!approverEdit()}><button type="button" disabled={busy()} onClick={() => void save("draft")}>Save draft</button></Show><button disabled={busy()}>{approverEdit() ? "Save changes" : params.id ? "Save and submit" : "Submit"}</button></div>
         </form>}</Show>
