@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -49,6 +50,40 @@ func TestTeamTreeCreateUpdateAndPermissions(t *testing.T) {
 	}
 	if got := env.Do(t, testutil.Employee, http.MethodGet, "/v1/organizationCharts/"+pf19Chart+"/teams", nil); got.Status != http.StatusForbidden {
 		t.Fatalf("employee status=%d want 403", got.Status)
+	}
+}
+
+func TestInactiveChartTeamRenameDoesNotRewriteActiveWorkflowCondition(t *testing.T) {
+	env := testutil.New(t)
+	if _, err := env.DB.Q().ExecContext(t.Context(), `INSERT INTO teams(id,organization_chart_id,code,name,parent_id,approve_only,created_at,updated_at) VALUES('future-sales-east','00000000-0000-4000-8000-000000000028','sales-east','Future Sales East',NULL,0,1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	workflowID, err := store.WorkflowIDByCode(t.Context(), env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition.RouteConditions = []model.RouteCondition{{ID: "team-condition", ConditionType: "field", CombinationType: "all", ConditionFields: []model.ConditionField{{FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "sales-east"}}}}
+	raw, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=? WHERE id=?`, string(raw), definition.ID); err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/organizationCharts/00000000-0000-4000-8000-000000000028/teams/sales-east", map[string]any{"code": "future-east"})
+	if response.Status != http.StatusOK {
+		t.Fatalf("inactive chart rename status=%d body=%s", response.Status, response.Body)
+	}
+	updated, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), definition.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := updated.RouteConditions[0].ConditionFields[0].Value; got != "sales-east" {
+		t.Fatalf("active workflow condition value=%v, want sales-east", got)
 	}
 }
 

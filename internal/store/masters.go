@@ -276,7 +276,11 @@ func UpdateGeneralMasterItem(ctx context.Context, q Querier, x model.GeneralMast
 	if err := q.QueryRowContext(ctx, `SELECT code FROM general_master_items WHERE id=? AND general_master_id=?`, x.ID, x.GeneralMasterID).Scan(&oldCode); err != nil {
 		return err
 	}
-	if err := ReconcileDefinitionCodeChange(ctx, q, "master_item", oldCode, x.Code, x.UpdatedAt); err != nil {
+	master, err := GetGeneralMaster(ctx, q, x.GeneralMasterID)
+	if err != nil {
+		return err
+	}
+	if err := ReconcileDefinitionCodeChange(ctx, q, "master_item", oldCode, x.Code, x.UpdatedAt, master.Code); err != nil {
 		return err
 	}
 	inputs, err := json.Marshal(x.Inputs)

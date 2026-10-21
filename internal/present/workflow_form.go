@@ -101,6 +101,7 @@ func pf08SlipFieldInContext(ctx context.Context, q store.Querier, f model.SlipFi
 	if f.GeneralMasterCode == "" {
 		return out
 	}
+	out["defaultGeneralMasterItem"] = pf08DefaultGeneralMasterItem(ctx, q, f.GeneralMasterCode, f.DefaultGeneralMasterItemCode)
 	id, err := store.ResolveID(ctx, q, "general_masters", f.GeneralMasterCode)
 	if err != nil {
 		out["generalMaster"] = nil

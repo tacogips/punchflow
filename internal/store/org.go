@@ -59,6 +59,17 @@ func OrgChartUpdate(ctx context.Context, q Querier, id, name string, at time.Tim
 	res, e := q.ExecContext(ctx, "UPDATE organization_charts SET name=?,updated_at=? WHERE id=?", name, Millis(at), id)
 	return pf19RowsAffected(res, e)
 }
+func OrgChartIsCurrent(ctx context.Context, q Querier, id string) (bool, error) {
+	var current bool
+	err := q.QueryRowContext(ctx, `SELECT current=1 FROM organization_charts WHERE id=?`, id).Scan(&current)
+	if err == sql.ErrNoRows {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("store: read organization chart current status: %w", err)
+	}
+	return current, nil
+}
 func OrgChartDelete(ctx context.Context, q Querier, id string) error {
 	res, e := q.ExecContext(ctx, "DELETE FROM organization_charts WHERE id=?", id)
 	return pf19RowsAffected(res, e)
@@ -123,6 +134,19 @@ func OrgChartActivate(ctx context.Context, q Querier, id string, at time.Time) e
 	}
 	res, e := q.ExecContext(ctx, "UPDATE organization_charts SET current=1,updated_at=? WHERE id=?", Millis(at), id)
 	return pf19RowsAffected(res, e)
+}
+
+// CurrentTeamByCode resolves a historical team code to the active chart.
+func CurrentTeamByCode(ctx context.Context, q Querier, code string) (model.Team, error) {
+	var id string
+	err := q.QueryRowContext(ctx, `SELECT t.id FROM teams t JOIN organization_charts c ON c.id=t.organization_chart_id WHERE c.current=1 AND t.code=?`, code).Scan(&id)
+	if err == sql.ErrNoRows {
+		return model.Team{}, ErrNotFound
+	}
+	if err != nil {
+		return model.Team{}, fmt.Errorf("store: resolve current-chart team %s: %w", code, err)
+	}
+	return GetTeam(ctx, q, id)
 }
 
 // TeamList returns a page of teams of the chart under parentID (root teams when

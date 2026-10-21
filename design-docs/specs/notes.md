@@ -374,6 +374,15 @@ These are scope cuts, not inferences. Each is visible to API clients only as a c
 | INF-A5-06 | Deleting a grade removes it from stored route/workflow grade filters; if the removed grade was the last grade in a team target, the grade operator is removed and the target applies to all members of that team. Grade-only conditions that reference the deleted grade are removed. | Grade deletion FAQ 50187130016793; route/workflow cleanup regression. |
 | INF-A5-07 | Resource code updates cascade through fixture-defined route/workflow references by changing code-bearing fields while retaining stable resource IDs. This covers teams, users, grades, general masters and general-master items. | Organization chart FAQ 20907729963545 (team-code propagation); in-memory fixture-reference regression for all supported code-bearing fields. |
 | INF-A5-08 | Team membership request-shape failures follow the OpenAPI required/type rules: omitted `leader` and update fields return `400 invalid_parameter`, omitted creation `gradeIds` uses the configured default, and explicit `gradeIds: null` is rejected. | Official OpenAPI `createTeamMembers`/`updateTeamMember`, REST error reference; membership regressions. |
+### Round-6 administrative reconciliation (INF-A6-*)
+| ID | Inference / compatibility decision | Evidence |
+|---|---|---|
+| INF-A6-01 | Team and grade condition references are typed by `fieldKey`; renames update their `value`, while deletion removes only the matching typed condition object and preserves same-text literals. | Route condition schemas and deletion/code-change FAQs 360045071813, 50187130016793, 20907729963545; reconciliation regression. |
+| INF-A6-02 | A general-master item code rename updates condition/default-item references only when their sibling `generalMasterCode` matches the parent master. | OpenAPI `updateGeneralMasterItem`; duplicate item-code regression across two masters. |
+| INF-A6-03 | Team changes in an inactive organization chart remain isolated from globally stored active workflow/route definitions until chart activation. | Future chart FAQ 360045217634; inactive-chart mutation regression. |
+| INF-A6-04 | Activating a chart removes typed team conditions for teams that disappear, alongside other settings for those missing codes; fixed team targets retain route invalidation behavior. | Chart-switch FAQ 20907729963545 and team-deletion FAQ 360045071813; activation reconciliation regression. |
+| INF-A6-05 | Automatic team-member and manager sharing after chart activation resolves the ticket's historical applicant-team code into the current chart before querying memberships and ancestry; ticket history remains unchanged. | Automatic-sharing FAQ 59493283644313 and chart-switch FAQ 20907729963545; active-chart sharing regression. |
+| INF-A6-06 | A detail field's configured `defaultGeneralMasterItemCode` is presented as the resolved item object from its configured master, matching main-form fields. | OpenAPI `SlipFieldDetail.defaultGeneralMasterItem`; populated workflow-detail presenter regression. |
 ### Round-5 API and sharing compatibility (INF-M5-*)
 
 | ID | Inference / compatibility decision | Evidence |

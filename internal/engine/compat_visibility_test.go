@@ -300,6 +300,44 @@ func TestWorkflowVisibleToTeamMembersPersistsIndividualViewers(t *testing.T) {
 	}
 }
 
+func TestSharingRefreshResolvesHistoricalTeamIntoActiveChart(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetWorkflow(t, e, "expense-claim", "$.visibleToTeamMembers", true)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	oldTeamID := e.team("sales")
+	newTeamID := "active-chart-sales"
+	if _, err := e.db.Q().ExecContext(e.ctx, `INSERT INTO organization_charts(id,name,current,created_at,updated_at) VALUES('future-chart','Future',0,1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.db.Q().ExecContext(e.ctx, `INSERT INTO teams(id,organization_chart_id,code,name,parent_id,approve_only,created_at,updated_at) VALUES(?, 'future-chart','sales','Sales new chart',NULL,0,1,1)`, newTeamID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.WithTx(e.ctx, func(tx *store.Tx) error { return store.OrgChartActivate(e.ctx, tx, "future-chart", e.clock.Now()) }); err != nil {
+		t.Fatal(err)
+	}
+	newMember := e.user("assistant")
+	if _, err := e.db.Q().ExecContext(e.ctx, `INSERT INTO team_memberships(id,team_id,user_id,leader,grade_ids,created_at,updated_at) VALUES(?,?,?,0,'[]',1,1)`, store.NewID(), newTeamID, newMember); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.WithTx(e.ctx, func(tx *store.Tx) error { return SyncWorkflowManagerSharingForTicket(e.ctx, tx, id) }); err != nil {
+		t.Fatal(err)
+	}
+	ticket := e.ticket(id)
+	if ticket.AuthorTeamID == nil || *ticket.AuthorTeamID != oldTeamID {
+		t.Fatalf("historical authorTeamID changed: %v", ticket.AuthorTeamID)
+	}
+	viewers, err := store.TicketViewers(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, viewer := range viewers {
+		if viewer.UserID != nil && *viewer.UserID == newMember {
+			return
+		}
+	}
+	t.Fatal("active-chart team member was not added to ticket viewers")
+}
+
 func TestWorkflowWatchersAreSharedUsers(t *testing.T) {
 	e := pf14Setup(t)
 	watcherID := e.user("hr-manager")

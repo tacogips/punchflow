@@ -135,6 +135,50 @@ func TestDefinitionCodeRenameAndGradeCleanup(t *testing.T) {
 	}
 }
 
+func TestConditionReferencesReconcileByTypeAndMaster(t *testing.T) {
+	ctx, db := openMemory(t)
+	for _, statement := range []string{
+		`INSERT INTO folders(id,code,name,created_at,updated_at) VALUES('f1','folder','Folder',1,1)`,
+		`INSERT INTO routes(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('r','route','visible','f1','{"steps":[{"routeStepCondition":{"routeStepConditionFields":[{"fieldKey":"author_team","value":"old-team"},{"fieldKey":"author_grade","value":"old-grade"},{"fieldKey":"text_variable","value":"old-team"}]}}]}',1,1)`,
+		`INSERT INTO workflows(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('w','workflow','visible','f1','{"routeConditions":[{"conditionFields":[{"fieldKey":"author_team","value":"old-team"},{"fieldKey":"author_grade","value":"old-grade"}]}],"sections":[{"slipFields":[{"generalMasterCode":"master-a","defaultGeneralMasterItemCode":"shared"},{"generalMasterCode":"master-b","defaultGeneralMasterItemCode":"shared"}]}]}',1,1)`,
+	} {
+		if _, err := db.Q().ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ReconcileDefinitionCodeChange(ctx, db.Q(), "team", "old-team", "new-team", time.UnixMilli(10)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileDefinitionCodeChange(ctx, db.Q(), "grade", "old-grade", "new-grade", time.UnixMilli(10)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReconcileDefinitionCodeChange(ctx, db.Q(), "master_item", "shared", "renamed", time.UnixMilli(10), "master-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveTeamDefinitionReferences(ctx, db.Q(), "new-team", time.UnixMilli(20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveGradeDefinitionReferences(ctx, db.Q(), "new-grade", time.UnixMilli(20)); err != nil {
+		t.Fatal(err)
+	}
+	var route, workflow string
+	if err := db.Q().QueryRowContext(ctx, `SELECT definition_json FROM routes WHERE id='r'`).Scan(&route); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Q().QueryRowContext(ctx, `SELECT definition_json FROM workflows WHERE id='w'`).Scan(&workflow); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(route, `"fieldKey":"author_team"`) || strings.Contains(route, `"fieldKey":"author_grade"`) || !strings.Contains(route, `"fieldKey":"text_variable"`) || !strings.Contains(route, `"value":"old-team"`) {
+		t.Fatalf("route conditions after reconciliation: %s", route)
+	}
+	if strings.Contains(workflow, `"fieldKey":"author_team"`) || strings.Contains(workflow, `"fieldKey":"author_grade"`) {
+		t.Fatalf("workflow conditions after reconciliation: %s", workflow)
+	}
+	if !strings.Contains(workflow, `"generalMasterCode":"master-a"`) || !strings.Contains(workflow, `"defaultGeneralMasterItemCode":"renamed"`) || !strings.Contains(workflow, `"generalMasterCode":"master-b"`) || !strings.Contains(workflow, `"defaultGeneralMasterItemCode":"shared"`) {
+		t.Fatalf("master scoped defaults after reconciliation: %s", workflow)
+	}
+}
+
 func TestRemoveScopedMasterAndFolderTargets(t *testing.T) {
 	ctx, db := openMemory(t)
 	if _, err := db.Q().ExecContext(ctx, `INSERT INTO roles(id,name,editable,permission_list,created_at,updated_at) VALUES('role','Role',1,'[{"permission":"master","generalMasterIds":["master","keep"]},{"permission":"workflow","folderIds":["folder","keep-folder"]}]',1,1)`); err != nil {

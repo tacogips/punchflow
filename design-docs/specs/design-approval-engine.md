@@ -220,6 +220,8 @@ Proxy approver action authority is checked at action time and is available only 
 
 When an organization chart is activated, ticket-level team viewers are mapped to teams with the same code in the new chart. Viewer rows for teams without a matching code are removed; the ticket's historical applicant-team reference is unchanged (INF-SHR-04).
 
+Definition reconciliation treats condition references as typed values: `author_team` and `author_grade` conditions carry the referenced code in `value`. Renames update only those typed values, and deletion removes matching condition objects while preserving unrelated literals. General-master item renames are scoped by the containing `generalMasterCode`, including condition and detail-field default references. Edits to inactive charts do not reconcile global active definitions; missing-team reconciliation runs when the chart is activated. For automatic team-member and manager sharing, the historical applicant-team code is resolved into the active chart before memberships and ancestry are read. Detail fields present configured default master items using the same master/item resolution as main form fields (INF-A6-01 through INF-A6-06; see `notes.md`).
+
 ### Required engine tests (`internal/engine/*_test.go`)
 
 | Test | Scenario |

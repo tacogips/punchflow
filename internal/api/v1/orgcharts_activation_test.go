@@ -215,10 +215,10 @@ func TestActivateOrganizationChartReconcilesMissingTeams(t *testing.T) {
 	if err := store.TicketQueryInsertViewer(ctx, env.DB.Q(), model.TicketViewer{ID: store.NewID(), TicketID: ticketID, TeamID: &missingRef}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO routes(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('chart-route','chart-route','visible',?,'{"steps":[{"stepType":"team","targets":[{"teamCode":"chart-only-old"}]}]}',?,?)`, workflow.FolderID, store.Millis(now), store.Millis(now)); err != nil {
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO routes(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('chart-route','chart-route','visible',?,'{"steps":[{"stepType":"team","targets":[{"teamCode":"chart-only-old"}],"routeStepCondition":{"routeStepConditionFields":[{"fieldKey":"author_team","value":"chart-only-old"}]}}]}',?,?)`, workflow.FolderID, store.Millis(now), store.Millis(now)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO workflows(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('chart-workflow','chart-workflow','visible',?,'{"routeCode":"chart-route"}',?,?)`, workflow.FolderID, store.Millis(now), store.Millis(now)); err != nil {
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO workflows(id,code,status,folder_id,definition_json,created_at,updated_at) VALUES('chart-workflow','chart-workflow','visible',?,'{"routeCode":"chart-route","routeConditions":[{"conditionFields":[{"fieldKey":"author_team","value":"chart-only-old"}]}]}',?,?)`, workflow.FolderID, store.Millis(now), store.Millis(now)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO roles(id,name,editable,permission_list,created_at,updated_at) VALUES('chart-role','Chart role',1,?, ?, ?)`, `[ {"permission":"team","restricted":true,"teamIds":["`+oldMissing+`"]} ]`, store.Millis(now), store.Millis(now)); err != nil {
@@ -244,5 +244,15 @@ func TestActivateOrganizationChartReconcilesMissingTeams(t *testing.T) {
 	}
 	if routeStatus != model.RouteStatusError || workflowStatus != model.WorkflowStatusInvisible || strings.Contains(roleTargets, oldMissing) {
 		t.Fatalf("route=%s workflow=%s role=%s", routeStatus, workflowStatus, roleTargets)
+	}
+	var routeDefinition, workflowDefinition string
+	if err := env.DB.Q().QueryRowContext(ctx, `SELECT definition_json FROM routes WHERE id='chart-route'`).Scan(&routeDefinition); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.DB.Q().QueryRowContext(ctx, `SELECT definition_json FROM workflows WHERE id='chart-workflow'`).Scan(&workflowDefinition); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(routeDefinition, `"fieldKey":"author_team"`) || strings.Contains(workflowDefinition, `"fieldKey":"author_team"`) {
+		t.Fatalf("missing-team conditions survived chart activation: route=%s workflow=%s", routeDefinition, workflowDefinition)
 	}
 }

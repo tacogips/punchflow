@@ -289,6 +289,33 @@ func TestPresentMasterItemInputIDs(t *testing.T) {
 	}
 }
 
+func TestWorkflowDetailPresentsDefaultMasterItemForDetailField(t *testing.T) {
+	ctx, db := pf08DB(t)
+	definition, err := store.WorkflowDefByID(ctx, db.Q(), "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition.SectionList[0].SlipFields[0].GeneralMasterCode = "GM"
+	definition.SectionList[0].SlipFields[0].DefaultGeneralMasterItemCode = "I1"
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Q().ExecContext(ctx, `UPDATE workflows SET definition_json=? WHERE id='wf'`, string(encoded)); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := WorkflowDetail(ctx, db.Q(), "wf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	section := detail["sectionList"].([]any)[0].(map[string]any)
+	field := section["slipFields"].([]any)[0].(map[string]any)
+	item, ok := field["defaultGeneralMasterItem"].(GeneralMasterItemJSON)
+	if !ok || item["id"] != "it" || item["code"] != "I1" {
+		t.Fatalf("detail default master item = %#v", field["defaultGeneralMasterItem"])
+	}
+}
+
 func TestPresentSectionShapes(t *testing.T) {
 	ctx, db := pf08DB(t)
 	sections, err := pf08Sections(ctx, db.Q(), []model.WorkflowSection{

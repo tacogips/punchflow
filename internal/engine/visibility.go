@@ -64,6 +64,17 @@ func pf14SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, 
 	if ticket.AuthorTeamID == nil {
 		return nil
 	}
+	historicalTeam, err := store.GetTeam(ctx, tx, *ticket.AuthorTeamID)
+	if err != nil {
+		return err
+	}
+	activeTeam, err := store.CurrentTeamByCode(ctx, tx, historicalTeam.Code)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
 	switch ticket.Status {
 	case model.TicketStatusInProgress:
 	case model.TicketStatusCompleted:
@@ -81,7 +92,7 @@ func pf14SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, 
 		return nil
 	}
 	if def.VisibleToTeamMembers {
-		members, err := store.EngActiveTeamMemberIDs(ctx, tx, *ticket.AuthorTeamID)
+		members, err := store.EngActiveTeamMemberIDs(ctx, tx, activeTeam.ID)
 		if err != nil {
 			return err
 		}
@@ -94,7 +105,7 @@ func pf14SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, 
 	if def.VisibleToManager != "direct" && def.VisibleToManager != "all" {
 		return nil
 	}
-	teams, err := store.EngTeamAncestors(ctx, tx, *ticket.AuthorTeamID)
+	teams, err := store.EngTeamAncestors(ctx, tx, activeTeam.ID)
 	if err != nil {
 		return err
 	}

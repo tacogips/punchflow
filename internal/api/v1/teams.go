@@ -297,6 +297,10 @@ func (a *API) updateTeam(w http.ResponseWriter, r *http.Request) {
 	x.UpdatedAt = time.Now()
 	p, _ := auth.FromContext(r.Context())
 	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		currentChart, er := store.OrgChartIsCurrent(r.Context(), tx, chart)
+		if er != nil {
+			return er
+		}
 		if x.ParentID != nil {
 			ok, er := store.TeamParentInChart(r.Context(), tx, chart, *x.ParentID)
 			if er != nil {
@@ -320,8 +324,10 @@ func (a *API) updateTeam(w http.ResponseWriter, r *http.Request) {
 		if exists {
 			return kferr.ValidationFailed(map[string][]string{"code": {"already exists in organization chart"}})
 		}
-		if er = store.ReconcileDefinitionCodeChange(r.Context(), tx, "team", oldTeamCode, x.Code, x.UpdatedAt); er != nil {
-			return er
+		if currentChart {
+			if er = store.ReconcileDefinitionCodeChange(r.Context(), tx, "team", oldTeamCode, x.Code, x.UpdatedAt); er != nil {
+				return er
+			}
 		}
 		if er = store.TeamUpdate(r.Context(), tx, x); er != nil {
 			return er
@@ -365,19 +371,25 @@ func (a *API) deleteTeam(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.FromContext(r.Context())
 	var events []model.WebhookEvent
 	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
+		currentChart, currentErr := store.OrgChartIsCurrent(r.Context(), tx, chart)
+		if currentErr != nil {
+			return currentErr
+		}
 		var er error
 		events, er = a.d.Engine.CleanupDeletedTeam(r.Context(), tx, actorFor(p), id)
 		if er != nil {
 			return er
 		}
-		if er = store.InvalidateRoutesReferencing(r.Context(), tx, team.Code, false, a.d.Clock.Now()); er != nil {
-			return er
-		}
-		if er = store.RemoveTeamDefinitionReferences(r.Context(), tx, team.Code, a.d.Clock.Now()); er != nil {
-			return er
-		}
-		if er = store.RemoveTeamFromRoleTargets(r.Context(), tx, id, a.d.Clock.Now()); er != nil {
-			return er
+		if currentChart {
+			if er = store.InvalidateRoutesReferencing(r.Context(), tx, team.Code, false, a.d.Clock.Now()); er != nil {
+				return er
+			}
+			if er = store.RemoveTeamDefinitionReferences(r.Context(), tx, team.Code, a.d.Clock.Now()); er != nil {
+				return er
+			}
+			if er = store.RemoveTeamFromRoleTargets(r.Context(), tx, id, a.d.Clock.Now()); er != nil {
+				return er
+			}
 		}
 		if er = store.TeamReparentChildren(r.Context(), tx, id, team.ParentID, a.d.Clock.Now()); er != nil {
 			return er

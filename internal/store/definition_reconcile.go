@@ -95,6 +95,7 @@ func RemoveTeamDefinitionReferences(ctx context.Context, q Querier, code string,
 				return nil, false, err
 			}
 			changed := removeNominationTeamTarget(&def, code)
+			changed = removeConditionReferences(&def, model.StepConditionFieldKeyAuthorTeam, code) || changed
 			if !changed {
 				return raw, false, nil
 			}
@@ -106,12 +107,60 @@ func RemoveTeamDefinitionReferences(ctx context.Context, q Querier, code string,
 			return nil, false, err
 		}
 		changed := removeJSONReference(&value, "teamCode", code)
+		changed = removeConditionReferences(&value, model.StepConditionFieldKeyAuthorTeam, code) || changed
 		if !changed {
 			return raw, false, nil
 		}
 		encoded, err := json.Marshal(value)
 		return encoded, true, err
 	})
+}
+
+// removeConditionReferences removes typed condition objects by their field key
+// and stored reference value. It deliberately leaves literal values untouched.
+func removeConditionReferences(value any, fieldKey, code string) bool {
+	changed := false
+	switch node := value.(type) {
+	case *any:
+		return removeConditionReferences(*node, fieldKey, code)
+	case *model.RouteDef:
+		raw, err := json.Marshal(node)
+		if err != nil {
+			return false
+		}
+		var generic any
+		if json.Unmarshal(raw, &generic) != nil || !removeConditionReferences(generic, fieldKey, code) {
+			return false
+		}
+		updated, err := json.Marshal(generic)
+		if err != nil || json.Unmarshal(updated, node) != nil {
+			return false
+		}
+		return true
+	case map[string]any:
+		for key, child := range node {
+			if key == "conditionFields" || key == "routeStepConditionFields" {
+				if fields, ok := child.([]any); ok {
+					kept := fields[:0]
+					for _, item := range fields {
+						if field, ok := item.(map[string]any); ok && field["fieldKey"] == fieldKey && field["value"] == code {
+							changed = true
+							continue
+						}
+						kept = append(kept, item)
+					}
+					node[key] = kept
+					continue
+				}
+			}
+			changed = removeConditionReferences(child, fieldKey, code) || changed
+		}
+	case []any:
+		for _, child := range node {
+			changed = removeConditionReferences(child, fieldKey, code) || changed
+		}
+	}
+	return changed
 }
 
 func removeJSONReference(value *any, key, target string) bool {
@@ -158,6 +207,7 @@ func RemoveGradeDefinitionReferences(ctx context.Context, q Querier, code string
 			return nil, false, err
 		}
 		changed := reconcileGradeJSON(&value, code)
+		changed = removeConditionReferences(&value, model.StepConditionFieldKeyAuthorGrade, code) || changed
 		if !changed {
 			return raw, false, nil
 		}
@@ -231,7 +281,7 @@ func reconcileGradeJSON(value *any, code string) bool {
 // ReconcileDefinitionCodeChange cascades a resource code rename through stored
 // fixture definitions. IDs remain stable; only fields that represent the
 // renamed resource's code are changed.
-func ReconcileDefinitionCodeChange(ctx context.Context, q Querier, kind, oldCode, newCode string, at time.Time) error {
+func ReconcileDefinitionCodeChange(ctx context.Context, q Querier, kind, oldCode, newCode string, at time.Time, masterIDs ...string) error {
 	if oldCode == newCode {
 		return nil
 	}
@@ -246,18 +296,88 @@ func ReconcileDefinitionCodeChange(ctx context.Context, q Querier, kind, oldCode
 	if len(keys) == 0 {
 		return fmt.Errorf("unsupported definition code kind %q", kind)
 	}
+	masterID := ""
+	if len(masterIDs) > 0 {
+		masterID = masterIDs[0]
+	}
 	return rewriteDefinitions(ctx, q, at, func(_ string, raw []byte) ([]byte, bool, error) {
 		var value any
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return nil, false, err
 		}
-		changed := replaceJSONCode(&value, keys, oldCode, newCode)
+		changed := replaceJSONCodeScoped(&value, keys, oldCode, newCode, kind == "master_item", masterID)
+		conditionKey := map[string]string{"team": model.StepConditionFieldKeyAuthorTeam, "grade": model.StepConditionFieldKeyAuthorGrade}[kind]
+		if conditionKey != "" {
+			changed = replaceConditionReference(value, conditionKey, oldCode, newCode) || changed
+		}
 		if !changed {
 			return raw, false, nil
 		}
 		encoded, err := json.Marshal(value)
 		return encoded, true, err
 	})
+}
+
+func replaceConditionReference(value any, fieldKey, oldCode, newCode string) bool {
+	changed := false
+	switch node := value.(type) {
+	case map[string]any:
+		for key, child := range node {
+			if key == "conditionFields" || key == "routeStepConditionFields" {
+				if fields, ok := child.([]any); ok {
+					for _, item := range fields {
+						if field, ok := item.(map[string]any); ok && field["fieldKey"] == fieldKey && field["value"] == oldCode {
+							field["value"] = newCode
+							changed = true
+						}
+					}
+					continue
+				}
+			}
+			changed = replaceConditionReference(child, fieldKey, oldCode, newCode) || changed
+		}
+	case []any:
+		for _, child := range node {
+			changed = replaceConditionReference(child, fieldKey, oldCode, newCode) || changed
+		}
+	}
+	return changed
+}
+
+func replaceJSONCodeScoped(value *any, keys map[string]bool, oldCode, newCode string, scopedItem bool, masterCode string) bool {
+	if !scopedItem {
+		return replaceJSONCode(value, keys, oldCode, newCode)
+	}
+	return replaceMasterItemCode(value, oldCode, newCode, masterCode)
+}
+
+func replaceMasterItemCode(value *any, oldCode, newCode, masterCode string) bool {
+	changed := false
+	switch node := (*value).(type) {
+	case map[string]any:
+		matches := masterCode == "" || node["generalMasterCode"] == masterCode
+		for key, child := range node {
+			if (key == "generalMasterItemCode" || key == "defaultGeneralMasterItemCode") && matches && child == oldCode {
+				node[key] = newCode
+				changed = true
+				continue
+			}
+			v := child
+			if replaceMasterItemCode(&v, oldCode, newCode, masterCode) {
+				node[key] = v
+				changed = true
+			}
+		}
+	case []any:
+		for i := range node {
+			v := node[i]
+			if replaceMasterItemCode(&v, oldCode, newCode, masterCode) {
+				node[i] = v
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 func replaceJSONCode(value *any, keys map[string]bool, oldCode, newCode string) bool {
 	changed := false
