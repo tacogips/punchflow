@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -416,6 +417,110 @@ func TestWebhookRegistrationsDeliverConcurrently(t *testing.T) {
 	close(releaseSlow)
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestWebhookAdmitsNewRegistrationWhileAnotherBatchIsInFlight(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	slowStarted, releaseSlow := make(chan struct{}), make(chan struct{})
+	fastDelivered := make(chan struct{}, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case <-slowStarted:
+		default:
+			close(slowStarted)
+		}
+		<-releaseSlow
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fastDelivered <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fast.Close()
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "slow", Name: "slow", URL: slow.URL, Enabled: true})
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "fast", Name: "fast", URL: fast.URL, Enabled: true})
+	backlog := pf09DueBatchLimit + 5
+	if _, err := db.Q().ExecContext(ctx, `WITH RECURSIVE seq(i) AS (
+		SELECT 0 UNION ALL SELECT i+1 FROM seq WHERE i < ?
+	) INSERT INTO webhook_events(id,webhook_id,event_type,body,status,next_attempt_at,created_at,updated_at)
+	SELECT printf('slow-%04d',i),'slow','ticket_created',x'7b7d','pending',?,?,? FROM seq`, backlog-1, store.Millis(now), store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{Concurrency: 2, PollEvery: time.Millisecond})
+	done := make(chan error, 1)
+	runCtx, cancel := context.WithCancel(ctx)
+	go func() { _, err := svc.RunOnce(runCtx); done <- err }()
+	select {
+	case <-slowStarted:
+	case err := <-done:
+		cancel()
+		t.Fatalf("dispatcher exited before slow delivery started: %v", err)
+	case <-time.After(10 * time.Second):
+		cancel()
+		t.Fatal("slow delivery did not start")
+	}
+	pf09InsertPending(t, ctx, db, "fast-event", "fast", now)
+	svc.Notify()
+	select {
+	case <-fastDelivered:
+	case <-time.After(10 * time.Second):
+		cancel()
+		close(releaseSlow)
+		t.Fatal("new healthy registration was not admitted while the earlier batch was in flight")
+	}
+	cancel()
+	close(releaseSlow)
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+}
+
+func TestWebhookAutoDisablePreservesAcceptedResend(t *testing.T) {
+	db, ctx := pf09TestDB(t)
+	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+	clock := kftime.NewFakeClock(now)
+	started, release := make(chan struct{}), make(chan struct{})
+	var requests atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+	firstFailure := now.Add(-7 * 24 * time.Hour)
+	pf09InsertWebhook(t, ctx, db, model.Webhook{ID: "hook", Name: "hook", URL: receiver.URL, Enabled: true, FirstFailureAt: &firstFailure})
+	pf09InsertPending(t, ctx, db, "event", "hook", now)
+	svc := New(db, pf09TestBuilder{}, clock, nil, Config{MaxAttempts: 1})
+	done := make(chan error, 1)
+	go func() { _, err := svc.RunOnce(ctx); done <- err }()
+	<-started
+	if err := svc.Resend(ctx, db.Q(), "event"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	hook, err := store.GetWebhook(ctx, db.Q(), "hook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := store.GetWebhookEvent(ctx, db.Q(), "event")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hook.Enabled || event.Status != model.WebhookStatusPending || event.ManualResendGeneration != 1 || event.ManualResendCompletedGeneration != 0 {
+		t.Fatalf("auto-disable lost accepted resend: webhook=%#v event=%#v", hook, event)
+	}
+	due, err := store.DueWebhookEvents(ctx, db.Q(), now, 10)
+	if err != nil || len(due) != 1 || due[0].ID != "event" {
+		t.Fatalf("disabled resend selection = %#v, %v; want pending event", due, err)
 	}
 }
 

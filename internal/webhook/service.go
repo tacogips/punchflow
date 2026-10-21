@@ -119,7 +119,7 @@ func (s *Service) EnqueueTo(ctx context.Context, q store.Querier, ev model.Webho
 			return nil, err
 		}
 		deliveryID := store.NewID()
-		if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: deliveryID, WebhookID: id, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: model.WebhookStatusPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
+		if err := store.InsertWebhookEvent(ctx, q, model.WebhookDelivery{ID: deliveryID, WebhookID: id, EventType: ev.Type, TicketID: pf09StringPtr(ev.TicketID), CommentID: pf09StringPtr(ev.CommentID), ActorUserID: pf09StringPtr(ev.ActorUserID), Body: append([]byte(nil), body...), Status: model.WebhookStatusPending, Diagnostic: ev.Type == model.WebhookEventPing, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
 			return nil, err
 		}
 		ids = append(ids, deliveryID)

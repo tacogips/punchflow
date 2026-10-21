@@ -34,6 +34,7 @@ type WebhookDelivery struct {
 	AttemptCount                    int       `json:"attemptCount"`
 	ManualResendGeneration          int64     `json:"-"`
 	ManualResendCompletedGeneration int64     `json:"-"`
+	Diagnostic                      bool      `json:"-"`
 	NextAttemptAt                   time.Time `json:"nextAttemptAt"`
 	LastStatusCode                  *int      `json:"lastStatusCode"`
 	CreatedAt                       time.Time `json:"createdAt"`

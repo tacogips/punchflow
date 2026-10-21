@@ -175,14 +175,17 @@ func InsertWebhookEvent(ctx context.Context, q Querier, v model.WebhookDelivery)
 	if v.Status == "" {
 		v.Status = model.WebhookStatusPending
 	}
-	_, err := q.ExecContext(ctx, "INSERT INTO webhook_events(id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.WebhookID, v.EventType, v.TicketID, v.CommentID, v.ActorUserID, v.Body, v.Status, v.AttemptCount, Millis(v.NextAttemptAt), v.LastStatusCode, Millis(v.CreatedAt), Millis(v.UpdatedAt))
+	_, err := q.ExecContext(ctx, "INSERT INTO webhook_events(id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,diagnostic) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.WebhookID, v.EventType, v.TicketID, v.CommentID, v.ActorUserID, v.Body, v.Status, v.AttemptCount, Millis(v.NextAttemptAt), v.LastStatusCode, Millis(v.CreatedAt), Millis(v.UpdatedAt), v.Diagnostic)
 	if err != nil {
 		return fmt.Errorf("store: insert webhook event: %w", err)
 	}
 	return nil
 }
 
-const dueWebhookEventColumns = "e.id,e.webhook_id,e.event_type,e.ticket_id,e.comment_id,e.actor_user_id,e.body,e.status,e.attempt_count,e.next_attempt_at,e.last_status_code,e.created_at,e.updated_at,e.manual_resend_generation,e.manual_resend_completed_generation"
+const (
+	dueWebhookEventColumns           = "e.id,e.webhook_id,e.event_type,e.ticket_id,e.comment_id,e.actor_user_id,e.body,e.status,e.attempt_count,e.next_attempt_at,e.last_status_code,e.created_at,e.updated_at,e.manual_resend_generation,e.manual_resend_completed_generation,e.diagnostic"
+	dueWebhookEventRegistrationLimit = 20 // Kickflow permits up to 50 registrations; reserve batch slots for each.
+)
 
 // DueWebhookEvents returns pending rows ready for delivery, oldest first.
 //
@@ -191,11 +194,8 @@ const dueWebhookEventColumns = "e.id,e.webhook_id,e.event_type,e.ticket_id,e.com
 // returned, plus rows with an unconsumed manual-resend generation (which are
 // attempted even when the webhook is disabled).
 func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int) ([]model.WebhookDelivery, error) {
-	query := "SELECT " + dueWebhookEventColumns + " FROM webhook_events e JOIN webhooks w ON w.id=e.webhook_id WHERE e.status='pending' AND e.next_attempt_at<=?"
-	args := []any{Millis(now)}
-	query += " AND (w.enabled=1 OR e.manual_resend_generation>e.manual_resend_completed_generation)"
-	query += " ORDER BY e.next_attempt_at,e.rowid LIMIT ?"
-	args = append(args, limit)
+	query := "SELECT " + dueWebhookEventColumns + " FROM (SELECT " + dueWebhookEventColumns + ", e.rowid AS delivery_rowid, ROW_NUMBER() OVER (PARTITION BY e.webhook_id ORDER BY e.next_attempt_at,e.rowid) AS registration_position FROM webhook_events e JOIN webhooks w ON w.id=e.webhook_id WHERE e.status='pending' AND e.next_attempt_at<=? AND (w.enabled=1 OR e.manual_resend_generation>e.manual_resend_completed_generation OR e.diagnostic=1)) AS e WHERE e.registration_position<=? ORDER BY e.next_attempt_at,e.delivery_rowid LIMIT ?"
+	args := []any{Millis(now), dueWebhookEventRegistrationLimit, limit}
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: query due webhook events: %w", err)
@@ -217,7 +217,7 @@ func DueWebhookEvents(ctx context.Context, q Querier, now time.Time, limit int) 
 
 // GetWebhookEvent loads one delivery row.
 func GetWebhookEvent(ctx context.Context, q Querier, id string) (model.WebhookDelivery, error) {
-	v, err := pf09ScanDelivery(q.QueryRowContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,manual_resend_generation,manual_resend_completed_generation FROM webhook_events WHERE id=?", id))
+	v, err := pf09ScanDelivery(q.QueryRowContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,manual_resend_generation,manual_resend_completed_generation,diagnostic FROM webhook_events WHERE id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.WebhookDelivery{}, ErrNotFound
 	}
@@ -230,7 +230,7 @@ func ListWebhookEvents(ctx context.Context, q Querier, webhookID string, offset,
 	if err := q.QueryRowContext(ctx, "SELECT count(*) FROM webhook_events WHERE webhook_id=?", webhookID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("store: count webhook events: %w", err)
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,manual_resend_generation,manual_resend_completed_generation FROM webhook_events WHERE webhook_id=? ORDER BY created_at DESC,rowid DESC LIMIT ? OFFSET ?", webhookID, limit, offset)
+	rows, err := q.QueryContext(ctx, "SELECT id,webhook_id,event_type,ticket_id,comment_id,actor_user_id,body,status,attempt_count,next_attempt_at,last_status_code,created_at,updated_at,manual_resend_generation,manual_resend_completed_generation,diagnostic FROM webhook_events WHERE webhook_id=? ORDER BY created_at DESC,rowid DESC LIMIT ? OFFSET ?", webhookID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: list webhook events: %w", err)
 	}
@@ -403,7 +403,9 @@ func SetWebhookFailureStateAtGeneration(ctx context.Context, q Querier, id strin
 		return nil
 	}
 	if disable {
-		if _, err := q.ExecContext(ctx, "UPDATE webhook_events SET status='failed',updated_at=? WHERE webhook_id=? AND status='pending'", Millis(now), id); err != nil {
+		if _, err := q.ExecContext(ctx, `UPDATE webhook_events SET status='failed',updated_at=?
+			WHERE webhook_id=? AND status='pending'
+			AND manual_resend_generation<=manual_resend_completed_generation AND diagnostic=0`, Millis(now), id); err != nil {
 			return fmt.Errorf("store: fail pending webhook events: %w", err)
 		}
 	}
@@ -448,7 +450,8 @@ func pf09ScanDelivery(row interface{ Scan(...any) error }) (model.WebhookDeliver
 	var ticket, comment, actor sql.NullString
 	var status sql.NullInt64
 	var next, created, updated int64
-	if err := row.Scan(&v.ID, &v.WebhookID, &v.EventType, &ticket, &comment, &actor, &v.Body, &v.Status, &v.AttemptCount, &next, &status, &created, &updated, &v.ManualResendGeneration, &v.ManualResendCompletedGeneration); err != nil {
+	var diagnostic int
+	if err := row.Scan(&v.ID, &v.WebhookID, &v.EventType, &ticket, &comment, &actor, &v.Body, &v.Status, &v.AttemptCount, &next, &status, &created, &updated, &v.ManualResendGeneration, &v.ManualResendCompletedGeneration, &diagnostic); err != nil {
 		return model.WebhookDelivery{}, fmt.Errorf("store: scan webhook event: %w", err)
 	}
 	if ticket.Valid {
@@ -470,6 +473,7 @@ func pf09ScanDelivery(row interface{ Scan(...any) error }) (model.WebhookDeliver
 	v.NextAttemptAt = Time(next)
 	v.CreatedAt = Time(created)
 	v.UpdatedAt = Time(updated)
+	v.Diagnostic = diagnostic != 0
 	return v, nil
 }
 func pf09MillisPtr(t *time.Time) any {

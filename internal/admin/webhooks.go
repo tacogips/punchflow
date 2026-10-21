@@ -359,7 +359,11 @@ func (a *API) createWebhookEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var belongs int
-		if e := a.d.DB.Q().QueryRowContext(r.Context(), "SELECT count(*) FROM comments WHERE id=? AND ticket_id=? AND deleted_at IS NULL", in.CommentID, in.TicketID).Scan(&belongs); e != nil {
+		commentQuery := "SELECT count(*) FROM comments WHERE id=? AND ticket_id=?"
+		if in.EventType == model.WebhookEventCommentCreated {
+			commentQuery += " AND deleted_at IS NULL"
+		}
+		if e := a.d.DB.Q().QueryRowContext(r.Context(), commentQuery, in.CommentID, in.TicketID).Scan(&belongs); e != nil {
 			kferr.Write(w, e)
 			return
 		}

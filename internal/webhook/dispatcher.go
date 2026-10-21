@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"punchflow/internal/model"
@@ -48,94 +47,119 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
-// RunOnce synchronously attempts all currently due deliveries, returning the number attempted.
+// RunOnce synchronously attempts due deliveries, admitting newly queued work while
+// receiver requests are still in flight. Only one attempt per registration runs
+// at a time; independent registrations share the configured worker bound.
 //
 // A webhook or delivery deleted concurrently cancels only that delivery. Other
 // per-delivery store errors are collected and returned after the remaining
 // deliveries were processed. Context cancellation returns immediately.
 func (s *Service) RunOnce(ctx context.Context) (int, error) {
-	now := s.clock.Now()
-	events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, pf09DueBatchLimit)
-	if err != nil {
-		return 0, err
-	}
-	// Group by registration in first-due order. Each group is handled serially,
-	// preserving per-registration order, while independent registrations use the
-	// configured worker bound.
-	type registrationQueue struct {
-		events []model.WebhookDelivery
-	}
-	queues := make([]registrationQueue, 0)
-	queueIndex := make(map[string]int)
-	for _, ev := range events {
-		idx, ok := queueIndex[ev.WebhookID]
-		if !ok {
-			idx = len(queues)
-			queueIndex[ev.WebhookID] = idx
-			queues = append(queues, registrationQueue{})
-		}
-		queues[idx].events = append(queues[idx].events, ev)
-	}
-	workers := s.cfg.Concurrency
-	if workers > len(queues) {
-		workers = len(queues)
-	}
-	if workers == 0 {
-		return 0, nil
-	}
 	type deliveryResult struct {
+		event     model.WebhookDelivery
 		attempted int
 		err       error
 	}
-	jobs := make(chan registrationQueue)
-	results := make(chan deliveryResult, len(queues))
-	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for queue := range jobs {
-				for _, ev := range queue.events {
-					if ctx.Err() != nil {
-						results <- deliveryResult{err: ctx.Err()}
-						break
-					}
-					attempted, err := s.pf09Process(ctx, ev, now)
+	workers := s.cfg.Concurrency
+	queues := make(map[string][]model.WebhookDelivery)
+	queueOrder := make([]string, 0)
+	known := make(map[string]bool)
+	attemptedIDs := make(map[string]bool)
+	active := make(map[string]bool)
+	results := make(chan deliveryResult, workers)
+	attempts := 0
+	var failures []error
+	var poll *time.Ticker
+	if s.cfg.PollEvery > 0 {
+		poll = time.NewTicker(s.cfg.PollEvery)
+		defer poll.Stop()
+	}
+	var pollC <-chan time.Time
+	if poll != nil {
+		pollC = poll.C
+	}
+
+	for {
+		if ctx.Err() != nil {
+			return attempts, ctx.Err()
+		}
+		// Refill due work on every scheduler pass. The ID set filters rows whose
+		// requests are still in flight or whose attempt already ran in this pass.
+		now := s.clock.Now()
+		events, err := store.DueWebhookEvents(ctx, s.db.Q(), now, pf09DueBatchLimit)
+		if err != nil {
+			return attempts, err
+		}
+		for _, ev := range events {
+			if known[ev.ID] || attemptedIDs[ev.ID] {
+				continue
+			}
+			if _, exists := queues[ev.WebhookID]; !exists {
+				queueOrder = append(queueOrder, ev.WebhookID)
+			}
+			queues[ev.WebhookID] = append(queues[ev.WebhookID], ev)
+			known[ev.ID] = true
+		}
+
+		// Start one event per idle registration. A later event for that
+		// registration remains queued until its previous attempt completes.
+		for len(active) < workers {
+			started := false
+			for i := 0; i < len(queueOrder); i++ {
+				hookID := queueOrder[i]
+				if active[hookID] || len(queues[hookID]) == 0 {
+					continue
+				}
+				ev := queues[hookID][0]
+				queues[hookID] = queues[hookID][1:]
+				active[hookID] = true
+				started = true
+				go func(ev model.WebhookDelivery) {
+					attempted, err := s.pf09Process(ctx, ev, s.clock.Now())
 					if err != nil {
 						err = fmt.Errorf("webhook delivery %s: %w", ev.ID, err)
 					}
-					result := deliveryResult{err: err}
+					result := deliveryResult{event: ev, err: err}
 					if attempted {
 						result.attempted = 1
 					}
-					results <- result
-				}
+					select {
+					case results <- result:
+					case <-ctx.Done():
+					}
+				}(ev)
+				break
 			}
-		}()
-	}
-	go func() {
-		defer close(jobs)
-		for _, queue := range queues {
-			select {
-			case jobs <- queue:
-			case <-ctx.Done():
-				return
+			if !started {
+				break
 			}
 		}
-	}()
-	go func() { wg.Wait(); close(results) }()
-	attempts := 0
-	var failures []error
-	for result := range results {
-		attempts += result.attempted
-		if result.err != nil && !errors.Is(result.err, context.Canceled) {
-			failures = append(failures, result.err)
+
+		if len(active) == 0 {
+			queued := false
+			for _, events := range queues {
+				queued = queued || len(events) > 0
+			}
+			if !queued {
+				return attempts, errors.Join(failures...)
+			}
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return attempts, ctx.Err()
+		case <-s.notify:
+		case <-pollC:
+		case result := <-results:
+			delete(active, result.event.WebhookID)
+			delete(known, result.event.ID)
+			attemptedIDs[result.event.ID] = true
+			attempts += result.attempted
+			if result.err != nil && !errors.Is(result.err, context.Canceled) {
+				failures = append(failures, result.err)
+			}
 		}
 	}
-	if ctx.Err() != nil {
-		return attempts, ctx.Err()
-	}
-	return attempts, errors.Join(failures...)
 }
 
 // pf09Process delivers one due row. It reports whether an attempt was recorded.
@@ -149,7 +173,7 @@ func (s *Service) pf09Process(ctx context.Context, ev model.WebhookDelivery, now
 		return false, err
 	}
 	manual := ev.ManualResendGeneration > ev.ManualResendCompletedGeneration
-	if !hook.Enabled && !manual {
+	if !hook.Enabled && !manual && !ev.Diagnostic {
 		// Disabled after batch selection.
 		return false, nil
 	}

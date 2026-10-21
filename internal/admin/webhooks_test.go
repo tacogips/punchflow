@@ -50,6 +50,37 @@ func TestWebhooksCreatePingAndRedaction(t *testing.T) {
 	bad := env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhooks", map[string]any{"name": "bad", "url": receiver.URL, "eventTypes": []string{"ticket_submitted"}})
 	testutil.AssertError(t, bad, http.StatusUnprocessableEntity, "validation_failed")
 }
+
+func TestWebhookPingAttemptsDisabledRegistration(t *testing.T) {
+	env := testutil.New(t)
+	var delivered atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		delivered.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+	created := env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhooks", map[string]any{"name": "disabled-test", "url": receiver.URL, "enabled": true})
+	if created.Status != http.StatusOK {
+		t.Fatalf("create webhook: %d %s", created.Status, created.Body)
+	}
+	var hook map[string]any
+	created.JSON(t, &hook)
+	id := hook["id"].(string)
+	if attempts := env.DeliverWebhooks(t); attempts != 1 || delivered.Load() != 1 {
+		t.Fatalf("create ping attempts=%d receiver=%d", attempts, delivered.Load())
+	}
+	if err := store.SetWebhookEnabled(t.Context(), env.DB.Q(), id, false, env.Clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ping := env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhooks/"+id+"/ping", nil)
+	if ping.Status != http.StatusOK {
+		t.Fatalf("disabled ping: %d %s", ping.Status, ping.Body)
+	}
+	if attempts := env.DeliverWebhooks(t); attempts != 1 || delivered.Load() != 2 {
+		t.Fatalf("disabled ping attempts=%d receiver=%d; want one explicit diagnostic attempt", attempts, delivered.Load())
+	}
+}
+
 func TestWebhookFireEventTypesAndNegativeEvents(t *testing.T) {
 	env := testutil.New(t)
 	workflow, err := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
@@ -186,6 +217,27 @@ func TestWebhookFireEventTypesAndNegativeEvents(t *testing.T) {
 			testutil.AssertError(t, env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhook-events", body), http.StatusBadRequest, "invalid_parameter")
 		})
 	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), "UPDATE comments SET deleted_at=? WHERE id=?", store.Millis(env.Clock.Now()), commentID); err != nil {
+		t.Fatal(err)
+	}
+	deletedUpdate := env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhook-events", map[string]any{"eventType": model.WebhookEventCommentUpdated, "ticketId": ticketID, "commentId": commentID, "webhookIds": []string{webhookID}})
+	if deletedUpdate.Status != http.StatusOK {
+		t.Fatalf("fire deleted comment_updated: %d %s", deletedUpdate.Status, deletedUpdate.Body)
+	}
+	if attempts := env.DeliverWebhooks(t); attempts != 1 {
+		t.Fatalf("deleted comment_updated attempts=%d, want 1", attempts)
+	}
+	var deletedPayload map[string]any
+	if err := json.Unmarshal(env.Receiver.Requests()[len(env.Receiver.Requests())-1].Body, &deletedPayload); err != nil {
+		t.Fatal(err)
+	}
+	data := deletedPayload["data"].(map[string]any)
+	comment := data["comment"].(map[string]any)
+	if deletedAt, ok := comment["deletedAt"].(string); !ok || deletedAt == "" {
+		t.Fatalf("deleted comment payload has no deletedAt: %#v", comment)
+	}
+	deletedCreated := env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhook-events", map[string]any{"eventType": model.WebhookEventCommentCreated, "ticketId": ticketID, "commentId": commentID, "webhookIds": []string{webhookID}})
+	testutil.AssertError(t, deletedCreated, http.StatusNotFound, "resource_not_found")
 	missing := env.Do(t, testutil.Integration, http.MethodPost, "/admin/api/webhook-events", map[string]any{"eventType": "comment_created", "ticketId": ticketID})
 	testutil.AssertError(t, missing, http.StatusBadRequest, "invalid_parameter")
 
