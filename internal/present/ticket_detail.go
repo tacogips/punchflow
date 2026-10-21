@@ -5,13 +5,23 @@ import (
 	"fmt"
 	"reflect"
 
+	"punchflow/internal/access"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
 
 type TicketDetailJSON map[string]any
 
+// TicketDetail presents a ticket without any per-caller section filtering
+// (used for webhook payloads, which carry the complete ticket).
 func TicketDetail(ctx context.Context, q store.Querier, id string) (TicketDetailJSON, error) {
+	return TicketDetailFor(ctx, q, id, nil)
+}
+
+// TicketDetailFor presents a ticket for the caller. Inputs of restricted form
+// sections the caller may not view are omitted and the section is marked not
+// viewable. A nil caller sees every section.
+func TicketDetailFor(ctx context.Context, q store.Querier, id string, caller *access.Caller) (TicketDetailJSON, error) {
 	ticket, err := Ticket(ctx, q, id)
 	if err != nil {
 		return nil, err
@@ -39,168 +49,68 @@ func TicketDetail(ctx context.Context, q store.Querier, id string) (TicketDetail
 	if err != nil {
 		return nil, err
 	}
+	viewable := map[string]bool{}
+	for _, s := range def.SectionList {
+		viewable[s.ID] = true
+	}
+	if caller != nil {
+		if viewable, err = access.SectionAccess(ctx, q, *caller, x, def); err != nil {
+			return nil, err
+		}
+	}
+	fieldSection := map[string]string{}
+	for _, s := range def.SectionList {
+		for _, f := range s.FormFields {
+			fieldSection[f.ID] = s.ID
+		}
+	}
 	inputMaps := make([]any, 0, len(inputs))
+	inputBySection := map[string][]any{}
 	values := map[string]any{}
 	for _, in := range inputs {
 		values[in.FormFieldID] = in.Value
-		var field any
-		var fieldModel *model.FormField
 		for _, section := range def.SectionList {
 			for _, f := range section.FormFields {
 				if f.ID == in.FormFieldID {
-					field = pf08FormField(ctx, q, f)
-					fieldModel = &f
 					values[f.Code] = in.Value
 				}
 			}
 		}
-		if field == nil {
-			field = map[string]any{"id": in.FormFieldID}
+		if sid, known := fieldSection[in.FormFieldID]; known && !viewable[sid] {
+			continue
 		}
-		general := []any{}
-		users := []any{}
-		teams := []any{}
-		tickets := []any{}
-		files := []any{}
-		refs := pf15ReferenceIDs(in.RefIDs, in.Value)
-		if fieldModel != nil {
-			switch fieldModel.FieldType {
-			case "master", "general_master", "general_master_item":
-				resolved, e := GeneralMasterItems(ctx, q, refs)
-				if e != nil {
-					return nil, e
-				}
-				for _, v := range resolved {
-					general = append(general, v)
-				}
-			case "user":
-				resolved, e := Users(ctx, q, refs, UserOpts{})
-				if e != nil {
-					return nil, e
-				}
-				for _, v := range resolved {
-					users = append(users, v)
-				}
-			case "team":
-				resolved, e := store.GetTeams(ctx, q, refs)
-				if e != nil {
-					return nil, e
-				}
-				for _, v := range resolved {
-					team, e := Team(ctx, q, v.ID)
-					if e != nil {
-						return nil, e
-					}
-					teams = append(teams, team)
-				}
-			case "ticket":
-				resolved, e := Tickets(ctx, q, refs)
-				if e != nil {
-					return nil, e
-				}
-				for _, v := range resolved {
-					tickets = append(tickets, v)
-				}
-			}
-		}
-		attachments, e := store.TicketAttachments(ctx, q, id, nil, &in.FormFieldID)
+		item, e := formInputJSON(ctx, q, def, in)
 		if e != nil {
 			return nil, e
 		}
-		for _, f := range attachments {
-			files = append(files, attachmentJSON(f))
+		inputMaps = append(inputMaps, item)
+		if sid, known := fieldSection[in.FormFieldID]; known {
+			inputBySection[sid] = append(inputBySection[sid], item)
 		}
-		inputMaps = append(inputMaps, map[string]any{"id": in.ID, "formFieldId": in.FormFieldID, "value": in.Value, "formField": field, "generalMasterItems": general, "users": users, "teams": teams, "inputTickets": tickets, "attachments": files})
 	}
 	sections := make([]any, 0, len(def.SectionList))
 	for _, s := range def.SectionList {
-		sectionInputs := []any{}
-		for i, in := range inputs {
-			for _, f := range s.FormFields {
-				if f.ID == in.FormFieldID {
-					sectionInputs = append(sectionInputs, inputMaps[i])
-				}
-			}
+		sectionInputs := inputBySection[s.ID]
+		if sectionInputs == nil {
+			sectionInputs = []any{}
 		}
 		visible := true
 		if s.Conditional {
 			visible = pf15SectionVisible(s, values)
 		}
-		sections = append(sections, map[string]any{"id": s.ID, "sectionId": s.ID, "visible": visible, "viewRestriction": false, "allowViewAuthor": true, "allowViewApprover": true, "viewable": true, "inputs": sectionInputs, "sectionViewers": []any{}})
+		restricted := s.SectionType == model.SectionTypeForm && s.ViewRestriction
+		viewers := []any{}
+		if restricted {
+			if viewers, err = sectionViewersJSON(ctx, q, s, &x.CreatedAt); err != nil {
+				return nil, err
+			}
+		}
+		allowAuthor, allowApprover := !restricted || s.AllowViewAuthor, !restricted || s.AllowViewApprover
+		sections = append(sections, map[string]any{"id": s.ID, "sectionId": s.ID, "visible": visible, "viewRestriction": restricted, "allowViewAuthor": allowAuthor, "allowViewApprover": allowApprover, "viewable": viewable[s.ID], "inputs": sectionInputs, "sectionViewers": viewers})
 	}
-	slipRows, err := store.TicketSlipItems(ctx, q, id)
+	slips, err := slipItemsJSON(ctx, q, def, id, viewable)
 	if err != nil {
 		return nil, err
-	}
-	slips := make([]any, 0, len(slipRows))
-	for _, row := range slipRows {
-		var section *model.WorkflowSection
-		for i := range def.SectionList {
-			if def.SectionList[i].ID == row.SlipSectionID {
-				section = &def.SectionList[i]
-				break
-			}
-		}
-		slipInputs := []any{}
-		for fieldID, value := range row.Inputs {
-			var field *model.SlipField
-			if section != nil {
-				for i := range section.SlipFields {
-					if section.SlipFields[i].ID == fieldID || section.SlipFields[i].Code == fieldID {
-						field = &section.SlipFields[i]
-						break
-					}
-				}
-			}
-			fieldIDOut := fieldID
-			if field != nil {
-				fieldIDOut = field.ID
-			}
-			general, users, teams, relatedTickets := []any{}, []any{}, []any{}, []any{}
-			refs := pf15ReferenceIDs(nil, value)
-			if field != nil {
-				switch field.FieldType {
-				case "master", "general_master", "general_master_item":
-					resolved, e := GeneralMasterItems(ctx, q, refs)
-					if e != nil {
-						return nil, e
-					}
-					for _, v := range resolved {
-						general = append(general, v)
-					}
-				case "user":
-					resolved, e := Users(ctx, q, refs, UserOpts{})
-					if e != nil {
-						return nil, e
-					}
-					for _, v := range resolved {
-						users = append(users, v)
-					}
-				case "team":
-					resolved, e := store.GetTeams(ctx, q, refs)
-					if e != nil {
-						return nil, e
-					}
-					for _, v := range resolved {
-						team, e := Team(ctx, q, v.ID)
-						if e != nil {
-							return nil, e
-						}
-						teams = append(teams, team)
-					}
-				case "ticket":
-					resolved, e := Tickets(ctx, q, refs)
-					if e != nil {
-						return nil, e
-					}
-					for _, v := range resolved {
-						relatedTickets = append(relatedTickets, v)
-					}
-				}
-			}
-			slipInputs = append(slipInputs, map[string]any{"id": fieldID, "slipFieldId": fieldIDOut, "value": value, "createdAt": pf08Time(row.CreatedAt), "updatedAt": pf08Time(row.UpdatedAt), "generalMasterItems": general, "users": users, "teams": teams, "inputTickets": relatedTickets})
-		}
-		slips = append(slips, map[string]any{"id": row.ID, "slipSectionId": row.SlipSectionID, "position": row.Position, "createdAt": pf08Time(row.CreatedAt), "updatedAt": pf08Time(row.UpdatedAt), "inputs": slipInputs})
 	}
 	steps, err := ticketStepJSON(ctx, q, id, true)
 	if err != nil {

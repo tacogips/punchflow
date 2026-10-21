@@ -1,0 +1,253 @@
+package contract_test
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+
+	apiv1 "punchflow/internal/api/v1"
+	"punchflow/internal/model"
+	"punchflow/internal/store"
+	"punchflow/internal/testutil"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+)
+
+const (
+	pf16PhotoFieldID    = "00000000-0000-4000-8000-0000000000a1"
+	pf16SubtotalFieldID = "00000000-0000-4000-8000-0000000000a2"
+	pf16TotalFieldID    = "00000000-0000-4000-8000-0000000000a3"
+	pf16ConfSectionID   = "00000000-0000-4000-8000-0000000000a4"
+	pf16ConfViewerID    = "00000000-0000-4000-8000-0000000000a5"
+)
+
+func pf16SlipFieldDef(id, code, fieldType string) model.SlipField {
+	return model.SlipField{ID: id, Code: code, Title: code, FieldType: fieldType, Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+}
+
+// pf16PrepareExpenseWorkflow adds a file and a calculation detail column, a
+// calculation form field and a restricted section to expense-claim.
+func pf16PrepareExpenseWorkflow(t *testing.T, env *testutil.Env) {
+	t.Helper()
+	ctx := t.Context()
+	id, err := store.WorkflowIDByCode(ctx, env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := store.WorkflowDefByID(ctx, env.DB.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subtotalFormula, totalFormula := "qty * {unit-price}", "amount * 2 + SUM(lines.subtotal)"
+	var note model.FormField
+	for i := range def.SectionList {
+		section := &def.SectionList[i]
+		switch section.SectionType {
+		case model.SectionTypeSlip:
+			photo := pf16SlipFieldDef(pf16PhotoFieldID, "photo", "file")
+			photo.Multiple = true
+			subtotal := pf16SlipFieldDef(pf16SubtotalFieldID, "subtotal", "calculation")
+			subtotal.Formula = &subtotalFormula
+			section.SlipFields = append(section.SlipFields, photo, subtotal)
+		case model.SectionTypeForm:
+			kept := make([]model.FormField, 0, len(section.FormFields))
+			for _, f := range section.FormFields {
+				switch f.Code {
+				case "approver-note":
+					note = f
+					continue
+				case "receipt":
+					f.Multiple = true
+				}
+				kept = append(kept, f)
+			}
+			total := model.FormField{ID: pf16TotalFieldID, Code: "total", Title: "Total", FieldType: "calculation", Formula: &totalFormula, Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+			section.FormFields = append(kept, total)
+		}
+	}
+	def.SectionList = append(def.SectionList, model.WorkflowSection{
+		ID: pf16ConfSectionID, Title: "Confidential", SectionType: model.SectionTypeForm, FormFields: []model.FormField{note},
+		ViewRestriction: true, AllowViewAuthor: false, AllowViewApprover: true,
+		SectionViewers: []model.SectionViewer{{ID: pf16ConfViewerID, UserCode: "ceo"}},
+	})
+	raw, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = env.DB.WithTx(ctx, func(tx *store.Tx) error {
+		_, e := tx.ExecContext(ctx, `UPDATE workflows SET definition_json=? WHERE id=?`, string(raw), id)
+		return e
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func pf16ResponseSchema(t *testing.T, compiler *jsonschema.Compiler, operation apiv1.Operation) *jsonschema.Schema {
+	t.Helper()
+	schema, err := compiler.Compile(responseSchemaURI(operation.Pattern, strings.ToLower(operation.Method)))
+	if err != nil {
+		t.Fatalf("compile %s response schema: %v", operation.OperationID, err)
+	}
+	return schema
+}
+
+// TestContractTicketDetailInputsAndSections validates a ticket with a
+// populated detail section, file attachments, calculated values and a
+// restricted section against the OpenAPI response schemas.
+func TestContractTicketDetailInputsAndSections(t *testing.T) {
+	operations := map[string]apiv1.Operation{}
+	for _, operation := range apiv1.Operations() {
+		operations[operation.OperationID] = operation
+	}
+	env := testutil.New(t, testutil.WithPublicBaseURL("http://punchflow.test"))
+	spec := loadSpec(t)
+	compiler := schemaCompiler(t, spec)
+	pf16PrepareExpenseWorkflow(t, env)
+
+	upload := pf26bUploadFile(t, env, []byte("%PDF-1.4 receipt"), true)
+	var uploaded struct {
+		SignedID string `json:"signedId"`
+	}
+	upload.JSON(t, &uploaded)
+	if uploaded.SignedID == "" {
+		t.Fatalf("upload returned no signedId: %s", upload.Body)
+	}
+
+	workflowID, _ := store.ResolveID(t.Context(), env.DB.Q(), "workflows", "expense-claim")
+	salesTeamID, _ := store.ResolveID(t.Context(), env.DB.Q(), "teams", "sales")
+	fields := map[string]string{}
+	slipFields := map[string]string{}
+	var linesSection string
+	wf := env.Do(t, testutil.Employee, http.MethodGet, "/v1/workflows/expense-claim", nil)
+	var workflow struct {
+		SectionList []struct {
+			ID         string `json:"id"`
+			Code       string `json:"code"`
+			FormFields []struct {
+				ID, Code string
+			} `json:"formFields"`
+			SlipFields []struct {
+				ID, Code string
+			} `json:"slipFields"`
+		} `json:"sectionList"`
+	}
+	wf.JSON(t, &workflow)
+	for _, s := range workflow.SectionList {
+		for _, f := range s.FormFields {
+			fields[f.Code] = f.ID
+		}
+		for _, f := range s.SlipFields {
+			slipFields[f.Code] = f.ID
+		}
+		if s.Code == "lines" {
+			linesSection = s.ID
+		}
+	}
+
+	slipRow := func(item string, qty, price float64, files []string) map[string]any {
+		return map[string]any{"slipSectionId": linesSection, "inputs": []map[string]any{
+			{"slipFieldId": slipFields["item"], "value": item},
+			{"slipFieldId": slipFields["qty"], "value": qty},
+			{"slipFieldId": slipFields["unit-price"], "value": price},
+			{"slipFieldId": slipFields["photo"], "files": files},
+			{"slipFieldId": slipFields["subtotal"], "value": nil},
+		}}
+	}
+	created := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
+		"status": "draft", "workflowId": workflowID, "authorTeamId": salesTeamID, "title": "PF-16 detail contract",
+		"inputs": []map[string]any{
+			{"formFieldId": fields["amount"], "value": 100},
+			{"formFieldId": fields["purpose"], "value": "detail rows"},
+			{"formFieldId": fields["expense-date"], "value": "2026-01-01"},
+			{"formFieldId": fields["cost-center"], "value": nil},
+			{"formFieldId": fields["receipt"], "files": []string{uploaded.SignedID}},
+			{"formFieldId": fields["total"], "value": nil},
+		},
+		"slipItems": []map[string]any{slipRow("pen", 2, 10.5, []string{uploaded.SignedID}), slipRow("pad", 1, 4, []string{})},
+	})
+	pf26aCheck(t, operations["createTicket"], created, pf16ResponseSchema(t, compiler, operations["createTicket"]), spec)
+
+	var ticket struct {
+		ID        string           `json:"id"`
+		Inputs    []map[string]any `json:"inputs"`
+		SlipItems []struct {
+			Inputs []struct {
+				Value       any              `json:"value"`
+				Attachments []map[string]any `json:"attachments"`
+				SlipField   map[string]any   `json:"slipField"`
+			} `json:"inputs"`
+		} `json:"slipItems"`
+		TicketSections []map[string]any `json:"ticketSections"`
+	}
+	created.JSON(t, &ticket)
+	if len(ticket.SlipItems) != 2 {
+		t.Fatalf("slipItems=%d want 2: %s", len(ticket.SlipItems), created.Body)
+	}
+	first := ticket.SlipItems[0].Inputs
+	var photoAttachments, subtotal = 0, any(nil)
+	for _, cell := range first {
+		switch cell.SlipField["code"] {
+		case "photo":
+			photoAttachments = len(cell.Attachments)
+			if len(cell.Attachments) == 1 && cell.Attachments[0]["signedId"] != uploaded.SignedID {
+				t.Errorf("detail attachment=%v", cell.Attachments[0])
+			}
+		case "subtotal":
+			subtotal = cell.Value
+		}
+	}
+	if photoAttachments != 1 || subtotal != 21.0 {
+		t.Errorf("first detail row photo attachments=%d subtotal=%v, want 1 and 21", photoAttachments, subtotal)
+	}
+	for _, in := range ticket.Inputs {
+		field, _ := in["formField"].(map[string]any)
+		attachments, _ := in["attachments"].([]any)
+		switch field["code"] {
+		case "receipt":
+			if len(attachments) != 1 {
+				t.Errorf("receipt attachments=%v want one", attachments)
+			}
+		case "total":
+			// amount*2 + SUM(subtotal) = 200 + (2*10.5 + 1*4)
+			if in["value"] != 225.0 {
+				t.Errorf("total=%v want 225", in["value"])
+			}
+		}
+	}
+	for _, section := range ticket.TicketSections {
+		if section["sectionId"] == pf16ConfSectionID {
+			if section["viewable"] != false || section["viewRestriction"] != true {
+				t.Errorf("restricted section for the author=%v", section)
+			}
+			if viewers, _ := section["sectionViewers"].([]any); len(viewers) != 1 {
+				t.Errorf("sectionViewers=%v", viewers)
+			}
+		}
+	}
+
+	patch := env.Do(t, testutil.Employee, http.MethodPatch, "/v1/tickets/"+ticket.ID+"/form", map[string]any{
+		"slipItems": []map[string]any{slipRow("pen", 3, 10, []string{})},
+	})
+	pf26aCheck(t, operations["updateTicketForm"], patch, pf16ResponseSchema(t, compiler, operations["updateTicketForm"]), spec)
+	var patched struct {
+		SlipItems []json.RawMessage `json:"slipItems"`
+	}
+	patch.JSON(t, &patched)
+	if len(patched.SlipItems) != 1 {
+		t.Errorf("form patch left %d detail rows, want the 1 submitted row", len(patched.SlipItems))
+	}
+
+	// An administrator with ticket_read sees the restricted section.
+	admin := env.Do(t, testutil.Admin, http.MethodGet, "/v1/tickets/"+ticket.ID, nil)
+	pf26aCheck(t, operations["getTicket"], admin, pf16ResponseSchema(t, compiler, operations["getTicket"]), spec)
+	var adminView struct {
+		TicketSections []map[string]any `json:"ticketSections"`
+	}
+	admin.JSON(t, &adminView)
+	for _, section := range adminView.TicketSections {
+		if section["sectionId"] == pf16ConfSectionID && section["viewable"] != true {
+			t.Errorf("ticket_read administrator cannot view restricted section: %v", section)
+		}
+	}
+}

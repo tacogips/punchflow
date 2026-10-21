@@ -39,6 +39,7 @@ type options struct {
 	enableAdminReset bool
 	rateLimit        int
 	rateLimitSecret  string
+	publicBaseURL    string
 }
 
 // WithLocalLogin enables the explicit development-only local login route.
@@ -46,6 +47,9 @@ func WithLocalLogin() Option { return func(o *options) { o.enableLocalLogin = tr
 
 // WithAdminReset enables the explicit development-only admin fixture reset.
 func WithAdminReset() Option { return func(o *options) { o.enableAdminReset = true } }
+
+// WithPublicBaseURL sets the externally visible base URL used for absolute file URLs.
+func WithPublicBaseURL(u string) Option { return func(o *options) { o.publicBaseURL = u } }
 
 // WithRateLimit enables the server's request limiter with the supplied limit and secret.
 func WithRateLimit(n int, secret string) Option {
@@ -73,7 +77,7 @@ func New(t *testing.T, opts ...Option) *Env {
 	clock := kftime.NewFakeClock(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
 	srv, err := server.New(context.Background(), server.Config{
 		DataDir: dataDir, DBPath: filepath.Join(dataDir, "punchflow.sqlite"),
-		FixturesFS: fixtureFS, Seed: true,
+		FixturesFS: fixtureFS, Seed: true, PublicBaseURL: config.publicBaseURL,
 		EnableLocalLogin: config.enableLocalLogin, EnableAdminReset: config.enableAdminReset,
 		RateLimit: config.rateLimit, RateLimitSecret: config.rateLimitSecret,
 	}, clock)

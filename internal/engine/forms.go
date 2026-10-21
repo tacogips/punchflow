@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -13,147 +12,6 @@ import (
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
-
-func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, def model.WorkflowDef, inputs []FieldInput, slips []SlipItemInput, full bool, nowTime int64) ([]model.TicketInput, []model.TicketSlipItem, error) {
-	fieldByID, fieldByCode := map[string]model.FormField{}, map[string]model.FormField{}
-	slipByID, slipByCode := map[string]model.WorkflowSection{}, map[string]model.WorkflowSection{}
-	for _, section := range def.SectionList {
-		switch section.SectionType {
-		case model.SectionTypeForm:
-			for _, f := range section.FormFields {
-				fieldByID[f.ID] = f
-				fieldByCode[f.Code] = f
-			}
-		case model.SectionTypeSlip:
-			slipByID[section.ID] = section
-			slipByCode[section.Code] = section
-		}
-	}
-	seen := map[string]bool{}
-	normalized := []model.TicketInput{}
-	errors := map[string][]string{}
-	for _, in := range inputs {
-		field, ok := model.FormField{}, false
-		if in.FormFieldID != "" {
-			field, ok = fieldByID[in.FormFieldID]
-		} else if in.FormFieldCode != "" {
-			field, ok = fieldByCode[in.FormFieldCode]
-		}
-		if !ok {
-			return nil, nil, kferr.InvalidParameter("Invalid form field code")
-		}
-		if seen[field.ID] {
-			return nil, nil, kferr.InvalidParameter("Form field must be unique")
-		}
-		seen[field.ID] = true
-		value, refs, err := pf14FieldValue(in)
-		if err != nil {
-			errors[field.Code] = append(errors[field.Code], "is invalid")
-			continue
-		}
-		if field.FieldType == "file" && len(in.Files) > 0 {
-			value = in.Files
-			refs = append([]string(nil), in.Files...)
-		}
-		if field.FieldType == "calculation" {
-			value, refs = nil, nil
-		}
-		if err = pf14ValidateValue(field, value); err != nil {
-			errors[field.Code] = append(errors[field.Code], err.Error())
-			continue
-		}
-		if field.FieldType != "calculation" {
-			if err = pf14cValidateFormValue(ctx, q, field, value); err != nil {
-				errors[field.Code] = append(errors[field.Code], err.Error())
-				continue
-			}
-		}
-		raw, err := json.Marshal(value)
-		if err != nil {
-			return nil, nil, fmt.Errorf("engine: encode form value: %w", err)
-		}
-		var decoded any
-		if err = json.Unmarshal(raw, &decoded); err != nil {
-			return nil, nil, err
-		}
-		normalized = append(normalized, model.TicketInput{ID: store.NewID(), TicketID: ticketID, FormFieldID: field.ID, Value: decoded, RefIDs: refs})
-	}
-	values := pf14InputValues(def, inputs)
-	for _, section := range def.SectionList {
-		if section.SectionType != model.SectionTypeForm || !pf14SectionVisible(section, values) {
-			continue
-		}
-		for _, field := range section.FormFields {
-			hidden := field.Hidden != nil && *field.Hidden
-			if full && field.Required && !field.Approver && !hidden {
-				if !seen[field.ID] || pf14Empty(values[field.Code]) {
-					errors[field.Code] = append(errors[field.Code], "is required")
-				}
-			}
-		}
-	}
-	if len(errors) > 0 {
-		return nil, nil, kferr.ValidationFailed(errors)
-	}
-	normalizedSlips := []model.TicketSlipItem{}
-	for i, item := range slips {
-		section, ok := slipByID[item.SlipSectionID]
-		if !ok && item.SlipSectionCode != "" {
-			section, ok = slipByCode[item.SlipSectionCode]
-		}
-		if !ok {
-			return nil, nil, kferr.ValidationFailed(map[string][]string{"slipItems": {"contains an unknown slip section"}})
-		}
-		mapInputs := map[string]any{}
-		fieldByID := map[string]model.SlipField{}
-		for _, f := range section.SlipFields {
-			fieldByID[f.ID] = f
-			fieldByID[f.Code] = f
-		}
-		for _, in := range item.Inputs {
-			field, ok := fieldByID[in.SlipFieldID]
-			if in.SlipFieldID == "" {
-				field, ok = fieldByID[in.SlipFieldCode]
-			}
-			if !ok {
-				return nil, nil, kferr.ValidationFailed(map[string][]string{"slipItems": {"contains an unknown slip field"}})
-			}
-			raw := in.Value
-			if len(raw) == 0 {
-				raw = in.GeneralMasterItemID
-			}
-			if len(raw) == 0 {
-				raw = in.UserID
-			}
-			if len(raw) == 0 {
-				raw = in.TeamID
-			}
-			if len(raw) == 0 {
-				raw = in.TicketID
-			}
-			var v any
-			if len(raw) > 0 {
-				if err := json.Unmarshal(raw, &v); err != nil {
-					return nil, nil, kferr.ValidationFailed(map[string][]string{field.Code: {"is invalid"}})
-				}
-			}
-			if field.Required && full && pf14Empty(v) {
-				return nil, nil, kferr.ValidationFailed(map[string][]string{field.Code: {"is required"}})
-			}
-			mapInputs[field.ID] = v
-		}
-		normalizedSlips = append(normalizedSlips, model.TicketSlipItem{ID: store.NewID(), TicketID: ticketID, SlipSectionID: section.ID, Position: i, Inputs: mapInputs})
-	}
-	for i := range normalized {
-		normalized[i].CreatedAt = store.Time(nowTime)
-		normalized[i].UpdatedAt = normalized[i].CreatedAt
-	}
-	for i := range normalizedSlips {
-		normalizedSlips[i].CreatedAt = store.Time(nowTime)
-		normalizedSlips[i].UpdatedAt = normalizedSlips[i].CreatedAt
-	}
-	return normalized, normalizedSlips, nil
-}
 
 func pf14cValidateFormValue(ctx context.Context, q store.Querier, field model.FormField, value any) error {
 	if pf14Empty(value) {
@@ -279,7 +137,8 @@ func pf14cReferenceExists(ctx context.Context, q store.Querier, field model.Form
 		if err != nil || !exists {
 			return exists, err
 		}
-		if len(field.AllowedTicketStatus) == 0 {
+		// The default fixtures list "all" (not in the kickflow enum) to mean any status.
+		if len(field.AllowedTicketStatus) == 0 || pf14cOptionAllowed(field.AllowedTicketStatus, "all") {
 			return true, nil
 		}
 		return pf14cOptionAllowed(field.AllowedTicketStatus, status), nil
@@ -339,8 +198,10 @@ func pf14Empty(v any) bool {
 	if v == nil {
 		return true
 	}
-	s, ok := v.(string)
-	return ok && strings.TrimSpace(s) == ""
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s) == ""
+	}
+	return pf14bEmptyArray(v)
 }
 
 func pf14ValidateApprovalInputs(def model.WorkflowDef, rows []model.TicketInput) error {

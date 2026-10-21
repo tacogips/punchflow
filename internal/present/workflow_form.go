@@ -25,6 +25,14 @@ func pf08Sections(ctx context.Context, q store.Querier, sections []model.Workflo
 		section := map[string]any{"id": s.ID, "title": s.Title, "sectionType": s.SectionType, "description": nil, "viewRestriction": false, "sectionViewers": []any{}, "formFields": fields, "slipFields": slips, "conditionFields": cfs}
 		switch s.SectionType {
 		case model.SectionTypeForm:
+			viewers, err := sectionViewersJSON(ctx, q, s, nil)
+			if err != nil {
+				return nil, err
+			}
+			section["viewRestriction"], section["sectionViewers"] = s.ViewRestriction, viewers
+			if s.ViewRestriction {
+				section["allowViewAuthor"], section["allowViewApprover"] = s.AllowViewAuthor, s.AllowViewApprover
+			}
 			section["conditional"] = s.Conditional
 			if s.Conditional {
 				section["combinationType"] = s.CombinationType

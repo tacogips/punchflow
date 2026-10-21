@@ -90,56 +90,8 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		hasUpdate = true
 	}
 	if in.Inputs != nil || in.SlipItems != nil {
-		var inputValues []FieldInput
-		slipValues := []SlipItemInput{}
-		if in.Inputs != nil {
-			if approver {
-				if err = pf14cValidateApproverPatch(def, *in.Inputs); err != nil {
-					return nil, err
-				}
-				existing, er := store.EngTicketInputs(ctx, tx, id)
-				if er != nil {
-					return nil, er
-				}
-				inputValues = pf14cMergeInputs(def, pf14cInputsFromRows(def, existing), *in.Inputs)
-			} else if partial {
-				existing, er := store.EngTicketInputs(ctx, tx, id)
-				if er != nil {
-					return nil, er
-				}
-				inputValues = pf14cMergeInputs(def, pf14cInputsFromRows(def, existing), *in.Inputs)
-			} else {
-				if err = pf14ValidateCreateCompleteness(def, *in.Inputs); err != nil {
-					return nil, err
-				}
-				inputValues = *in.Inputs
-			}
-		} else {
-			existing, er := store.EngTicketInputs(ctx, tx, id)
-			if er != nil {
-				return nil, er
-			}
-			if partial {
-				inputValues = pf14cInputsFromRows(def, existing)
-			} else {
-				inputValues = pf14InputsFromRows(def, existing)
-			}
-		}
-		if in.SlipItems != nil {
-			slipValues = *in.SlipItems
-		}
-		full := in.Status != nil && *in.Status == model.TicketStatusInProgress
-		inputs, slips, er := pf14NormalizeForm(ctx, tx, id, def, inputValues, slipValues, full, store.Millis(now))
-		if er != nil {
-			return nil, er
-		}
-		if err = store.EngReplaceInputs(ctx, tx, id, inputs); err != nil {
+		if err = e.pf14cApplyFormEdit(ctx, tx, a, &t, def, in, partial, approver, now); err != nil {
 			return nil, err
-		}
-		if in.SlipItems != nil {
-			if err = store.EngReplaceSlipItems(ctx, tx, id, slips); err != nil {
-				return nil, err
-			}
 		}
 		hasUpdate = true
 	}
@@ -347,16 +299,8 @@ func (e *Engine) pf14cSubmit(ctx context.Context, tx *store.Tx, a Actor, t *mode
 			return err
 		}
 	}
-	rows, err := store.EngTicketInputs(ctx, tx, t.ID)
+	inputValues, err := e.pf14cRevalidateForSubmit(ctx, tx, a, t, def, now)
 	if err != nil {
-		return err
-	}
-	inputValues := pf14InputsFromRows(def, rows)
-	normalized, _, err := pf14NormalizeForm(ctx, tx, t.ID, def, inputValues, nil, true, store.Millis(now))
-	if err != nil {
-		return err
-	}
-	if err = store.EngReplaceInputs(ctx, tx, t.ID, normalized); err != nil {
 		return err
 	}
 	if err = store.EngDeleteTicketSteps(ctx, tx, t.ID); err != nil {

@@ -54,14 +54,26 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if in.SlipItems != nil {
 		slips = *in.SlipItems
 	}
-	if err = pf14ValidateCreateCompleteness(def, inputs); err != nil {
-		return "", nil, err
-	}
-	id := store.NewID()
-	normalized, normalizedSlips, err := pf14NormalizeForm(ctx, tx, id, def, inputs, slips, full, store.Millis(now))
+	authorID := a.UserID
+	blocked, err := pf16BlockedSections(ctx, tx, a, model.Ticket{AuthorID: &authorID}, def)
 	if err != nil {
 		return "", nil, err
 	}
+	if err = pf16RejectBlockedInputs(def, blocked, inputs); err != nil {
+		return "", nil, err
+	}
+	if err = pf14ValidateCreateCompleteness(def, inputs, blocked); err != nil {
+		return "", nil, err
+	}
+	id := store.NewID()
+	form, err := pf14NormalizeForm(ctx, tx, id, def, inputs, slips, formOpts{Full: full, SlipMode: slipReplaceAll, Blocked: blocked}, store.Millis(now))
+	if err != nil {
+		return "", nil, err
+	}
+	if form.Title != nil {
+		in.Title = form.Title
+	}
+	inputs = pf14cInputsFromRows(def, form.Inputs)
 	snapshotName, err := store.TeamFullName(ctx, tx, authorTeam.ID)
 	if err != nil {
 		return "", nil, err
@@ -78,10 +90,13 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if err = store.EngInsertTicket(ctx, tx, t); err != nil {
 		return "", nil, err
 	}
-	if err = store.EngReplaceInputs(ctx, tx, id, normalized); err != nil {
+	if err = store.EngReplaceInputs(ctx, tx, id, form.Inputs); err != nil {
 		return "", nil, err
 	}
-	if err = store.EngReplaceSlipItems(ctx, tx, id, normalizedSlips); err != nil {
+	if err = store.EngReplaceSlipItems(ctx, tx, id, form.Slips); err != nil {
+		return "", nil, err
+	}
+	if err = pf14SyncInputSideEffects(ctx, tx, def, id, nil, nil, form, store.Millis(now)); err != nil {
 		return "", nil, err
 	}
 	events := []model.WebhookEvent{pf14Event(model.WebhookEventTicketCreated, id, a.UserID)}
@@ -116,9 +131,11 @@ func pf14cValidateProxyClient(ctx context.Context, q store.Querier, actorID, cli
 	return nil
 }
 
-func pf14ValidateCreateCompleteness(def model.WorkflowDef, inputs []FieldInput) error {
+// pf14ValidateCreateCompleteness requires every form field to be present,
+// except those in sections the actor cannot enter.
+func pf14ValidateCreateCompleteness(def model.WorkflowDef, inputs []FieldInput, blocked map[string]bool) error {
 	for _, section := range def.SectionList {
-		if section.SectionType != model.SectionTypeForm {
+		if section.SectionType != model.SectionTypeForm || blocked[section.ID] {
 			continue
 		}
 		for _, field := range section.FormFields {

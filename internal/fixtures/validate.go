@@ -316,6 +316,24 @@ func Validate(s *Set) error {
 					add(FileWorkflows, sp+".combinationType", "invalid combinationType")
 				}
 			}
+			if (sec.ViewRestriction || len(sec.SectionViewers) > 0) && sec.SectionType != model.SectionTypeForm {
+				add(FileWorkflows, sp+".viewRestriction", "only form sections support view restrictions")
+			}
+			for vi, v := range sec.SectionViewers {
+				vp := fmt.Sprintf("%s.sectionViewers[%d]", sp, vi)
+				if (v.UserCode == "") == (v.TeamCode == "") {
+					add(FileWorkflows, vp, "exactly one of userCode and teamCode is required")
+				}
+				if v.UserCode != "" && !userCodes[v.UserCode] {
+					add(FileWorkflows, vp+".userCode", "unknown user code")
+				}
+				if v.TeamCode != "" && !teamCodes[v.TeamCode] {
+					add(FileWorkflows, vp+".teamCode", "unknown team code")
+				}
+				if v.GradeCode != "" && (v.TeamCode == "" || !gradeCodes[v.GradeCode]) {
+					add(FileWorkflows, vp+".gradeCode", "gradeCode requires a team and a known grade code")
+				}
+			}
 			for fi, f := range sec.FormFields {
 				fields[f.Code] = true
 				if !pf06Contains(model.FormFieldSizes, f.Size) {

@@ -110,6 +110,24 @@ type WorkflowSection struct {
 	FormFields      []FormField      `json:"formFields,omitempty"`
 	SlipFields      []SlipField      `json:"slipFields,omitempty"`
 	ConditionFields []ConditionField `json:"conditionFields,omitempty"`
+	// ViewRestriction limits who may view and enter the section contents.
+	// When true, only the author (AllowViewAuthor), current or past approvers
+	// (AllowViewApprover), the SectionViewers and ticket_read administrators
+	// may see the section's inputs.
+	ViewRestriction   bool            `json:"viewRestriction,omitempty"`
+	AllowViewAuthor   bool            `json:"allowViewAuthor,omitempty"`
+	AllowViewApprover bool            `json:"allowViewApprover,omitempty"`
+	SectionViewers    []SectionViewer `json:"sectionViewers,omitempty"`
+}
+
+// SectionViewer designates a user, or a team (optionally narrowed by grade),
+// allowed to view a restricted section. Exactly one of UserCode and TeamCode is set.
+type SectionViewer struct {
+	ID          string `json:"id,omitempty"`
+	UserCode    string `json:"userCode,omitempty"`
+	TeamCode    string `json:"teamCode,omitempty"`
+	GradeCode   string `json:"gradeCode,omitempty"`
+	Descendants bool   `json:"descendants,omitempty"`
 }
 type FormField struct {
 	ID                      string   `json:"id"`

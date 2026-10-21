@@ -159,7 +159,8 @@ func TestFormFieldTypes(t *testing.T) {
 	calc := model.FormField{ID: "calculation-id", Code: "calculation", FieldType: "calculation", MinValue: &minCalculationValue}
 	inputs := []FieldInput{pf14Input("calculation", calc.ID, "ignored")}
 	def := model.WorkflowDef{SectionList: []model.WorkflowSection{{SectionType: model.SectionTypeForm, FormFields: []model.FormField{calc}}}}
-	rows, _, err := pf14NormalizeForm(e.ctx, e.db.Q(), "ticket-id", def, inputs, nil, false, 0)
+	res, err := pf14NormalizeForm(e.ctx, e.db.Q(), "ticket-id", def, inputs, nil, formOpts{}, 0)
+	rows := res.Inputs
 	if err != nil || len(rows) != 1 || rows[0].Value != nil {
 		t.Fatalf("calculation should normalize to null: rows=%+v err=%v", rows, err)
 	}
