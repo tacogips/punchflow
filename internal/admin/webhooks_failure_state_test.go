@@ -84,3 +84,34 @@ func TestWebhookEditPreservesFailureHistory(t *testing.T) {
 		t.Fatalf("re-enable should clear failure state: %#v", hook)
 	}
 }
+
+// WH-05 regression: the dispatcher may record a failure after PATCH has read
+// the webhook. A configuration update based on that stale read must not erase it.
+func TestWebhookPatchPreservesFailureRecordedAfterRead(t *testing.T) {
+	env := testutil.New(t)
+	id := env.RegisterReceiverWebhook(t, "secret", "ticket_created")
+	stale, err := store.GetWebhook(t.Context(), env.DB.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstFailure := env.Clock.Now()
+	if err = env.DB.WithTx(t.Context(), func(tx *store.Tx) error {
+		return store.SetWebhookFailureState(t.Context(), tx, id, &firstFailure, false, firstFailure)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stale.Name = "edited after failure"
+	stale.UpdatedAt = firstFailure.Add(time.Second)
+	if err = env.DB.WithTx(t.Context(), func(tx *store.Tx) error {
+		return store.UpdateWebhook(t.Context(), tx, stale)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetWebhook(t.Context(), env.DB.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.FirstFailureAt == nil || !got.FirstFailureAt.Equal(firstFailure) {
+		t.Fatalf("PATCH erased concurrent first_failure_at: got %v want %v", got.FirstFailureAt, firstFailure)
+	}
+}

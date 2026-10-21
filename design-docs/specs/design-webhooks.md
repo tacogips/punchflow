@@ -87,6 +87,8 @@ Payloads reuse `internal/present` so they are identical to `getTicket` / `listTi
 
 Webhook create, and update that changes `url` or `secret`, enqueue a `ping` (Confirmed). Re-enabling a disabled webhook is done with `PATCH {enabled: true}`, which clears `disabled_at` and `first_failure_at`. `first_failure_at` is cleared only by a successful delivery or by this disabled-to-enabled transition; ordinary edits (name, filters, url, secret, or `enabled: true` on an already enabled webhook) preserve it, so edits cannot postpone automatic disabling.
 
+PATCH reads existing configuration to merge omitted fields, but persists ordinary configuration columns separately from delivery state. The failure clock and enabled/disabled timestamps are changed only by an explicit `enabled` transition, using SQL state updates within the PATCH transaction; stale configuration snapshots therefore cannot erase a dispatcher failure recorded after the read (WH-05).
+
 ### Required tests (`internal/webhook/*_test.go`)
 
 | Test | Checks |

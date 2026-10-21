@@ -39,12 +39,17 @@ func pf16PrepareExpenseWorkflow(t *testing.T, env *testutil.Env) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	subtotalFormula, totalFormula := "qty * {unit-price}", "amount * 2 + SUM(lines.subtotal)"
+	subtotalFormula, totalFormula := "$qty * ${unit-price}", "$amount * 2 + $sum${unit-price}"
 	var note model.FormField
 	for i := range def.SectionList {
 		section := &def.SectionList[i]
 		switch section.SectionType {
 		case model.SectionTypeSlip:
+			for i := range section.SlipFields {
+				if section.SlipFields[i].Code == "unit-price" {
+					section.SlipFields[i].ShowTotal = true
+				}
+			}
 			photo := pf16SlipFieldDef(pf16PhotoFieldID, "photo", "file")
 			photo.Multiple = true
 			subtotal := pf16SlipFieldDef(pf16SubtotalFieldID, "subtotal", "calculation")
@@ -209,9 +214,9 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 				t.Errorf("receipt attachments=%v want one", attachments)
 			}
 		case "total":
-			// amount*2 + SUM(subtotal) = 200 + (2*10.5 + 1*4)
-			if in["value"] != 225.0 {
-				t.Errorf("total=%v want 225", in["value"])
+			// $amount*2 + $sum${unit-price} = 200 + 10.5 + 4.
+			if in["value"] != 214.5 {
+				t.Errorf("total=%v want 214.5", in["value"])
 			}
 		}
 	}

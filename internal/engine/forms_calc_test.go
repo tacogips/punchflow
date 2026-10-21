@@ -16,12 +16,17 @@ func pf16WithCalcs(t *testing.T, e *pf14TestEnv, mutate func(*model.WorkflowDef)
 	t.Helper()
 	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
 		subtotal := pf16SlipField("subtotal", "calculation")
-		subtotal.Formula = pf16Formula("qty * {unit-price}")
+		subtotal.Formula = pf16Formula("$qty * ${unit-price}")
 		pf16Section(def, "lines").SlipFields = append(pf16Section(def, "lines").SlipFields, subtotal)
 		total := pf16FormField("total", "calculation")
-		total.Formula = pf16Formula("amount * 2")
+		total.Formula = pf16Formula("$amount * 2")
 		grand := pf16FormField("grand", "calculation")
-		grand.Formula = pf16Formula("SUM(lines.subtotal) + total")
+		grand.Formula = pf16Formula("SUM(lines.subtotal) + $total + $sum${unit-price}")
+		for i := range pf16Section(def, "lines").SlipFields {
+			if pf16Section(def, "lines").SlipFields[i].Code == "unit-price" {
+				pf16Section(def, "lines").SlipFields[i].ShowTotal = true
+			}
+		}
 		for i := range def.SectionList {
 			if def.SectionList[i].SectionType == model.SectionTypeForm {
 				def.SectionList[i].FormFields = append(def.SectionList[i].FormFields, total, grand)
@@ -68,8 +73,8 @@ func TestCalculationFieldsAreEvaluated(t *testing.T) {
 		t.Errorf("total=%v want 200", got)
 	}
 	// SUM over the detail column (2*10.5 + 3*4) + total.
-	if got := pf16FormValue(t, e, id, "grand"); got != 233.0 {
-		t.Errorf("grand=%v want 233", got)
+	if got := pf16FormValue(t, e, id, "grand"); got != 247.5 {
+		t.Errorf("grand=%v want 247.5", got)
 	}
 	def := pf16Def(t, e, "expense-claim")
 	rows := pf16Slips(t, e, id)
@@ -84,15 +89,15 @@ func TestCalculationFieldsAreEvaluated(t *testing.T) {
 	if got := pf16FormValue(t, e, id, "total"); got != 600.0 {
 		t.Errorf("total after update=%v want 600", got)
 	}
-	if got := pf16FormValue(t, e, id, "grand"); got != 633.0 {
-		t.Errorf("grand after update=%v want 633", got)
+	if got := pf16FormValue(t, e, id, "grand"); got != 647.5 {
+		t.Errorf("grand after update=%v want 647.5", got)
 	}
 	// ... and when detail rows change.
 	if err = pf16UpdateForm(e, e.actor("sales-rep"), id, FormPatch{SlipItems: []SlipItemInput{pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 1})}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := pf16FormValue(t, e, id, "grand"); got != 601.0 {
-		t.Errorf("grand after detail change=%v want 601", got)
+	if got := pf16FormValue(t, e, id, "grand"); got != 602.0 {
+		t.Errorf("grand after detail change=%v want 602", got)
 	}
 	// A client-supplied value for a calculation field is ignored.
 	if err = pf16UpdateForm(e, e.actor("sales-rep"), id, FormPatch{Inputs: []FieldInput{pf14Input("total", "", 1)}}); err != nil {
@@ -133,13 +138,29 @@ func TestCalculatedValuesDriveRouteConditions(t *testing.T) {
 }
 
 func TestUnsupportedAndFailingFormulas(t *testing.T) {
+	t.Run("detail sum requires show total", func(t *testing.T) {
+		e := pf14Setup(t)
+		pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
+			for i := range def.SectionList {
+				if def.SectionList[i].Code == "lines" {
+					for j := range def.SectionList[i].SlipFields {
+						if def.SectionList[i].SlipFields[j].Code == "unit-price" {
+							def.SectionList[i].SlipFields[j].ShowTotal = false
+						}
+					}
+				}
+			}
+		})
+		_, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, pf16Base), []SlipItemInput{pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10})})
+		assertPF14FieldError(t, err, "validation_failed", "grand")
+	})
 	t.Run("unsupported expression is a validation error", func(t *testing.T) {
 		e := pf14Setup(t)
 		pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
 			for i := range def.SectionList {
 				for j := range def.SectionList[i].FormFields {
 					if def.SectionList[i].FormFields[j].Code == "total" {
-						def.SectionList[i].FormFields[j].Formula = pf16Formula("json_lookup(amount, 1)")
+						def.SectionList[i].FormFields[j].Formula = pf16Formula("unknownFunc(amount)")
 					}
 				}
 			}

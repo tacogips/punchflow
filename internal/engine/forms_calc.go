@@ -13,9 +13,10 @@ import (
 
 // calcDef is the part of a calculation field the evaluator needs.
 type calcDef struct {
-	id, code string
-	formula  *string
-	digits   *int
+	id, code    string
+	sectionType string
+	formula     *string
+	digits      *int
 }
 
 type slipRowRef struct {
@@ -60,7 +61,7 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 	for _, section := range n.def.SectionList {
 		for _, f := range section.FormFields {
 			if f.FieldType == "calculation" && !n.opts.Blocked[section.ID] {
-				r.formCalc[f.Code] = calcDef{id: f.ID, code: f.Code, formula: f.Formula, digits: f.DecimalDigit}
+				r.formCalc[f.Code] = calcDef{id: f.ID, code: f.Code, sectionType: section.SectionType, formula: f.Formula, digits: f.DecimalDigit}
 			}
 		}
 	}
@@ -137,6 +138,14 @@ func (r *calcRun) evalFormula(code, src string, env formula.Env, row *slipRowRef
 	for _, ref := range expr.Refs() {
 		if !r.known(ref, row) {
 			r.n.fail(code, fmt.Sprintf("has a formula referencing unknown field %q", ref))
+			return nil, false
+		}
+	}
+	for _, ref := range expr.SumRefs() {
+		_, field, ok := r.n.slipColumn(ref)
+		source, sourceOK := r.formCalc[code]
+		if row != nil || !sourceOK || source.sectionType != model.SectionTypeForm || !ok || !field.ShowTotal {
+			r.n.fail(code, fmt.Sprintf("has an invalid detail sum reference %q", ref))
 			return nil, false
 		}
 	}

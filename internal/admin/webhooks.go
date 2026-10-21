@@ -121,7 +121,7 @@ func (a *API) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	beforeURL := v.URL
-	wasEnabled := v.Enabled
+	var requestedEnabled *bool
 	beforeSecret := ""
 	if v.Secret != nil {
 		beforeSecret = *v.Secret
@@ -140,7 +140,13 @@ func (a *API) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		e = decode("secret", &v.Secret)
 	}
 	if e == nil {
-		e = decode("enabled", &v.Enabled)
+		if _, exists := patch["enabled"]; exists {
+			var enabled bool
+			e = json.Unmarshal(patch["enabled"], &enabled)
+			if e == nil {
+				requestedEnabled = &enabled
+			}
+		}
 	}
 	if e == nil {
 		e = decode("workflowIds", &v.WorkflowIDs)
@@ -164,20 +170,16 @@ func (a *API) updateWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	now := a.d.Clock.Now()
 	v.UpdatedAt = now
-	if v.Enabled {
-		v.DisabledAt = nil
-		// The continuous-failure clock restarts only on an explicit
-		// disabled-to-enabled transition (or a successful delivery); ordinary
-		// edits of an enabled webhook must not postpone automatic disabling.
-		if !wasEnabled {
-			v.FirstFailureAt = nil
-		}
-	}
 	changed := beforeURL != v.URL || beforeSecret != pf24Secret(v.Secret)
 	var eventID string
 	e = a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		if x := store.UpdateWebhook(r.Context(), tx, v); x != nil {
 			return x
+		}
+		if requestedEnabled != nil {
+			if x := store.SetWebhookEnabled(r.Context(), tx, id, *requestedEnabled, now); x != nil {
+				return x
+			}
 		}
 		if changed {
 			ids, x := a.d.Webhooks.EnqueueTo(r.Context(), tx, model.WebhookEvent{Type: model.WebhookEventPing, ActorUserID: p.User.ID}, []string{id})
@@ -194,6 +196,11 @@ func (a *API) updateWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	if changed {
 		a.d.Webhooks.Notify()
+	}
+	v, e = store.GetWebhook(r.Context(), a.d.DB.Q(), id)
+	if e != nil {
+		kferr.Write(w, e)
+		return
 	}
 	out := pf24WebhookJSON(v, true)
 	out["secret"] = v.Secret

@@ -72,7 +72,7 @@ func InsertWebhook(ctx context.Context, q Querier, v model.Webhook) error {
 	return nil
 }
 
-// UpdateWebhook replaces mutable webhook fields and timestamps.
+// UpdateWebhook replaces webhook configuration without modifying delivery state.
 func UpdateWebhook(ctx context.Context, q Querier, v model.Webhook) error {
 	workflows, err := json.Marshal(v.WorkflowIDs)
 	if err != nil {
@@ -85,13 +85,34 @@ func UpdateWebhook(ctx context.Context, q Querier, v model.Webhook) error {
 	if v.UpdatedAt.IsZero() {
 		v.UpdatedAt = time.Now()
 	}
-	result, err := q.ExecContext(ctx, "UPDATE webhooks SET name=?,url=?,secret=?,enabled=?,workflow_ids=?,event_types=?,first_failure_at=?,disabled_at=?,updated_at=? WHERE id=?", v.Name, v.URL, v.Secret, v.Enabled, string(workflows), string(events), pf09MillisPtr(v.FirstFailureAt), pf09MillisPtr(v.DisabledAt), Millis(v.UpdatedAt), v.ID)
+	result, err := q.ExecContext(ctx, "UPDATE webhooks SET name=?,url=?,secret=?,workflow_ids=?,event_types=?,updated_at=? WHERE id=?", v.Name, v.URL, v.Secret, string(workflows), string(events), Millis(v.UpdatedAt), v.ID)
 	if err != nil {
 		return fmt.Errorf("store: update webhook: %w", err)
 	}
 	n, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("store: count updated webhook: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetWebhookEnabled applies an explicit enable/disable transition while preserving
+// failure state unless enabling from the currently disabled state.
+func SetWebhookEnabled(ctx context.Context, q Querier, id string, enabled bool, now time.Time) error {
+	result, err := q.ExecContext(ctx, `UPDATE webhooks SET
+		enabled=?,
+		first_failure_at=CASE WHEN ?=1 AND enabled=0 THEN NULL ELSE first_failure_at END,
+		disabled_at=CASE WHEN ?=1 THEN NULL WHEN enabled=1 AND ?=0 THEN ? ELSE disabled_at END,
+		updated_at=? WHERE id=?`, enabled, enabled, enabled, enabled, Millis(now), Millis(now), id)
+	if err != nil {
+		return fmt.Errorf("store: set webhook enabled state: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: count webhook enabled state: %w", err)
 	}
 	if n == 0 {
 		return ErrNotFound

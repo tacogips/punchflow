@@ -1,9 +1,9 @@
 // Package formula parses and evaluates the calculation-field expressions of
 // punchflow workflows.
 //
-// kickflow does not publish its formula grammar, so this package implements a
-// documented, conservative subset (see Parse). Expressions outside the subset
-// fail at Parse time with an *UnsupportedError so callers can report them
+// Kickflow documents its formula operators and functions. This package supports
+// those expressions as well as legacy forms retained for local fixtures.
+// Expressions outside the supported grammar fail at Parse time with an *UnsupportedError so callers can report them
 // instead of silently storing null.
 package formula
 
@@ -30,6 +30,7 @@ const (
 	tokNumber
 	tokString
 	tokRef
+	tokSumRef
 	tokIdent
 	tokOp
 )
@@ -56,6 +57,38 @@ func (e *Expr) Refs() []string {
 				seen[v.name] = true
 				out = append(out, v.name)
 			}
+		case sumRefNode:
+			if !seen[v.name] {
+				seen[v.name] = true
+				out = append(out, v.name)
+			}
+		case unaryNode:
+			walk(v.operand)
+		case binaryNode:
+			walk(v.left)
+			walk(v.right)
+		case callNode:
+			for _, a := range v.args {
+				walk(a)
+			}
+		}
+	}
+	walk(e.root)
+	return out
+}
+
+// SumRefs returns detail-column references used with kickflow's $sum syntax.
+func (e *Expr) SumRefs() []string {
+	seen := map[string]bool{}
+	out := []string{}
+	var walk func(node)
+	walk = func(n node) {
+		switch v := n.(type) {
+		case sumRefNode:
+			if !seen[v.name] {
+				seen[v.name] = true
+				out = append(out, v.name)
+			}
 		case unaryNode:
 			walk(v.operand)
 		case binaryNode:
@@ -73,15 +106,11 @@ func (e *Expr) Refs() []string {
 
 // Parse compiles a formula.
 //
-// Supported syntax (inferred, see package docs):
-//   - numbers (12, 3.5), strings ("text" or 'text'), TRUE and FALSE
-//   - field references: bare identifiers (price, lines.qty) or {any-code} /
-//     [any-code] for codes containing characters such as '-'
-//   - arithmetic + - * / % with parentheses and unary minus
-//   - string concatenation with & and CONCAT(...)
-//   - comparisons < <= > >= = == != <> and logic && || ! (also AND, OR, NOT)
-//   - SUM AVG AVERAGE MIN MAX COUNT ROUND ROUNDUP ROUNDDOWN FLOOR CEIL
-//     CEILING ABS IF AND OR NOT CONCAT
+// Supported syntax includes kickflow's documented operators and functions,
+// `$code` / `${code}` references, and `$sum$code` / `$sum${code}` detail sums.
+// Legacy bare/braced/bracket references and operators/functions remain
+// supported for existing local workflows. Unsupported expressions return an
+// *UnsupportedError so callers can report them instead of silently storing null.
 //
 // A reference named "section.field" (or a bare detail field code) is a detail
 // column and evaluates to the list of that field's values across rows.
@@ -137,6 +166,23 @@ func tokenize(src string) ([]token, error) {
 			}
 			toks = append(toks, token{kind: tokString, text: sb.String()})
 			i = j + 1
+		case c == '$':
+			if strings.HasPrefix(string(rs[i:]), "$sum$") {
+				i += len([]rune("$sum$"))
+				name, next, err := scanDollarRef(rs, i)
+				if err != nil {
+					return nil, err
+				}
+				toks = append(toks, token{kind: tokSumRef, text: name})
+				i = next
+			} else {
+				name, next, err := scanDollarRef(rs, i+1)
+				if err != nil {
+					return nil, err
+				}
+				toks = append(toks, token{kind: tokRef, text: name})
+				i = next
+			}
 		case c == '{' || c == '[':
 			closer := '}'
 			if c == '[' {
@@ -174,6 +220,31 @@ func tokenize(src string) ([]token, error) {
 		}
 	}
 	return append(toks, token{kind: tokEOF}), nil
+}
+
+func scanDollarRef(rs []rune, start int) (string, int, error) {
+	if start < len(rs) && rs[start] == '{' {
+		end := start + 1
+		for end < len(rs) && rs[end] != '}' {
+			end++
+		}
+		if end >= len(rs) || end == start+1 {
+			return "", start, unsupported("malformed reference")
+		}
+		return strings.TrimSpace(string(rs[start+1 : end])), end + 1, nil
+	}
+	end := start
+	for end < len(rs) {
+		c := rs[end]
+		if unicode.IsSpace(c) || strings.ContainsRune("+-*/%(),<>=!&", c) {
+			break
+		}
+		end++
+	}
+	if end == start {
+		return "", start, unsupported("malformed reference")
+	}
+	return string(rs[start:end]), end, nil
 }
 
 type parser struct {
@@ -281,6 +352,8 @@ func (p *parser) parsePrimary() (node, error) {
 		return literalNode{value: t.text}, nil
 	case tokRef:
 		return refNode{name: t.text}, nil
+	case tokSumRef:
+		return sumRefNode{name: t.text}, nil
 	case tokIdent:
 		if _, ok := p.isOp("("); ok {
 			return p.parseCall(t.text)
