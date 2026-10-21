@@ -57,7 +57,7 @@ func TestOpenMigratesAllTablesAndReopenIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tables := []string{"tenant", "grades", "users", "user_invitations", "organization_charts", "teams", "team_memberships", "roles", "role_memberships", "categories", "folders", "general_masters", "general_master_fields", "general_master_items", "routes", "workflows", "proxy_applicants", "proxy_approvers", "tickets", "ticket_inputs", "ticket_slip_items", "ticket_steps", "ticket_assignees", "ticket_custom_approvers", "ticket_viewers", "ticket_links", "comments", "files", "file_attachments", "audit_logs", "api_tokens", "sessions", "oidc_states", "webhooks", "webhook_events", "webhook_attempts", "server_secrets", "schema_migrations"}
+	tables := []string{"tenant", "grades", "users", "user_invitations", "organization_charts", "teams", "team_memberships", "roles", "role_memberships", "categories", "folders", "general_masters", "general_master_fields", "general_master_items", "routes", "workflows", "proxy_applicants", "proxy_approvers", "tickets", "ticket_inputs", "ticket_slip_items", "ticket_steps", "ticket_assignees", "ticket_custom_approvers", "ticket_viewers", "ticket_links", "comments", "files", "file_attachments", "audit_logs", "api_tokens", "sessions", "oidc_states", "webhooks", "webhook_events", "webhook_attempts", "calculation_variables", "server_secrets", "schema_migrations"}
 	for _, table := range tables {
 		var name string
 		if err := db.Q().QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name); err != nil {

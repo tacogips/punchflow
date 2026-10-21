@@ -59,8 +59,8 @@ func TestRunFixturesAndToken(t *testing.T) {
 		t.Fatalf("fixtures export exit=%d stderr=%q", code, stderr)
 	}
 	entries, err := os.ReadDir(out)
-	if err != nil || len(entries) != 17 {
-		t.Fatalf("export entries=%d err=%v, want 17", len(entries), err)
+	if err != nil || len(entries) != 18 {
+		t.Fatalf("export entries=%d err=%v, want 18", len(entries), err)
 	}
 	if code, token, stderr := call("token", "issue", "--db", dbPath, "--user", "admin"); code != 0 || !regexp.MustCompile(`^pf_pat_[0-9A-Za-z]{32}\n$`).MatchString(token) {
 		t.Fatalf("token issue exit=%d token=%q stderr=%q", code, token, stderr)

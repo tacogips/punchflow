@@ -53,7 +53,7 @@ func EngUpdateTicket(ctx context.Context, q Querier, x model.Ticket) error {
 	return nil
 }
 func EngTicketInputs(ctx context.Context, q Querier, ticketID string) ([]model.TicketInput, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,form_field_id,value,ref_ids,created_at,updated_at FROM ticket_inputs WHERE ticket_id=? ORDER BY created_at,id`, ticketID)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,form_field_id,value,ref_ids,reference_snapshot,created_at,updated_at FROM ticket_inputs WHERE ticket_id=? ORDER BY created_at,id`, ticketID)
 	if err != nil {
 		return nil, fmt.Errorf("store: query engine inputs: %w", err)
 	}
@@ -61,9 +61,9 @@ func EngTicketInputs(ctx context.Context, q Querier, ticketID string) ([]model.T
 	out := []model.TicketInput{}
 	for rows.Next() {
 		var x model.TicketInput
-		var value, refs string
+		var value, refs, snapshot string
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketID, &x.FormFieldID, &value, &refs, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketID, &x.FormFieldID, &value, &refs, &snapshot, &c, &u); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal([]byte(value), &x.Value); err != nil {
@@ -71,6 +71,9 @@ func EngTicketInputs(ctx context.Context, q Querier, ticketID string) ([]model.T
 		}
 		if err = json.Unmarshal([]byte(refs), &x.RefIDs); err != nil {
 			return nil, fmt.Errorf("store: decode engine refs: %w", err)
+		}
+		if err = json.Unmarshal([]byte(snapshot), &x.ReferenceSnapshot); err != nil {
+			return nil, fmt.Errorf("store: decode engine reference snapshot: %w", err)
 		}
 		x.CreatedAt = Time(c)
 		x.UpdatedAt = Time(u)
@@ -91,7 +94,11 @@ func EngReplaceInputs(ctx context.Context, q Querier, ticketID string, values []
 		if e != nil {
 			return fmt.Errorf("store: encode engine refs: %w", e)
 		}
-		if _, e = q.ExecContext(ctx, `INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,ref_ids,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, x.ID, ticketID, x.FormFieldID, string(v), string(refs), Millis(x.CreatedAt), Millis(x.UpdatedAt)); e != nil {
+		snapshot, e := json.Marshal(x.ReferenceSnapshot)
+		if e != nil {
+			return fmt.Errorf("store: encode engine reference snapshot: %w", e)
+		}
+		if _, e = q.ExecContext(ctx, `INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,ref_ids,reference_snapshot,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, x.ID, ticketID, x.FormFieldID, string(v), string(refs), string(snapshot), Millis(x.CreatedAt), Millis(x.UpdatedAt)); e != nil {
 			return fmt.Errorf("store: insert engine input: %w", e)
 		}
 	}
@@ -106,7 +113,11 @@ func EngReplaceSlipItems(ctx context.Context, q Querier, ticketID string, values
 		if e != nil {
 			return fmt.Errorf("store: encode engine slip: %w", e)
 		}
-		if _, e = q.ExecContext(ctx, `INSERT INTO ticket_slip_items(id,ticket_id,slip_section_id,position,inputs,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, x.ID, ticketID, x.SlipSectionID, x.Position, string(v), Millis(x.CreatedAt), Millis(x.UpdatedAt)); e != nil {
+		snapshots, e := json.Marshal(x.ReferenceSnapshots)
+		if e != nil {
+			return fmt.Errorf("store: encode engine detail reference snapshots: %w", e)
+		}
+		if _, e = q.ExecContext(ctx, `INSERT INTO ticket_slip_items(id,ticket_id,slip_section_id,position,inputs,reference_snapshots,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, x.ID, ticketID, x.SlipSectionID, x.Position, string(v), string(snapshots), Millis(x.CreatedAt), Millis(x.UpdatedAt)); e != nil {
 			return fmt.Errorf("store: insert engine slip: %w", e)
 		}
 	}

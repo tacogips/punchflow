@@ -69,7 +69,7 @@ func TicketViewers(ctx context.Context, q Querier, id string) ([]model.TicketVie
 }
 
 func TicketInputs(ctx context.Context, q Querier, id string) ([]model.TicketInput, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,form_field_id,value,ref_ids,created_at,updated_at FROM ticket_inputs WHERE ticket_id=? ORDER BY created_at,id`, id)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,form_field_id,value,ref_ids,reference_snapshot,created_at,updated_at FROM ticket_inputs WHERE ticket_id=? ORDER BY created_at,id`, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: query ticket inputs: %w", err)
 	}
@@ -77,9 +77,9 @@ func TicketInputs(ctx context.Context, q Querier, id string) ([]model.TicketInpu
 	out := []model.TicketInput{}
 	for rows.Next() {
 		var x model.TicketInput
-		var value, refs string
+		var value, refs, snapshot string
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketID, &x.FormFieldID, &value, &refs, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketID, &x.FormFieldID, &value, &refs, &snapshot, &c, &u); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal([]byte(value), &x.Value); err != nil {
@@ -88,6 +88,9 @@ func TicketInputs(ctx context.Context, q Querier, id string) ([]model.TicketInpu
 		if err = json.Unmarshal([]byte(refs), &x.RefIDs); err != nil {
 			return nil, fmt.Errorf("store: decode ticket input refs: %w", err)
 		}
+		if err = json.Unmarshal([]byte(snapshot), &x.ReferenceSnapshot); err != nil {
+			return nil, fmt.Errorf("store: decode ticket input snapshot: %w", err)
+		}
 		x.CreatedAt, x.UpdatedAt = Time(c), Time(u)
 		out = append(out, x)
 	}
@@ -95,7 +98,7 @@ func TicketInputs(ctx context.Context, q Querier, id string) ([]model.TicketInpu
 }
 
 func TicketSlipItems(ctx context.Context, q Querier, id string) ([]model.TicketSlipItem, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,slip_section_id,position,inputs,created_at,updated_at FROM ticket_slip_items WHERE ticket_id=? ORDER BY position,id`, id)
+	rows, err := q.QueryContext(ctx, `SELECT id,ticket_id,slip_section_id,position,inputs,reference_snapshots,created_at,updated_at FROM ticket_slip_items WHERE ticket_id=? ORDER BY position,id`, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: query slip items: %w", err)
 	}
@@ -103,13 +106,16 @@ func TicketSlipItems(ctx context.Context, q Querier, id string) ([]model.TicketS
 	out := []model.TicketSlipItem{}
 	for rows.Next() {
 		var x model.TicketSlipItem
-		var inputs string
+		var inputs, snapshots string
 		var c, u int64
-		if err = rows.Scan(&x.ID, &x.TicketID, &x.SlipSectionID, &x.Position, &inputs, &c, &u); err != nil {
+		if err = rows.Scan(&x.ID, &x.TicketID, &x.SlipSectionID, &x.Position, &inputs, &snapshots, &c, &u); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal([]byte(inputs), &x.Inputs); err != nil {
 			return nil, fmt.Errorf("store: decode slip item: %w", err)
+		}
+		if err = json.Unmarshal([]byte(snapshots), &x.ReferenceSnapshots); err != nil {
+			return nil, fmt.Errorf("store: decode detail reference snapshots: %w", err)
 		}
 		x.CreatedAt, x.UpdatedAt = Time(c), Time(u)
 		out = append(out, x)

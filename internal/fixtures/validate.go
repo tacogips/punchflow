@@ -64,6 +64,17 @@ func Validate(s *Set) error {
 	for _, x := range s.Users {
 		userIDs[x.ID], userCodes[x.Code] = true, true
 	}
+	globalNames := map[string]bool{}
+	for i, variable := range s.CalculationVariables {
+		path := fmt.Sprintf("[%d]", i)
+		if !regexp.MustCompile(`^[A-Za-z0-9]{1,10}$`).MatchString(variable.Name) {
+			add(FileCalculationVariables, path+".name", "must contain 1 to 10 ASCII letters or digits")
+		}
+		if globalNames[variable.Name] {
+			add(FileCalculationVariables, path+".name", "duplicate variable name")
+		}
+		globalNames[variable.Name] = true
+	}
 	for _, x := range s.Grades {
 		gradeCodes[x.Code] = true
 	}

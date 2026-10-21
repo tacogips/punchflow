@@ -139,6 +139,42 @@ func TestFormulaMetadataAvailableInFormAndDetailContexts(t *testing.T) {
 	}
 }
 
+func TestGlobalCalculationVariableAndMasterRootCustomFields(t *testing.T) {
+	e := pf14Setup(t)
+	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {
+		selection := pf16FormField("selectedcenter", "master")
+		selection.GeneralMasterCode = "cost-centers"
+		value := pf16FormField("budget-owner-copy", "calculation")
+		value.Formula = pf16Formula(`json_lookup($selectedcenter, "$[0].budget-owner")`)
+		tax := pf16FormField("tax-total", "calculation")
+		tax.Formula = pf16Formula("$amount * $taxrate")
+		for i := range def.SectionList {
+			if def.SectionList[i].SectionType == model.SectionTypeForm {
+				def.SectionList[i].FormFields = append(def.SectionList[i].FormFields, selection, value, tax)
+				break
+			}
+		}
+	})
+	_, fields := pf14FormDefinition(t, e, "expense-claim")
+	inputs := pf14CompleteInputs(fields, map[string]any{"amount": "100", "purpose": "trip"})
+	center := pf14cMasterItemID(t, e, "cost-centers", "cc-eng")
+	for i := range inputs {
+		if inputs[i].FormFieldCode == "selectedcenter" {
+			inputs[i].GeneralMasterItemID, _ = json.Marshal(center)
+		}
+	}
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, inputs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pf16FormValue(t, e, id, "budget-owner-copy"); got != "eng-manager" {
+		t.Fatalf("custom master field formula=%v, want eng-manager", got)
+	}
+	if got := pf16FormValue(t, e, id, "tax-total"); got != 110.0 {
+		t.Fatalf("global variable formula=%v, want 110", got)
+	}
+}
+
 func TestFormulaCanLookupSelectedMasterCache(t *testing.T) {
 	e := pf14Setup(t)
 	pf16WithCalcs(t, e, func(def *model.WorkflowDef) {

@@ -14,23 +14,24 @@ import (
 
 // Set is one complete input collection of fixture files.
 type Set struct {
-	Tenant           TenantFile
-	Grades           []GradeFixture
-	Users            []UserFixture
-	UserCustomFields []UserCustomFieldFixture
-	OrgCharts        []OrgChartFixture
-	Roles            []RoleFixture
-	Categories       []CategoryFixture
-	Folders          []FolderFixture
-	GeneralMasters   []GeneralMasterFixture
-	Routes           []model.RouteDef
-	Workflows        []model.WorkflowDef
-	ProxyApplicants  []ProxyFixture
-	ProxyApprovers   []ProxyFixture
-	Tokens           []TokenFixture
-	Webhooks         []WebhookFixture
-	Labels           []LabelFixture
-	SubStatuses      []SubStatusFixture
+	Tenant               TenantFile
+	Grades               []GradeFixture
+	Users                []UserFixture
+	UserCustomFields     []UserCustomFieldFixture
+	OrgCharts            []OrgChartFixture
+	Roles                []RoleFixture
+	Categories           []CategoryFixture
+	Folders              []FolderFixture
+	GeneralMasters       []GeneralMasterFixture
+	Routes               []model.RouteDef
+	Workflows            []model.WorkflowDef
+	ProxyApplicants      []ProxyFixture
+	ProxyApprovers       []ProxyFixture
+	Tokens               []TokenFixture
+	Webhooks             []WebhookFixture
+	Labels               []LabelFixture
+	SubStatuses          []SubStatusFixture
+	CalculationVariables []CalculationVariableFixture
 }
 
 // Problem describes one invalid value in a fixture file.
@@ -65,6 +66,7 @@ func Parse(fsys fs.FS) (*Set, error) {
 		{FileProxyApplicants, &out.ProxyApplicants, false}, {FileProxyApprovers, &out.ProxyApprovers, false},
 		{FileTokens, &out.Tokens, false}, {FileWebhooks, &out.Webhooks, false},
 		{FileLabels, &out.Labels, false}, {FileSubStatuses, &out.SubStatuses, false},
+		{FileCalculationVariables, &out.CalculationVariables, false},
 	}
 	for _, f := range files {
 		data, err := fs.ReadFile(fsys, f.name)

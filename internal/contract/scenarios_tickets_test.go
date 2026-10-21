@@ -104,6 +104,13 @@ func TestContractLiveTickets(t *testing.T) {
 		instructionResponse := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+approveID, nil)
 		pf26aCheck(t, operations["getTicket"], instructionResponse, schemas["getTicket"], spec)
 		var instructed struct {
+			Inputs []struct {
+				Value              any              `json:"value"`
+				GeneralMasterItems []map[string]any `json:"generalMasterItems"`
+				FormField          struct {
+					Code string `json:"code"`
+				} `json:"formField"`
+			} `json:"inputs"`
 			Steps []struct {
 				Instruction *string `json:"instruction"`
 			} `json:"steps"`
@@ -115,6 +122,20 @@ func TestContractLiveTickets(t *testing.T) {
 		}
 		if !foundInstruction {
 			t.Fatal("populated ticket step instruction was not returned")
+		}
+		foundCachedMaster := false
+		for _, input := range instructed.Inputs {
+			if input.FormField.Code != "cost-center" {
+				continue
+			}
+			values, ok := input.Value.([]any)
+			if !ok || len(values) != 1 || values[0].(map[string]any)["name"] != "Sales" || len(input.GeneralMasterItems) != 1 {
+				t.Fatalf("master input=%+v, want cached value array and separate resolved array", input)
+			}
+			foundCachedMaster = true
+		}
+		if !foundCachedMaster {
+			t.Fatal("populated master reference value missing from schema-validated ticket detail")
 		}
 		if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_assignees SET pending=1 WHERE id=(SELECT ta.id FROM ticket_assignees ta JOIN ticket_steps ts ON ts.id=ta.ticket_step_id JOIN tickets tk ON tk.id=ts.ticket_id WHERE tk.id=? AND ts.status='in_progress' ORDER BY ta.created_at,ta.id LIMIT 1)`, approveID); err != nil {
 			t.Fatalf("set populated assignment hold: %v", err)

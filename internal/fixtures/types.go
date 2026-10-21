@@ -4,23 +4,24 @@ package fixtures
 import "punchflow/internal/model"
 
 const (
-	FileTenant             = "tenant.json"
-	FileGrades             = "grades.json"
-	FileUsers              = "users.json"
-	FileUserCustomFields   = "user-custom-fields.json"
-	FileOrganizationCharts = "organization-charts.json"
-	FileRoles              = "roles.json"
-	FileCategories         = "categories.json"
-	FileFolders            = "folders.json"
-	FileGeneralMasters     = "general-masters.json"
-	FileRoutes             = "routes.json"
-	FileWorkflows          = "workflows.json"
-	FileProxyApplicants    = "proxy-applicants.json"
-	FileProxyApprovers     = "proxy-approvers.json"
-	FileTokens             = "tokens.json"
-	FileWebhooks           = "webhooks.json"
-	FileLabels             = "labels.json"
-	FileSubStatuses        = "sub-statuses.json"
+	FileTenant               = "tenant.json"
+	FileGrades               = "grades.json"
+	FileUsers                = "users.json"
+	FileUserCustomFields     = "user-custom-fields.json"
+	FileOrganizationCharts   = "organization-charts.json"
+	FileRoles                = "roles.json"
+	FileCategories           = "categories.json"
+	FileFolders              = "folders.json"
+	FileGeneralMasters       = "general-masters.json"
+	FileRoutes               = "routes.json"
+	FileWorkflows            = "workflows.json"
+	FileProxyApplicants      = "proxy-applicants.json"
+	FileProxyApprovers       = "proxy-approvers.json"
+	FileTokens               = "tokens.json"
+	FileWebhooks             = "webhooks.json"
+	FileLabels               = "labels.json"
+	FileSubStatuses          = "sub-statuses.json"
+	FileCalculationVariables = "calculation-variables.json"
 )
 
 type TenantFile struct {
@@ -177,6 +178,13 @@ type SubStatusFixture struct {
 	AllowWithdrawal bool    `json:"allowWithdrawal"`
 	AllowRejection  bool    `json:"allowRejection"`
 	AllowDenial     bool    `json:"allowDenial"`
+}
+
+// CalculationVariableFixture defines a numeric variable shared by formulas.
+type CalculationVariableFixture struct {
+	Name        string  `json:"name"`
+	Value       float64 `json:"value"`
+	Description string  `json:"description,omitempty"`
 }
 type DefinitionsFile struct {
 	Routes    []model.RouteDef    `json:"routes"`

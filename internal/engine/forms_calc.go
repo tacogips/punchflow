@@ -41,6 +41,7 @@ type calcRun struct {
 	badParse  map[string]bool
 	changed   bool
 	metadata  map[string]any
+	globals   map[string]any
 }
 
 const (
@@ -56,6 +57,12 @@ const (
 // leave the value null.
 func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketSlipItem) (*string, bool) {
 	r := &calcRun{n: n, formVals: map[string]any{}, formCalc: map[string]calcDef{}, formState: map[string]int{}, parsed: map[string]*formula.Expr{}, badParse: map[string]bool{}, metadata: map[string]any{}}
+	globals, err := store.CalculationVariables(n.ctx, n.q)
+	if err != nil {
+		n.fail("base", "could not load global calculation variables")
+		globals = map[string]any{}
+	}
+	r.globals = globals
 	if n.opts.AuthorID != "" {
 		if user, err := store.GetUser(n.ctx, n.q, n.opts.AuthorID); err == nil {
 			r.metadata["author"] = calcUserJSON(user)
@@ -81,7 +88,11 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 			if n.opts.Blocked[n.idx.fieldSection[f.ID]] {
 				continue
 			}
-			r.formVals[f.Code] = n.calcReferenceValue(f.FieldType, inputs[i].RefIDs, inputs[i].Value)
+			if inputs[i].ReferenceSnapshot != nil {
+				r.formVals[f.Code] = calcFormulaReferenceValue(f.FieldType, inputs[i].ReferenceSnapshot)
+			} else {
+				r.formVals[f.Code] = n.calcReferenceValue(f.FieldType, inputs[i].RefIDs, inputs[i].Value)
+			}
 		}
 	}
 	for _, section := range n.def.SectionList {
@@ -136,7 +147,16 @@ func (n *normalizer) calcReferenceValue(fieldType string, ids []string, value an
 			if err != nil {
 				continue
 			}
-			record = map[string]any{"id": item.ID, "code": item.Code, "name": item.Name, "description": item.Description, "inputs": item.Inputs}
+			record = map[string]any{"id": item.ID, "code": item.Code, "name": item.Name, "description": item.Description}
+			fields, err := store.GetGeneralMasterFields(n.ctx, n.q, item.GeneralMasterID)
+			if err != nil {
+				continue
+			}
+			for _, field := range fields {
+				if value, ok := item.Inputs[field.ID]; ok {
+					record.(map[string]any)[field.Code] = value
+				}
+			}
 		case "user":
 			user, err := store.GetUser(n.ctx, n.q, id)
 			if err != nil {
@@ -241,6 +261,9 @@ func (r *calcRun) evalFormula(code, src string, env formula.Env, row *slipRowRef
 
 func (r *calcRun) known(name string, row *slipRowRef) bool {
 	if _, ok := r.metadata[name]; ok {
+		return true
+	}
+	if _, ok := r.globals[name]; ok {
 		return true
 	}
 	if row != nil {
@@ -354,7 +377,54 @@ func (r *calcRun) cell(sr *slipRowRef, f model.SlipField) any {
 		return r.slipValue(sr, f)
 	}
 	v, _ := slipCell(*sr.row, f)
+	if snapshot, ok := sr.row.ReferenceSnapshots[f.ID]; ok {
+		return calcFormulaReferenceValue(f.FieldType, snapshot)
+	}
 	return r.n.calcReferenceValue(f.FieldType, pf14StringsOf(v), v)
+}
+
+func calcJSONValue(value any) any {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	return string(raw)
+}
+
+func calcFormulaReferenceValue(fieldType string, snapshot any) any {
+	if raw, err := json.Marshal(snapshot); err == nil {
+		var cloned any
+		if json.Unmarshal(raw, &cloned) == nil {
+			snapshot = cloned
+		}
+	}
+	if fieldType == "master" {
+		if records, ok := snapshot.([]any); ok {
+			for _, raw := range records {
+				record, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				inputs, ok := record["inputs"].([]any)
+				if !ok {
+					continue
+				}
+				for _, rawInput := range inputs {
+					input, ok := rawInput.(map[string]any)
+					if !ok {
+						continue
+					}
+					field, ok := input["field"].(map[string]any)
+					if ok {
+						if code, codeOK := field["code"].(string); codeOK {
+							record[code] = input["value"]
+						}
+					}
+				}
+			}
+		}
+	}
+	return calcJSONValue(snapshot)
 }
 
 type formScope struct{ r *calcRun }
@@ -364,11 +434,15 @@ func (s formScope) Lookup(name string) (any, bool) {
 	if value, ok := r.metadata[name]; ok {
 		return value, true
 	}
+	// INF-FRM-03: workflow fields and metadata take precedence over globals.
 	if f, ok := r.n.idx.fieldByCode[name]; ok {
 		if cd, isCalc := r.formCalc[f.Code]; isCalc {
 			return r.formValue(cd), true
 		}
 		return r.formVals[f.Code], true
+	}
+	if value, ok := r.globals[name]; ok {
+		return value, true
 	}
 	section, field, ok := r.n.slipColumn(name)
 	if !ok {

@@ -60,7 +60,8 @@ func (e *Engine) pf14cApplyFormEdit(ctx context.Context, tx *store.Tx, a Actor, 
 	}
 	opts := formOpts{
 		Full: in.Status != nil && *in.Status == model.TicketStatusInProgress, Partial: partial, Approver: approver,
-		Blocked: blocked, Supplied: supplied, ExistingInputs: existingInputs, ExistingSlips: existingSlips,
+		LockReferenceSnapshots: t.Status == model.TicketStatusInProgress || t.Status == model.TicketStatusCompleted,
+		Blocked:                blocked, Supplied: supplied, ExistingInputs: existingInputs, ExistingSlips: existingSlips,
 		AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot,
 	}
 	slipValues := []SlipItemInput{}

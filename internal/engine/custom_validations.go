@@ -11,13 +11,19 @@ import (
 func (n *normalizer) validateCustomFields(inputs []model.TicketInput, slips []model.TicketSlipItem) {
 	formValues := make(map[string]any, len(inputs)*2)
 	for _, input := range inputs {
-		formValues[input.FormFieldID] = input.Value
 		if field, ok := n.idx.fieldByID[input.FormFieldID]; ok {
-			formValues[field.Code] = input.Value
+			if !n.opts.Blocked[n.idx.fieldSection[field.ID]] {
+				formValues[input.FormFieldID] = input.Value
+				formValues[field.Code] = input.Value
+			}
 		}
 	}
 	for _, section := range n.def.SectionList {
 		for _, field := range section.FormFields {
+			if n.opts.Blocked[section.ID] {
+				formValues[field.Code], formValues[field.ID] = nil, nil
+				continue
+			}
 			if value, ok := formValues[field.Code]; ok {
 				formValues[field.ID] = value
 			}

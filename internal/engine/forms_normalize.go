@@ -32,6 +32,8 @@ type formOpts struct {
 	Partial bool
 	// Approver marks edits made by a current approver.
 	Approver bool
+	// LockReferenceSnapshots retains reference records after application.
+	LockReferenceSnapshots bool
 	// SlipMode selects the detail-row write behavior.
 	SlipMode slipMode
 	// Blocked lists section IDs the actor cannot view or enter; their stored
@@ -148,7 +150,7 @@ func pf14NormalizeForm(ctx context.Context, q store.Querier, ticketID string, de
 func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, error) {
 	seen := map[string]bool{}
 	normalized := []model.TicketInput{}
-	values := pf14InputValues(n.def, inputs)
+	values := n.actorInputValues(inputs)
 	for _, in := range inputs {
 		field, ok := n.idx.field(in)
 		if !ok {
@@ -194,7 +196,20 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 		if err = json.Unmarshal(raw, &decoded); err != nil {
 			return nil, err
 		}
-		normalized = append(normalized, model.TicketInput{ID: store.NewID(), TicketID: n.ticketID, FormFieldID: field.ID, Value: decoded, RefIDs: refs})
+		var snapshot any
+		if field.FieldType == "master" || field.FieldType == "user" || field.FieldType == "team" || field.FieldType == "ticket" {
+			snapshot, err = n.referenceSnapshot(field.FieldType, refs)
+			if err != nil {
+				return nil, err
+			}
+			for _, old := range n.opts.ExistingInputs {
+				if n.opts.LockReferenceSnapshots && old.FormFieldID == field.ID && sameStrings(old.RefIDs, refs) && old.ReferenceSnapshot != nil {
+					snapshot = old.ReferenceSnapshot
+					break
+				}
+			}
+		}
+		normalized = append(normalized, model.TicketInput{ID: store.NewID(), TicketID: n.ticketID, FormFieldID: field.ID, Value: decoded, RefIDs: refs, ReferenceSnapshot: snapshot})
 	}
 	if n.opts.Full {
 		for _, section := range n.def.SectionList {
@@ -212,6 +227,21 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 		}
 	}
 	return normalized, nil
+}
+
+// INF-FRM-05 applies section visibility before conditional completeness and
+// radio checks; restricted stored values remain untouched for persistence.
+func (n *normalizer) actorInputValues(inputs []FieldInput) map[string]any {
+	values := pf14InputValues(n.def, inputs)
+	for _, section := range n.def.SectionList {
+		if !n.opts.Blocked[section.ID] {
+			continue
+		}
+		for _, field := range section.FormFields {
+			values[field.ID], values[field.Code] = nil, nil
+		}
+	}
+	return values
 }
 
 // radioMustBeSelected implements the type-specific "unselected" check that

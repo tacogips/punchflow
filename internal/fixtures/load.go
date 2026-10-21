@@ -334,6 +334,11 @@ func pf06InsertTx(ctx context.Context, q store.Querier, s *Set, now time.Time) (
 			return counts, err
 		}
 	}
+	for _, x := range s.CalculationVariables {
+		if err = insert("calculation_variables", "INSERT INTO calculation_variables(name,value,description,created_at,updated_at) VALUES(?,?,?,?,?)", x.Name, x.Value, x.Description, ms, ms); err != nil {
+			return counts, err
+		}
+	}
 	for _, x := range s.Webhooks {
 		wf := make([]string, 0, len(x.WorkflowCodes))
 		for _, c := range x.WorkflowCodes {

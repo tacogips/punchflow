@@ -413,6 +413,20 @@ func Export(ctx context.Context, q store.Querier) (map[string][]byte, error) {
 	if err = exportLabelsAndSubStatuses(ctx, q, s); err != nil {
 		return nil, err
 	}
+	if err = pf06Query(ctx, q, "SELECT name,value,description FROM calculation_variables ORDER BY name", func(r *sql.Rows) error {
+		var variable CalculationVariableFixture
+		var description sql.NullString
+		if e := r.Scan(&variable.Name, &variable.Value, &description); e != nil {
+			return e
+		}
+		if description.Valid {
+			variable.Description = description.String
+		}
+		s.CalculationVariables = append(s.CalculationVariables, variable)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 	return pf06EncodeSet(s)
 }
 
@@ -482,10 +496,13 @@ func pf06EncodeSet(s *Set) (map[string][]byte, error) {
 	if s.SubStatuses == nil {
 		s.SubStatuses = []SubStatusFixture{}
 	}
+	if s.CalculationVariables == nil {
+		s.CalculationVariables = []CalculationVariableFixture{}
+	}
 	values := []struct {
 		name string
 		v    any
-	}{{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileUserCustomFields, s.UserCustomFields}, {FileOrganizationCharts, s.OrgCharts}, {FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters}, {FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants}, {FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks}, {FileLabels, s.Labels}, {FileSubStatuses, s.SubStatuses}}
+	}{{FileTenant, s.Tenant}, {FileGrades, s.Grades}, {FileUsers, s.Users}, {FileUserCustomFields, s.UserCustomFields}, {FileOrganizationCharts, s.OrgCharts}, {FileRoles, s.Roles}, {FileCategories, s.Categories}, {FileFolders, s.Folders}, {FileGeneralMasters, s.GeneralMasters}, {FileRoutes, s.Routes}, {FileWorkflows, s.Workflows}, {FileProxyApplicants, s.ProxyApplicants}, {FileProxyApprovers, s.ProxyApprovers}, {FileTokens, s.Tokens}, {FileWebhooks, s.Webhooks}, {FileLabels, s.Labels}, {FileSubStatuses, s.SubStatuses}, {FileCalculationVariables, s.CalculationVariables}}
 	for i := range values {
 		if values[i].v == nil {
 			values[i].v = []any{}

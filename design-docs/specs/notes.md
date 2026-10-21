@@ -239,6 +239,17 @@ Session 464 wave-A findings, carried into session 465 at checkpoint `ea385c7`. E
 | INF-ACC-04 | Workflow watchers and a `watcherUserId` supplied on ticket create/update are shared users. Workflow watcher teams resolve against current active-chart membership; `watcherUserId` creates a persisted user viewer. Self-service watch operations continue to require existing ticket visibility. | Watch and sharing distinction 360053205593; workflow watcher behavior inferred from configured watcher audience |
 | INF-ACC-05 | A caller who cannot view a restricted section still receives each stored input's input identity and `formField` definition. Its value, resolved references, and attachments are redacted, matching the restricted webhook representation. | Section restrictions REST behavior 47269820740761 |
 
+### Backend form values and validation (INF-FRM-*)
+
+| ID | Decision | Evidence |
+|---|---|---|
+| INF-FRM-01 | A saved reference input/detail cell stores its selected IDs separately from a JSON record snapshot. Public `value` uses the saved snapshot; resolved `generalMasterItems`, `users`, `teams`, and `inputTickets` remain live lookup arrays. Draft/rejected edits and submission capture current records; after submission an unchanged selection retains its snapshot, while changed selections capture current records. | Master snapshot article 23427511503513; schema `TicketInput.value`; edit lifecycle mapping inferred |
+| INF-FRM-02 | General-master selections in formula contexts are JSON arrays whose records expose custom field values at the root under each master field code; the nested public `inputs` representation is not used by `json_lookup`. | General-master formula article 10738484258841 |
+| INF-FRM-03 | Global calculation variables are fixture-defined numeric values. Lookup precedence is ticket metadata, workflow form fields (including calculated fields), then global variables. This order resolves collisions deterministically; Kickflow documents global variable syntax but not collision precedence. | Global variable article 900007118003; precedence is a punchflow inference |
+| INF-FRM-04 | Custom validations evaluate values visible to the editing actor. Fields in inaccessible sections are empty for validation, while their stored values remain preserved. | Section restrictions article 47269820740761 |
+| INF-FRM-05 | Conditional-section visibility, completeness and radio selection checks use the editing actor's value map. Inaccessible section fields are empty in that map and stored values remain preserved. | Section restrictions article 47269820740761 |
+| INF-FRM-06 | Approvers cannot remove previously saved detail rows through ticket or form patches. Applicant edits retain row deletion behavior; approvers may delete their unsaved additions before saving. | Detail row addition article 58248909885209 |
+
 ### Intentional divergences from kickflow
 
 ### Ticket values, calculations, and uploads (2026-10-21)

@@ -97,11 +97,11 @@ func (n *normalizer) normalizeSlipRows(items []SlipItemInput) ([]model.TicketSli
 		if n.opts.Approver && prev == nil && !section.AllowApproverToAddItems {
 			return nil, kferr.InvalidParameter("Approver cannot add rows to this detail section")
 		}
-		cells, err := n.normalizeSlipCells(section, item, prev)
+		cells, snapshots, err := n.normalizeSlipCells(section, item, prev)
 		if err != nil {
 			return nil, err
 		}
-		row := model.TicketSlipItem{ID: store.NewID(), TicketID: n.ticketID, SlipSectionID: section.ID, Inputs: cells, CreatedAt: store.Time(n.nowMs), UpdatedAt: store.Time(n.nowMs)}
+		row := model.TicketSlipItem{ID: store.NewID(), TicketID: n.ticketID, SlipSectionID: section.ID, Inputs: cells, ReferenceSnapshots: snapshots, CreatedAt: store.Time(n.nowMs), UpdatedAt: store.Time(n.nowMs)}
 		if prev != nil {
 			row.ID, row.CreatedAt = prev.ID, prev.CreatedAt
 		}
@@ -110,13 +110,14 @@ func (n *normalizer) normalizeSlipRows(items []SlipItemInput) ([]model.TicketSli
 	return rows, nil
 }
 
-func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item SlipItemInput, prev *model.TicketSlipItem) (map[string]any, error) {
+func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item SlipItemInput, prev *model.TicketSlipItem) (map[string]any, map[string]any, error) {
 	fields := map[string]model.SlipField{}
 	for _, f := range section.SlipFields {
 		fields[f.ID] = f
 		fields[f.Code] = f
 	}
 	cells := map[string]any{}
+	snapshots := map[string]any{}
 	supplied := map[string]bool{}
 	for _, in := range item.Inputs {
 		key := in.SlipFieldID
@@ -125,14 +126,14 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 		}
 		field, ok := fields[key]
 		if !ok {
-			return nil, kferr.ValidationFailed(map[string][]string{"slipItems": {"contains an unknown slip field"}})
+			return nil, nil, kferr.ValidationFailed(map[string][]string{"slipItems": {"contains an unknown slip field"}})
 		}
 		if supplied[field.ID] {
-			return nil, kferr.InvalidParameter("Slip field must be unique")
+			return nil, nil, kferr.InvalidParameter("Slip field must be unique")
 		}
 		supplied[field.ID] = true
 		if !n.editableByActor(field) {
-			return nil, kferr.InvalidParameter("Invalid slip field code")
+			return nil, nil, kferr.InvalidParameter("Invalid slip field code")
 		}
 		value, err := slipRawValue(in)
 		if err != nil {
@@ -161,6 +162,17 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 			}
 		}
 		cells[field.ID] = value
+		if field.FieldType == "master" || field.FieldType == "user" || field.FieldType == "team" || field.FieldType == "ticket" {
+			refs := pf14StringsOf(value)
+			snapshot, err := n.referenceSnapshot(field.FieldType, refs)
+			if err != nil {
+				return nil, nil, err
+			}
+			if n.opts.LockReferenceSnapshots && prev != nil && sameStrings(pf14StringsOf(prev.Inputs[field.ID]), refs) && prev.ReferenceSnapshots[field.ID] != nil {
+				snapshot = prev.ReferenceSnapshots[field.ID]
+			}
+			snapshots[field.ID] = snapshot
+		}
 	}
 	if prev != nil {
 		for _, f := range section.SlipFields {
@@ -170,9 +182,12 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 			if v, ok := slipCell(*prev, f); ok {
 				cells[f.ID] = v
 			}
+			if snapshot, ok := prev.ReferenceSnapshots[f.ID]; ok {
+				snapshots[f.ID] = snapshot
+			}
 		}
 	}
-	return cells, nil
+	return cells, snapshots, nil
 }
 
 func (n *normalizer) slipRadioMustBeSelected(f model.SlipField, value any) bool {
@@ -198,6 +213,11 @@ func cloneSlipRow(row model.TicketSlipItem) model.TicketSlipItem {
 		cells[k] = v
 	}
 	row.Inputs = cells
+	snapshots := make(map[string]any, len(row.ReferenceSnapshots))
+	for k, v := range row.ReferenceSnapshots {
+		snapshots[k] = v
+	}
+	row.ReferenceSnapshots = snapshots
 	return row
 }
 
@@ -206,6 +226,23 @@ func cloneSlipRow(row model.TicketSlipItem) model.TicketSlipItem {
 // stored set must be rewritten.
 func (n *normalizer) assembleSlips(newRows []model.TicketSlipItem) ([]model.TicketSlipItem, bool) {
 	existing := n.opts.ExistingSlips
+	if n.opts.Approver && n.opts.SlipMode != slipKeep {
+		oldCounts, newCounts := map[string]int{}, map[string]int{}
+		for _, row := range existing {
+			oldCounts[row.SlipSectionID]++
+		}
+		for _, row := range newRows {
+			newCounts[row.SlipSectionID]++
+		}
+		for sectionID, count := range oldCounts {
+			if n.opts.Blocked[sectionID] {
+				continue
+			}
+			if newCounts[sectionID] < count {
+				n.fail("slipItems", "approvers cannot delete saved detail rows")
+			}
+		}
+	}
 	final := []model.TicketSlipItem{}
 	switch n.opts.SlipMode {
 	case slipReplaceAll:

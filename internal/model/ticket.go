@@ -24,22 +24,24 @@ type Ticket struct {
 	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 type TicketInput struct {
-	ID          string    `json:"id"`
-	TicketID    string    `json:"ticketId"`
-	FormFieldID string    `json:"formFieldId"`
-	Value       any       `json:"value"`
-	RefIDs      []string  `json:"refIds"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID                string    `json:"id"`
+	TicketID          string    `json:"ticketId"`
+	FormFieldID       string    `json:"formFieldId"`
+	Value             any       `json:"value"`
+	RefIDs            []string  `json:"refIds"`
+	ReferenceSnapshot any       `json:"referenceSnapshot,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 type TicketSlipItem struct {
-	ID            string         `json:"id"`
-	TicketID      string         `json:"ticketId"`
-	SlipSectionID string         `json:"slipSectionId"`
-	Position      int            `json:"position"`
-	Inputs        map[string]any `json:"inputs"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UpdatedAt     time.Time      `json:"updatedAt"`
+	ID                 string         `json:"id"`
+	TicketID           string         `json:"ticketId"`
+	SlipSectionID      string         `json:"slipSectionId"`
+	Position           int            `json:"position"`
+	Inputs             map[string]any `json:"inputs"`
+	ReferenceSnapshots map[string]any `json:"referenceSnapshots,omitempty"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
 }
 type TicketStep struct {
 	ID                       string     `json:"id"`

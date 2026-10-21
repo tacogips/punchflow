@@ -16,8 +16,8 @@ func TestFixturesExportAndResetGate(t *testing.T) {
 	}
 	var files map[string]json.RawMessage
 	exported.JSON(t, &files)
-	if len(files) != 17 {
-		t.Fatalf("export has %d fixture files, want 17", len(files))
+	if len(files) != 18 {
+		t.Fatalf("export has %d fixture files, want 18", len(files))
 	}
 	var masters []struct {
 		Items []struct {

@@ -123,13 +123,29 @@ func formInputJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 	if fieldModel != nil {
 		switch fieldModel.FieldType {
 		case "master":
-			value = resolved.general
+			if in.ReferenceSnapshot != nil {
+				value = in.ReferenceSnapshot
+			} else {
+				value = resolved.general
+			}
 		case "user":
-			value = resolved.users
+			if in.ReferenceSnapshot != nil {
+				value = in.ReferenceSnapshot
+			} else {
+				value = resolved.users
+			}
 		case "team":
-			value = resolved.teams
+			if in.ReferenceSnapshot != nil {
+				value = in.ReferenceSnapshot
+			} else {
+				value = resolved.teams
+			}
 		case "ticket":
-			value = resolved.tickets
+			if in.ReferenceSnapshot != nil {
+				value = in.ReferenceSnapshot
+			} else {
+				value = resolved.tickets
+			}
 		case "file":
 			value = nil
 		}
@@ -204,13 +220,29 @@ func slipCellJSON(ctx context.Context, q store.Querier, row model.TicketSlipItem
 	publicValue := value
 	switch f.FieldType {
 	case "master", "general_master", "general_master_item":
-		publicValue = resolved.general
+		if snapshot, ok := row.ReferenceSnapshots[f.ID]; ok {
+			publicValue = snapshot
+		} else {
+			publicValue = resolved.general
+		}
 	case "user":
-		publicValue = resolved.users
+		if snapshot, ok := row.ReferenceSnapshots[f.ID]; ok {
+			publicValue = snapshot
+		} else {
+			publicValue = resolved.users
+		}
 	case "team":
-		publicValue = resolved.teams
+		if snapshot, ok := row.ReferenceSnapshots[f.ID]; ok {
+			publicValue = snapshot
+		} else {
+			publicValue = resolved.teams
+		}
 	case "ticket":
-		publicValue = resolved.tickets
+		if snapshot, ok := row.ReferenceSnapshots[f.ID]; ok {
+			publicValue = snapshot
+		} else {
+			publicValue = resolved.tickets
+		}
 	case "file":
 		publicValue = nil
 	}

@@ -534,7 +534,7 @@ func jsonLookup(v any, path string) (any, error) {
 	if !strings.HasPrefix(path, "$") {
 		return nil, evalFail("invalid JSONPath")
 	}
-	re := regexp.MustCompile(`(?:\.([A-Za-z0-9_]+)|\[([0-9]+)\])`)
+	re := regexp.MustCompile(`(?:\.([A-Za-z0-9_-]+)|\[([0-9]+)\])`)
 	matches := re.FindAllStringSubmatch(path, -1)
 	matchedPath := strings.Builder{}
 	for _, m := range matches {
