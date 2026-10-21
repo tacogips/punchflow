@@ -55,7 +55,7 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 		slips = *in.SlipItems
 	}
 	authorID := a.UserID
-	blocked, err := pf16BlockedSections(ctx, tx, a, model.Ticket{AuthorID: &authorID}, def)
+	blocked, err := pf16BlockedSections(ctx, tx, a, model.Ticket{WorkflowID: workflow.ID, AuthorID: &authorID}, def)
 	if err != nil {
 		return "", nil, err
 	}

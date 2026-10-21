@@ -197,6 +197,34 @@ func TestContractTicketDetailInputsAndSections(t *testing.T) {
 	if len(ticket.SlipItems) != 2 {
 		t.Fatalf("slipItems=%d want 2: %s", len(ticket.SlipItems), created.Body)
 	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `INSERT INTO ticket_inputs(id,ticket_id,form_field_id,value,ref_ids,created_at,updated_at) VALUES(?,?,?,?,?,0,0)`, store.NewID(), ticket.ID, fields["approver-note"], `"restricted value"`, `[]`); err != nil {
+		t.Fatal(err)
+	}
+	populated := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+ticket.ID, nil)
+	pf26aCheck(t, operations["getTicket"], populated, pf16ResponseSchema(t, compiler, operations["getTicket"]), spec)
+	var populatedTicket struct {
+		Inputs []map[string]any `json:"inputs"`
+	}
+	populated.JSON(t, &populatedTicket)
+	foundRestricted := false
+	for _, input := range populatedTicket.Inputs {
+		field, _ := input["formField"].(map[string]any)
+		if field["code"] != "approver-note" {
+			continue
+		}
+		foundRestricted = true
+		if input["id"] == nil || input["formFieldId"] != fields["approver-note"] || input["value"] != nil {
+			t.Errorf("restricted input identity/definition/redaction=%v", input)
+		}
+		for _, key := range []string{"generalMasterItems", "users", "teams", "inputTickets", "attachments"} {
+			if values, _ := input[key].([]any); len(values) != 0 {
+				t.Errorf("restricted input %s=%v, want empty", key, values)
+			}
+		}
+	}
+	if !foundRestricted {
+		t.Fatal("restricted input was omitted instead of retaining its input and formField identity")
+	}
 	first := ticket.SlipItems[0].Inputs
 	var photoAttachments, subtotal = 0, any(nil)
 	for _, cell := range first {

@@ -379,7 +379,13 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 	if err = e.pf15SyncSubStatus(ctx, tx, t, now); err != nil {
 		return err
 	}
-	return store.EngUpdateTicket(ctx, tx, *t)
+	if err = store.EngUpdateTicket(ctx, tx, *t); err != nil {
+		return err
+	}
+	if err = SyncProxySharingForTicket(ctx, tx, t.ID, now); err != nil {
+		return err
+	}
+	return SyncWorkflowManagerSharingForTicket(ctx, tx, t.ID)
 }
 func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id string, to int, comment *string) ([]model.WebhookEvent, error) {
 	t, err := e.pf14Guard(ctx, tx, a, id)

@@ -26,8 +26,8 @@ func TicketDetailWebhook(ctx context.Context, q store.Querier, id string) (Ticke
 }
 
 // TicketDetailFor presents a ticket for the caller. Inputs of restricted form
-// sections the caller may not view are omitted and the section is marked not
-// viewable. A nil caller sees every section.
+// sections remain present with values and resolved objects redacted when the
+// caller may not view them. A nil caller sees every section.
 func TicketDetailFor(ctx context.Context, q store.Querier, id string, caller *access.Caller) (TicketDetailJSON, error) {
 	return ticketDetail(ctx, q, id, caller, false)
 }
@@ -98,14 +98,11 @@ func ticketDetail(ctx context.Context, q store.Querier, id string, caller *acces
 			}
 		}
 		sid, known := fieldSection[in.FormFieldID]
-		if known && !viewable[sid] {
-			continue
-		}
 		item, e := formInputJSON(ctx, q, def, in)
 		if e != nil {
 			return nil, e
 		}
-		if redactRestricted && known && restrictedFormSection(def, sid) {
+		if known && restrictedFormSection(def, sid) && (redactRestricted || caller != nil && !viewable[sid]) {
 			redactFormInput(item)
 		}
 		inputMaps = append(inputMaps, item)

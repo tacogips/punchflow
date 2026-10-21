@@ -234,7 +234,11 @@ func TicketAttachments(ctx context.Context, q Querier, ticketID string, commentI
 }
 
 func ProxyUserIDs(ctx context.Context, q Querier, userID, workflowID, today string) ([]string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT proxy_user_id FROM proxy_approvers WHERE user_id=? AND (starts_on IS NULL OR starts_on<=?) AND (ends_on IS NULL OR ends_on>=?) AND (workflow_ids='[]' OR workflow_ids LIKE ?) ORDER BY created_at,proxy_user_id`, userID, today, today, "%\""+workflowID+"\"%")
+	active, err := EngUserActive(ctx, q, userID)
+	if err != nil || !active {
+		return []string{}, err
+	}
+	rows, err := q.QueryContext(ctx, `SELECT p.proxy_user_id FROM proxy_approvers p JOIN users principal ON principal.id=p.user_id JOIN users proxy ON proxy.id=p.proxy_user_id WHERE p.user_id=? AND principal.status='activated' AND principal.deactivated_at IS NULL AND proxy.status='activated' AND proxy.deactivated_at IS NULL AND (p.starts_on IS NULL OR p.starts_on<=?) AND (p.ends_on IS NULL OR p.ends_on>=?) AND (p.workflow_ids='[]' OR p.workflow_ids LIKE ?) ORDER BY p.created_at,p.proxy_user_id`, userID, today, today, "%\""+workflowID+"\"%")
 	if err != nil {
 		return nil, fmt.Errorf("store: query proxy approvers: %w", err)
 	}

@@ -3,12 +3,95 @@ package engine
 import (
 	"context"
 	"errors"
+	"time"
 
 	"punchflow/internal/kferr"
-	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
+
+// SyncProxySharingForTicket records the active proxy approvers as viewers and
+// watchers for a processing ticket. This snapshot intentionally survives later
+// proxy-setting removal; action authorization remains registration based.
+func SyncProxySharingForTicket(ctx context.Context, tx *store.Tx, ticketID string, now time.Time) error {
+	ticket, err := store.EngLoadTicket(ctx, tx, ticketID)
+	if err != nil {
+		return err
+	}
+	if ticket.Status != model.TicketStatusInProgress {
+		return nil
+	}
+	steps, err := store.EngTicketSteps(ctx, tx, ticketID)
+	if err != nil {
+		return err
+	}
+	date := now.In(time.FixedZone("JST", 9*60*60)).Format("2006-01-02")
+	for _, step := range steps {
+		assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
+		if err != nil {
+			return err
+		}
+		for _, assignee := range assignees {
+			proxies, err := store.ProxyUserIDs(ctx, tx, assignee.UserID, ticket.WorkflowID, date)
+			if err != nil {
+				return err
+			}
+			for _, proxyID := range proxies {
+				if err := addUserViewer(ctx, tx, ticketID, proxyID); err != nil {
+					return err
+				}
+				if err := store.SetTicketWatchState(ctx, tx, ticketID, proxyID, store.WatchStateWatching, now); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// SyncWorkflowManagerSharingForTicket snapshots the configured manager audience
+// when a ticket is submitted and when a later step becomes active.
+func SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, ticketID string) error {
+	ticket, err := store.EngLoadTicket(ctx, tx, ticketID)
+	if err != nil {
+		return err
+	}
+	if ticket.Status != model.TicketStatusInProgress || ticket.AuthorTeamID == nil {
+		return nil
+	}
+	def, err := store.WorkflowDefByID(ctx, tx, ticket.WorkflowID)
+	if err != nil {
+		return err
+	}
+	if def.VisibleToManager != "direct" && def.VisibleToManager != "all" {
+		return nil
+	}
+	teams, err := store.EngTeamAncestors(ctx, tx, *ticket.AuthorTeamID)
+	if err != nil {
+		return err
+	}
+	if def.VisibleToManager == "direct" && len(teams) > 1 {
+		teams = teams[:1]
+	}
+	for _, team := range teams {
+		leaders, err := store.EngLeadersOfTeam(ctx, tx, team.ID)
+		if err != nil {
+			return err
+		}
+		for _, userID := range leaders {
+			active, err := store.EngUserActive(ctx, tx, userID)
+			if err != nil {
+				return err
+			}
+			if active {
+				if err := addUserViewer(ctx, tx, ticketID, userID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
 
 // pf14EffectiveVisibility is the single place that decides whether an actor may
 // read a ticket (INF-36). Detail reads, ticket lists and file access all go
@@ -20,7 +103,8 @@ import (
 //     workflow), except while it is still a draft;
 //  4. ticket viewers added through POST /v1/tickets/{id}/viewers (user, or team
 //     with optional grade and descendants), except while it is still a draft;
-//  5. assignees of any step and their active proxy approvers.
+//  5. assignees of any step. Proxy visibility comes from the persisted viewer
+//     row created with the ticket's proxy sharing side effect.
 func (e *Engine) pf14EffectiveVisibility(ctx context.Context, q store.Querier, a Actor, t model.Ticket) (bool, error) {
 	if t.AuthorID != nil && *t.AuthorID == a.UserID {
 		return true, nil
@@ -50,15 +134,14 @@ func (e *Engine) pf14EffectiveVisibility(ctx context.Context, q store.Querier, a
 			return allowed, err
 		}
 	}
-	return e.pf14AssigneeViewer(ctx, q, a, t)
+	return pf14AssigneeViewer(ctx, q, a, t)
 }
 
-func (e *Engine) pf14AssigneeViewer(ctx context.Context, q store.Querier, a Actor, t model.Ticket) (bool, error) {
+func pf14AssigneeViewer(ctx context.Context, q store.Querier, a Actor, t model.Ticket) (bool, error) {
 	steps, err := store.EngTicketSteps(ctx, q, t.ID)
 	if err != nil {
 		return false, err
 	}
-	date := kftime.FormatDate(e.clock.Now())
 	for _, s := range steps {
 		assignees, err := store.EngStepAssignees(ctx, q, s.ID)
 		if err != nil {
@@ -66,13 +149,6 @@ func (e *Engine) pf14AssigneeViewer(ctx context.Context, q store.Querier, a Acto
 		}
 		for _, as := range assignees {
 			if as.UserID == a.UserID {
-				return true, nil
-			}
-			ok, err := store.EngActiveProxyApprovers(ctx, q, as.UserID, a.UserID, t.WorkflowID, date)
-			if err != nil {
-				return false, err
-			}
-			if ok {
 				return true, nil
 			}
 		}
@@ -165,6 +241,34 @@ func pf14WorkflowViewer(ctx context.Context, q store.Querier, a Actor, ticket mo
 		}
 		ok, err := pf14UserInTeam(ctx, q, a.UserID, team, viewer.Descendants, gradeID)
 		if err != nil || ok {
+			return ok, err
+		}
+	}
+	for _, watcher := range def.Watchers {
+		if watcher.UserCode != "" {
+			id, err := store.UserIDByCode(ctx, q, watcher.UserCode)
+			if err == nil && id == a.UserID {
+				return true, nil
+			}
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return false, err
+			}
+		}
+		if watcher.TeamCode == "" {
+			continue
+		}
+		chart, err := store.ActiveOrgChartID(ctx, q)
+		if err != nil {
+			return false, err
+		}
+		team, err := store.TeamIDByCode(ctx, q, chart, watcher.TeamCode)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if ok, err := pf14UserInTeam(ctx, q, a.UserID, team, false, ""); err != nil || ok {
 			return ok, err
 		}
 	}

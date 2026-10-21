@@ -72,7 +72,10 @@ func applyInlineViewers(ctx context.Context, tx *store.Tx, a Actor, def model.Wo
 		}
 	}
 	if watcherUserID != nil {
-		return store.SetTicketWatchState(ctx, tx, ticketID, *watcherUserID, store.WatchStateWatching, now)
+		if err := store.SetTicketWatchState(ctx, tx, ticketID, *watcherUserID, store.WatchStateWatching, now); err != nil {
+			return err
+		}
+		return addUserViewer(ctx, tx, ticketID, *watcherUserID)
 	}
 	return nil
 }
@@ -129,4 +132,17 @@ func replaceUserViewers(ctx context.Context, tx *store.Tx, ticketID string, user
 		}
 	}
 	return nil
+}
+
+func addUserViewer(ctx context.Context, tx *store.Tx, ticketID, userID string) error {
+	viewers, err := store.TicketViewers(ctx, tx, ticketID)
+	if err != nil {
+		return err
+	}
+	for _, viewer := range viewers {
+		if viewer.UserID != nil && *viewer.UserID == userID {
+			return nil
+		}
+	}
+	return store.TicketQueryInsertViewer(ctx, tx, model.TicketViewer{ID: store.NewID(), TicketID: ticketID, UserID: &userID})
 }

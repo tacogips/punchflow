@@ -48,7 +48,7 @@ func TicketQueryList(ctx context.Context, q Querier, filter TicketQueryFilter, o
 		}
 		parts := []string{alias + ".user_id IN (" + strings.Join(marks, ",") + ")"}
 		if filter.TaskProxyUserID != "" {
-			parts = append(parts, "EXISTS (SELECT 1 FROM proxy_approvers pa WHERE pa.user_id="+alias+".user_id AND pa.proxy_user_id=? AND (pa.starts_on IS NULL OR pa.starts_on<=?) AND (pa.ends_on IS NULL OR pa.ends_on>=?) AND (pa.workflow_ids='[]' OR EXISTS (SELECT 1 FROM json_each(pa.workflow_ids) workflow WHERE workflow.value=t.workflow_id)))")
+			parts = append(parts, "EXISTS (SELECT 1 FROM proxy_approvers pa JOIN users principal ON principal.id=pa.user_id JOIN users proxy ON proxy.id=pa.proxy_user_id WHERE pa.user_id="+alias+".user_id AND pa.proxy_user_id=? AND principal.status='activated' AND principal.deactivated_at IS NULL AND proxy.status='activated' AND proxy.deactivated_at IS NULL AND (pa.starts_on IS NULL OR pa.starts_on<=?) AND (pa.ends_on IS NULL OR pa.ends_on>=?) AND (pa.workflow_ids='[]' OR EXISTS (SELECT 1 FROM json_each(pa.workflow_ids) workflow WHERE workflow.value=t.workflow_id)))")
 			values = append(values, filter.TaskProxyUserID, filter.TaskProxyDate, filter.TaskProxyDate)
 		}
 		return "(" + strings.Join(parts, " OR ") + ")", values

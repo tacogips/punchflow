@@ -58,7 +58,9 @@ each unless the user has an explicit `unwatched` row, then 4. users with an expl
 
 Automatic subscribers need no row. Calling `DELETE` records `unwatched`, which wins over every automatic source from then on and is reported as `optedOut: true`; `POST` records `watching` again (the automatic `source` is kept when there is one). The ticket's assignees and the workflow are resolved when events fire, so approvers and workflow watchers added later also receive notifications for tickets that already exist.
 
-Watching requires that the caller can view the ticket (`403 invisible_ticket` otherwise, `404 resource_not_found` for an unknown ticket). Watching does not grant access.
+Watching requires that the caller can view the ticket (`403 invisible_ticket` otherwise, `404 resource_not_found` for an unknown ticket). A manual watch toggle does not grant access; configured watchers and `watcherUserId` are separate sharing inputs.
+
+Workflow watchers are also shared users and can read private tickets. A `watcherUserId` supplied while creating or updating a ticket is both subscribed and added as a persisted user viewer. Active proxy approvers are added as viewers and watchers for processing tickets when the proxy setting becomes effective, and when a ticket is submitted or advances to another step; removing the setting leaves those rows intact (INF-ACC-02/04).
 
 Watch state response: `{ticketId, watching, source: "" | "manual" | "workflow" | "applicant" | "approver", workflowWatcher, optedOut}`.
 
@@ -156,7 +158,7 @@ curl -OJ -H "Authorization: Bearer $TOKEN" "localhost:8080/ui/api/audit-logs/exp
 
 ## Limitations
 
-- Workflow-level watchers who cannot view a ticket are not notified (kickflow's rule for whether watchers also gain access is not documented).
+- Workflow-level watchers can view private tickets as shared users (INF-ACC-04).
 - Free-text search matches stored values only (no reference names, no full-width/half-width or kana normalisation, ASCII-only case folding in SQL).
 - Edited comments do not notify newly added mentions; only `comment_created` is fanned out.
 - The in-process `/v1` list is read page by page, so search and export cost grows with the number of visible tickets (fine for the dev dataset, capped at 10 000).

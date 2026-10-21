@@ -202,6 +202,10 @@ Standard ticket numbers use the workflow counter unless `ticketNumberKey` is con
 
 `proxyClientUserId` on Create/Update requires an active `ProxyApplicant` registration with `user = proxy client` and `proxyUser = actor`, valid today (JST) and for the workflow; otherwise `422 validation_failed`. The effective client is revalidated on every applicant draft/rejected save and submission, even when the request omits the field; suspended/deactivated clients produce `422 validation_failed`. Explicit `null` removes the client. `author` is the actor and `proxyClientUser` the client.
 
+Proxy approver action authority is checked at action time and is available only while the original assignee is activated. Proxy settings add the proxy as a persisted ticket viewer and watcher for matching processing tickets; submission and subsequent step progression also apply active settings to the ticket's assigned users. Removing or expiring a proxy setting leaves the already persisted sharing and watch state in place. Completed historical tickets are not backfilled when a proxy setting is added. See INF-ACC-02.
+
+`visibleToManager: direct` snapshots active leaders from the applicant's team as ticket viewers at submission. `visibleToManager: all` also snapshots leaders from each ancestor team. The manager audience is re-added when a later approval step becomes active; historical viewers remain on the ticket. See INF-ACC-03.
+
 ### Required engine tests (`internal/engine/*_test.go`)
 
 | Test | Scenario |

@@ -239,6 +239,37 @@ func TestUpdateTicketInlineViewersArePresenceAware(t *testing.T) {
 	}
 }
 
+func TestWatcherUserIDAlsoGrantsPrivateTicketVisibility(t *testing.T) {
+	env := testutil.New(t)
+	watcher := env.UserID(t, "finance-manager")
+	teamID, err := store.ResolveID(t.Context(), env.DB.Q(), "teams", "sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := env.Do(t, testutil.Employee, http.MethodPost, "/v1/tickets", map[string]any{
+		"status": "in_progress", "workflowId": pf22ExpenseWorkflow, "authorTeamId": teamID,
+		"title": "watcher sharing", "watcherUserId": watcher, "inputs": []map[string]any{
+			{"formFieldId": pf22AmountField, "value": 5000},
+			{"formFieldId": pf22PurposeField, "value": "watcher sharing"},
+			{"formFieldId": pf22ExpenseDateField, "value": "2026-01-01"},
+			{"formFieldId": pf22CostCenterField, "generalMasterItemId": "00000000-0000-4000-8000-000000000041"},
+			{"formFieldId": pf22ReceiptField, "files": []string{}},
+			{"formFieldId": pf22ApproverNoteField, "value": ""},
+		},
+	})
+	if created.Status != http.StatusOK {
+		t.Fatalf("create watcher ticket: %d %s", created.Status, created.Body)
+	}
+	var ticket struct {
+		ID string `json:"id"`
+	}
+	created.JSON(t, &ticket)
+	visible := env.Do(t, testutil.Finance, http.MethodGet, "/v1/tickets/"+ticket.ID, nil)
+	if visible.Status != http.StatusOK {
+		t.Fatalf("watcherUserId did not grant ticket visibility: %d %s", visible.Status, visible.Body)
+	}
+}
+
 func TestInlineViewersRespectAllowEditingOfViewers(t *testing.T) {
 	env := testutil.New(t)
 	workflowID, err := store.WorkflowIDByCode(t.Context(), env.DB.Q(), "expense-claim")

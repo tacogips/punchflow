@@ -157,6 +157,21 @@ func TestTasksPendingAndAssignedToCurrentUser(t *testing.T) {
 	if len(sortedRows) < 2 || sortedRows[0]["id"] != secondCreated || sortedRows[1]["id"] != firstCreated {
 		t.Fatalf("assignedToMeAt ascending order = %v; want %s before %s", sortedRows, secondCreated, firstCreated)
 	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE users SET status='suspended' WHERE id=?`, managerID); err != nil {
+		t.Fatal(err)
+	}
+	env.CallerFor = "sales-deputy"
+	proxyTasks = env.Do(t, testutil.Integration, http.MethodGet, "/v1/tickets/tasks?status=in_progress", nil)
+	env.CallerFor = ""
+	if proxyTasks.Status != http.StatusOK {
+		t.Fatalf("suspended-principal proxy task list: %d %s", proxyTasks.Status, proxyTasks.Body)
+	}
+	proxyTasks.JSON(t, &proxyRows)
+	for _, task := range proxyRows {
+		if task["id"] == id {
+			t.Fatalf("task list retained ticket %s after its principal was suspended", id)
+		}
+	}
 }
 
 func TestTicketAuthorizationGuards(t *testing.T) {

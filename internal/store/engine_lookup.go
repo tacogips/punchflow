@@ -8,6 +8,26 @@ import (
 	"punchflow/internal/model"
 )
 
+// EngProcessingTicketIDsForAssignee lists processing tickets where userID is
+// assigned to an approval step. Proxy sharing is materialized when a proxy
+// setting becomes effective and is intentionally independent of later edits.
+func EngProcessingTicketIDsForAssignee(ctx context.Context, q Querier, userID string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT t.id FROM tickets t JOIN ticket_steps s ON s.ticket_id=t.id JOIN ticket_assignees a ON a.ticket_step_id=s.id WHERE t.status=? AND a.user_id=? ORDER BY t.id`, model.TicketStatusInProgress, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: query processing tickets for assignee: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 func EngTenantMode(ctx context.Context, q Querier) (string, error) {
 	var mode string
 	err := q.QueryRowContext(ctx, `SELECT mode FROM tenant ORDER BY created_at LIMIT 1`).Scan(&mode)
@@ -116,6 +136,10 @@ func EngUsersByTeam(ctx context.Context, q Querier, teamID string, descendants b
 }
 
 func EngActiveProxyApprovers(ctx context.Context, q Querier, targetUserID, proxyUserID, workflowID, date string) (bool, error) {
+	active, err := EngUserActive(ctx, q, targetUserID)
+	if err != nil || !active {
+		return false, err
+	}
 	rows, err := q.QueryContext(ctx, `SELECT starts_on,ends_on,workflow_ids FROM proxy_approvers WHERE user_id=? AND proxy_user_id=?`, targetUserID, proxyUserID)
 	if err != nil {
 		return false, fmt.Errorf("store: query engine proxy approvers: %w", err)

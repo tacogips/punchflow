@@ -90,15 +90,19 @@ func TestWorkflowLevelWatchersAutoSubscribe(t *testing.T) {
 		}
 	})
 
-	t.Run("a watcher who cannot view the ticket is not notified", func(t *testing.T) {
+	t.Run("workflow watcher can view and is notified for a private ticket", func(t *testing.T) {
 		other := newExpenseEnv(t)
+		other.CallerFor = "engineer"
 		other.setWorkflowDefinition(t, "$.watchers", `[{"id":"w-team","watcherType":"team","teamCode":"engineering"}]`)
 		hidden := other.createTicket(t, testutil.Employee, ticketSpec{title: "Not public", purpose: "private"})
+		if detail := other.Do(t, testutil.Integration, http.MethodGet, "/v1/tickets/"+hidden, nil); detail.Status != http.StatusOK {
+			t.Fatalf("workflow watcher cannot view private ticket: %d %s", detail.Status, detail.Body)
+		}
 		if response := other.post(t, testutil.Manager, "/v1/tickets/"+hidden+"/approve", map[string]any{}); response.Status != http.StatusOK {
 			t.Fatalf("approve: %d %s", response.Status, response.Body)
 		}
-		if got := storedKinds(other.storedNotifications(t, "engineer"), hidden); len(got) != 0 {
-			t.Fatalf("watcher without view access was notified: %v", got)
+		if got := storedKinds(other.storedNotifications(t, "engineer"), hidden); len(got) != 2 || got[0] != "ticket_approved" || got[1] != "ticket_applied" {
+			t.Fatalf("shared workflow watcher notifications: %v", got)
 		}
 	})
 }

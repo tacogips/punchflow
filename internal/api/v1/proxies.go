@@ -1,12 +1,14 @@
 package v1
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	"punchflow/internal/auth"
+	"punchflow/internal/engine"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
@@ -140,6 +142,9 @@ func (a *API) pf19CreateProxy(w http.ResponseWriter, r *http.Request, applicant 
 			x := model.ProxyApprover{ID: store.NewID(), UserID: v.UserID, ProxyUserID: v.ProxyUserID, StartsOn: v.StartsOn, EndsOn: v.EndsOn, WorkflowIDs: v.WorkflowIDs, CreatedAt: now, UpdatedAt: now}
 			e = store.ProxyInsertApprover(r.Context(), tx, x)
 			resultID = x.ID
+			if e == nil {
+				e = a.pf19ShareProxyTickets(r.Context(), tx, x.UserID, x.WorkflowIDs, now)
+			}
 		}
 		if e != nil {
 			return a.pf19ProxyWriteError(e)
@@ -263,6 +268,9 @@ func (a *API) pf19UpdateProxy(w http.ResponseWriter, r *http.Request, applicant 
 			if e = store.ProxyUpdateApprover(r.Context(), tx, id, x); e != nil {
 				return a.pf19ProxyWriteError(e)
 			}
+			if e = a.pf19ShareProxyTickets(r.Context(), tx, x.UserID, x.WorkflowIDs, now); e != nil {
+				return e
+			}
 		}
 		return a.pf19ProxyAudit(r, tx, p.User.ID, applicant, "update", id)
 	})
@@ -282,6 +290,38 @@ func (a *API) pf19UpdateProxy(w http.ResponseWriter, r *http.Request, applicant 
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	_ = table
+}
+
+// pf19ShareProxyTickets persists the share and watch side effects for a newly
+// effective proxy-approver setting. Existing rows are never removed when a
+// setting later expires or is edited away.
+func (a *API) pf19ShareProxyTickets(ctx context.Context, tx *store.Tx, principalID string, workflows []string, now time.Time) error {
+	tickets, err := store.EngProcessingTicketIDsForAssignee(ctx, tx, principalID)
+	if err != nil {
+		return err
+	}
+	for _, ticketID := range tickets {
+		ticket, err := store.EngLoadTicket(ctx, tx, ticketID)
+		if err != nil {
+			return err
+		}
+		if len(workflows) > 0 {
+			allowed := false
+			for _, workflowID := range workflows {
+				if workflowID == ticket.WorkflowID {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				continue
+			}
+		}
+		if err = engine.SyncProxySharingForTicket(ctx, tx, ticketID, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func (a *API) deleteProxyApplicant(w http.ResponseWriter, r *http.Request) {
 	a.pf19DeleteProxy(w, r, true)

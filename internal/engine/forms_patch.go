@@ -39,7 +39,15 @@ func pf16BlockedSections(ctx context.Context, q store.Querier, a Actor, t model.
 	if !restricted {
 		return nil, nil
 	}
-	allowed, err := access.SectionAccess(ctx, q, access.Caller{UserID: a.UserID, TicketRead: a.Permissions[model.PermissionTicketRead]}, t, def)
+	workflowID := t.WorkflowID
+	if workflowID == "" {
+		workflowID = def.ID
+	}
+	ticketRead, err := ticketReadAllowed(ctx, q, a, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	allowed, err := access.SectionAccess(ctx, q, access.Caller{UserID: a.UserID, TicketRead: ticketRead}, t, def)
 	if err != nil {
 		return nil, err
 	}

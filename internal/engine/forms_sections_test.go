@@ -42,6 +42,7 @@ func pf16RestrictApproverNote(t *testing.T, e *pf14TestEnv) {
 
 func pf16NoteValue(t *testing.T, detail present.TicketDetailJSON, caller *access.Caller) (viewable bool, inputs int, topLevel bool) {
 	t.Helper()
+	var noteValue any
 	for _, raw := range detail["ticketSections"].([]any) {
 		section := raw.(map[string]any)
 		if section["sectionId"] == pf16ConfSection {
@@ -56,10 +57,15 @@ func pf16NoteValue(t *testing.T, detail present.TicketDetailJSON, caller *access
 		}
 	}
 	for _, raw := range detail["inputs"].([]any) {
-		field := raw.(map[string]any)["formField"].(map[string]any)
+		input := raw.(map[string]any)
+		field := input["formField"].(map[string]any)
 		if field["code"] == "approver-note" {
 			topLevel = true
+			noteValue = input["value"]
 		}
+	}
+	if !viewable && noteValue != nil {
+		t.Errorf("hidden input value=%v, want redacted", noteValue)
 	}
 	return
 }
@@ -103,14 +109,46 @@ func TestSectionViewRestrictions(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			viewable, inputs, topLevel := pf16NoteValue(t, detailFor(tc.caller), tc.caller)
-			wantInputs := 0
-			if tc.viewable {
-				wantInputs = 1
-			}
-			if viewable != tc.viewable || inputs != wantInputs || topLevel != tc.viewable {
-				t.Fatalf("viewable=%v inputs=%d topLevel=%v, want viewable=%v inputs=%d", viewable, inputs, topLevel, tc.viewable, wantInputs)
+			wantInputs := 1
+			if viewable != tc.viewable || inputs != wantInputs || !topLevel {
+				t.Fatalf("viewable=%v inputs=%d topLevel=%v, want viewable=%v inputs=%d and field definition retained", viewable, inputs, topLevel, tc.viewable, wantInputs)
 			}
 		})
+	}
+}
+
+func TestScopedTicketReadAllowsRestrictedSectionDuringCreateAndFormEdit(t *testing.T) {
+	e := pf14Setup(t)
+	pf16RestrictApproverNote(t, e)
+	workflow, err := store.GetWorkflowByCode(e.ctx, e.db.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := e.actor("sales-rep")
+	actor.Permissions = map[string]bool{model.PermissionTicketRead: false}
+	actor.ReadFolderIDs = map[string]bool{workflow.FolderID: true}
+	inputs := pf16Inputs(t, e, pf16Base)
+	var id string
+	err = e.db.WithTx(e.ctx, func(tx *store.Tx) error {
+		var createErr error
+		id, _, createErr = e.engine.Create(e.ctx, tx, actor, CreateInput{Status: model.TicketStatusDraft, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"), Inputs: &inputs})
+		return createErr
+	})
+	if err != nil {
+		t.Fatalf("create submission with folder-scoped ticket_read: %v", err)
+	}
+	_, fields := pf14FormDefinition(t, e, "expense-claim")
+	if err = pf16UpdateForm(e, actor, id, FormPatch{Inputs: []FieldInput{pf14Input("approver-note", fields["approver-note"], "authorized edit")}}); err != nil {
+		t.Fatalf("edit restricted field with folder-scoped ticket_read: %v", err)
+	}
+	inProgress := model.TicketStatusInProgress
+	if err = pf16Update(e, actor, id, UpdateInput{Status: &inProgress}); err != nil {
+		t.Fatalf("submit with folder-scoped ticket_read: %v", err)
+	}
+	outside := actor
+	outside.ReadFolderIDs = map[string]bool{"unrelated-folder": true}
+	if err = pf16UpdateForm(e, outside, id, FormPatch{Inputs: []FieldInput{pf14Input("approver-note", fields["approver-note"], "blocked edit")}}); err == nil {
+		t.Fatal("ticket_read grant outside the workflow folder edited restricted field")
 	}
 }
 
@@ -172,6 +210,9 @@ func TestSectionAccessIncludesProxyApplicantsAndActiveProxyApprovers(t *testing.
 	}
 	_, fields := pf14FormDefinition(t, e, "expense-claim")
 	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE tickets SET proxy_client_user_id=? WHERE id=?`, proxyID, id); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.TicketQueryInsertViewer(e.ctx, e.db.Q(), model.TicketViewer{ID: store.NewID(), TicketID: id, UserID: &proxyID}); err != nil {
 		t.Fatal(err)
 	}
 	detailFor := func(userID string) present.TicketDetailJSON {

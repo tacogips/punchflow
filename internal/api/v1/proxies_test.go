@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"punchflow/internal/store"
 	"punchflow/internal/testutil"
 )
 
@@ -93,4 +94,46 @@ func TestProxyApproversAndSelfServicePermission(t *testing.T) {
 	if deleted := env.Do(t, testutil.Employee, http.MethodDelete, "/v1/proxyApprovers/"+id, nil); deleted.Status != http.StatusOK {
 		t.Fatalf("self-service delete status=%d body=%s", deleted.Status, deleted.Body)
 	}
+}
+
+func TestProxyApproverAPIAddsAndRetainsProcessingTicketSharing(t *testing.T) {
+	env := testutil.New(t)
+	ticketID := pf22CreateTicket(t, env, testutil.Employee, "in_progress", 5000)
+	var principalID string
+	if err := env.DB.Q().QueryRowContext(t.Context(), `SELECT user_id FROM ticket_assignees WHERE ticket_id=? AND completed=0 ORDER BY created_at LIMIT 1`, ticketID).Scan(&principalID); err != nil {
+		t.Fatal(err)
+	}
+	proxyID := env.UserID(t, "assistant")
+	created := env.Do(t, testutil.Admin, http.MethodPost, "/v1/proxyApprovers", map[string]any{"userId": principalID, "proxyUserId": proxyID})
+	if created.Status != http.StatusOK {
+		t.Fatalf("create proxy setting: %d %s", created.Status, created.Body)
+	}
+	var proxy struct {
+		ID string `json:"id"`
+	}
+	created.JSON(t, &proxy)
+	assertSharing := func(stage string) {
+		t.Helper()
+		viewers, err := store.TicketViewers(t.Context(), env.DB.Q(), ticketID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, viewer := range viewers {
+			found = found || viewer.UserID != nil && *viewer.UserID == proxyID
+		}
+		if !found {
+			t.Fatalf("proxy viewer missing %s setting", stage)
+		}
+		state, err := store.TicketWatchState(t.Context(), env.DB.Q(), ticketID, proxyID)
+		if err != nil || state != store.WatchStateWatching {
+			t.Fatalf("proxy watch state after %s = %q, err=%v", stage, state, err)
+		}
+	}
+	assertSharing("creation")
+	deleted := env.Do(t, testutil.Admin, http.MethodDelete, "/v1/proxyApprovers/"+proxy.ID, nil)
+	if deleted.Status != http.StatusOK {
+		t.Fatalf("remove proxy setting: %d %s", deleted.Status, deleted.Body)
+	}
+	assertSharing("removal")
 }
