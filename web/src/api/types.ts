@@ -59,8 +59,11 @@ export interface TicketControls {
 }
 export interface CustomStepBody {
   title: string;
-  actionType: "approve" | "confirm";
-  userIds: string[];
+  actionType: "approve" | "confirm" | "none";
+  userIds?: string[];
+  teamCodes?: string[];
+  requiredApprovalsNumber?: number;
+  requiredApprovalsPercent?: number;
   instruction?: string;
   afterStepOrder?: number;
 }

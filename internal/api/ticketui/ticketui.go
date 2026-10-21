@@ -70,6 +70,8 @@ var operations = [...]Operation{
 	{Name: "addTicketCustomStep", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/custom-steps", Handle: (*API).addCustomStep},
 	{Name: "removeTicketCustomStep", Method: http.MethodDelete, Pattern: "/ui/api/tickets/{ticketId}/custom-steps/{stepId}", Handle: (*API).removeCustomStep},
 	{Name: "assignCurrentApprover", Method: http.MethodPost, Pattern: "/ui/api/tickets/{ticketId}/assignees", Handle: (*API).assignCurrentApprover},
+	{Name: "handoverApplicants", Method: http.MethodPost, Pattern: "/ui/api/admin/tickets/applicant-handover", Handle: (*API).handoverApplicants},
+	{Name: "handoverApprovalRequests", Method: http.MethodPost, Pattern: "/ui/api/admin/tickets/approval-handover", Handle: (*API).handoverApprovalRequests},
 }
 
 // Operations returns a copy of the route table.

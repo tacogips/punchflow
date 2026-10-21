@@ -114,10 +114,21 @@ func pf14CustomNumbers(ctx context.Context, tx *store.Tx, ticket *model.Ticket, 
 			initial = 1
 		}
 		var counter int64
-		if _, err = tx.ExecContext(ctx, `INSERT INTO custom_numbering_counters(custom_numbering_id,counter) VALUES(?,?) ON CONFLICT(custom_numbering_id) DO NOTHING`, counterKey, initial-1); err != nil {
+		period := pf14CustomNumberingPeriod(definition.ResetPeriod, now, tenant.FiscalYearStartMonth)
+		if _, err = tx.ExecContext(ctx, `INSERT INTO custom_numbering_counters(custom_numbering_id,counter,last_allocated_at,last_period) VALUES(?,?,NULL,'') ON CONFLICT(custom_numbering_id) DO NOTHING`, counterKey, initial-1); err != nil {
 			return fmt.Errorf("engine: initialize custom numbering counter: %w", err)
 		}
-		if err = tx.QueryRowContext(ctx, `UPDATE custom_numbering_counters SET counter=counter+1 WHERE custom_numbering_id=? RETURNING counter`, counterKey).Scan(&counter); err != nil {
+		var lastAllocated sql.NullInt64
+		var lastPeriod string
+		if err = tx.QueryRowContext(ctx, `SELECT last_allocated_at,last_period FROM custom_numbering_counters WHERE custom_numbering_id=?`, counterKey).Scan(&lastAllocated, &lastPeriod); err != nil {
+			return fmt.Errorf("engine: read custom numbering period: %w", err)
+		}
+		reset := definition.ResetPeriod != "" && lastAllocated.Valid && lastPeriod != "" && lastPeriod != period
+		if reset {
+			if err = tx.QueryRowContext(ctx, `UPDATE custom_numbering_counters SET counter=1,last_allocated_at=?,last_period=? WHERE custom_numbering_id=? RETURNING counter`, store.Millis(now), period, counterKey).Scan(&counter); err != nil {
+				return fmt.Errorf("engine: reset custom numbering counter: %w", err)
+			}
+		} else if err = tx.QueryRowContext(ctx, `UPDATE custom_numbering_counters SET counter=counter+1,last_allocated_at=?,last_period=? WHERE custom_numbering_id=? RETURNING counter`, store.Millis(now), period, counterKey).Scan(&counter); err != nil {
 			return fmt.Errorf("engine: increment custom numbering counter: %w", err)
 		}
 		formatted := pf14FormatTicketNumber(*setting.TicketNumberFormat, now, counter, tenant.FiscalYearStartMonth)
@@ -126,6 +137,27 @@ func pf14CustomNumbers(ctx context.Context, tx *store.Tx, ticket *model.Ticket, 
 		}
 	}
 	return nil
+}
+
+func pf14CustomNumberingPeriod(resetPeriod string, now time.Time, fiscalYearStartMonth int) string {
+	local := now.In(kftime.JST)
+	switch resetPeriod {
+	case "monthly":
+		return local.Format("2006-01")
+	case "yearly":
+		return local.Format("2006")
+	case "fiscal_year":
+		if fiscalYearStartMonth < 1 || fiscalYearStartMonth > 12 {
+			fiscalYearStartMonth = 4
+		}
+		year := local.Year()
+		if int(local.Month()) < fiscalYearStartMonth {
+			year--
+		}
+		return fmt.Sprintf("%04d", year)
+	default:
+		return ""
+	}
 }
 
 // pf14FormatTicketNumber expands the documented format tokens in JST:

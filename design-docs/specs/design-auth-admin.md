@@ -32,6 +32,10 @@ How callers authenticate to `/v1` and `/admin/api`, how the browser UI logs in t
 
 A role's `permissionList` entry may be `restricted` and name the folders, general masters or teams it covers. Which dimension applies depends on the permission (`model.PermissionScopeKind`, as in kickflow): `workflow`, `route`, `pipeline` and `ticket_read` by folder; `master` and `master_read` by general master; `team` by team. Every other permission ignores the flag and is always unrestricted. The restriction is enforced (INF-84); there is no longer a divergence for it.
 
+### User lifecycle ticket handover (INF-B8-04)
+
+Kickflow documents applicant-ticket and approval-request handover as administrator UI operations and has no public REST endpoint for them. Punchflow exposes them under `/ui/api/admin/tickets/` and shows controls on the Users page to users with `ticket_write`. Applicant handover updates the direct applicant and selected target team for eligible unproxied drafts, in-progress and rejected tickets. Approval handover replaces incomplete assignees on active steps. Explicit ticket lists are limited to 1,000 and require ticket visibility; blank lists select all eligible tickets. Each changed ticket records an audit log and a `ticket_updated` webhook event in the same transaction.
+
 - `store.UserGrants` merges the entries of all of a user's roles into one `PermissionGrant` per permission: any unrestricted entry makes the grant unrestricted; otherwise `Targets` is the union of the restricted entries' targets, with folder and team targets expanded to their descendants. A restricted entry with no targets matches nothing.
 - `auth.Principal` carries the grants: `Has` (held in any scope), `Unrestricted`, `Allows(permission, target)`, `AllowsAny` and `Targets`.
 - Handlers use `requireTarget` (the grant covers a given folder, master or team) and `requireUnrestricted` (operations without a single target). Out-of-scope access returns `403 missing_permission`; list endpoints filter to the covered resources. Deleting a folder needs `workflow`/`route` coverage of every folder it retires (INF-83).

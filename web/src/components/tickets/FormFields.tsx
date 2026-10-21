@@ -54,11 +54,11 @@ function FieldControl(props: {
   }}</For></div>;
   if (fieldType === "text_long") return <textarea {...common} value={selected()} onInput={(event) => props.onChange(event.currentTarget.value)} />;
   if (["pull_down", "radio_button", "master", "general_master"].includes(fieldType)) {
-    const items = generalMasterId ? filteredMasterItems() : options.map((option) => ({ id: str(option.id ?? option.value), name: str(option.name ?? option.label), code: str(option.code ?? option.value) } as GeneralMasterItem));
+    const items = () => generalMasterId ? filteredMasterItems() : options.map((option) => ({ id: str(option.id ?? option.value), name: str(option.name ?? option.label), code: str(option.code ?? option.value) } as GeneralMasterItem));
     const multiple = obj(props.field).multiple === true;
     const selectedValues = () => Array.isArray(props.value) ? props.value.map(String) : props.value == null || props.value === "" ? [] : [String(props.value)];
     return <select {...common} multiple={multiple} value={multiple ? selectedValues() : selected()} onChange={(event) => props.onChange(multiple ? Array.from(event.currentTarget.selectedOptions, (option) => option.value) : event.currentTarget.value || null)}>
-      <Show when={!multiple}><option value="">Select…</option></Show><For each={items}>{(item) => <option value={item.id}>{item.name}</option>}</For>
+      <Show when={!multiple}><option value="">Select…</option></Show><For each={items()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
     </select>;
   }
   if (fieldType === "ticket" && props.field.multiple !== true) return <select {...common} value={selected()} onChange={(event) => {

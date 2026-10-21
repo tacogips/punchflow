@@ -14,10 +14,13 @@ const customStepTitleMaxRunes = 100
 
 // CustomStepInput describes an ad-hoc step added to one ticket (PF-19).
 type CustomStepInput struct {
-	Title       string   `json:"title"`
-	ActionType  string   `json:"actionType"`
-	UserIDs     []string `json:"userIds"`
-	Instruction *string  `json:"instruction"`
+	Title                    string   `json:"title"`
+	ActionType               string   `json:"actionType"`
+	UserIDs                  []string `json:"userIds"`
+	TeamCodes                []string `json:"teamCodes,omitempty"`
+	RequiredApprovalsNumber  int      `json:"requiredApprovalsNumber,omitempty"`
+	RequiredApprovalsPercent int      `json:"requiredApprovalsPercent,omitempty"`
+	Instruction              *string  `json:"instruction"`
 	// AfterStepOrder places the step in a new group right after the group with
 	// this order. nil inserts it after the group that is currently waiting.
 	AfterStepOrder *int `json:"afterStepOrder"`
@@ -156,15 +159,42 @@ func (e *Engine) AddCustomStep(ctx context.Context, tx *store.Tx, a Actor, id st
 	case len([]rune(title)) > customStepTitleMaxRunes:
 		problems["title"] = []string{"is too long"}
 	}
-	if in.ActionType != model.ActionTypeApprove && in.ActionType != model.ActionTypeConfirm {
-		problems["actionType"] = []string{"must be approve or confirm"}
+	if in.ActionType != model.ActionTypeApprove && in.ActionType != model.ActionTypeConfirm && in.ActionType != model.ActionTypeNone {
+		problems["actionType"] = []string{"must be approve, confirm, or none"}
 	}
 	userIDs, err := pf15ResolveCustomAssignees(ctx, tx, in.UserIDs)
 	if err != nil {
 		return nil, err
 	}
-	if len(userIDs) == 0 {
-		problems["userIds"] = []string{"must contain at least one active user"}
+	for _, teamCode := range in.TeamCodes {
+		team, teamErr := store.CurrentTeamByCode(ctx, tx, teamCode)
+		if teamErr != nil {
+			problems["teamCodes"] = []string{"must identify active teams"}
+			continue
+		}
+		members, teamErr := store.EngUsersByTeam(ctx, tx, team.ID, false)
+		if teamErr != nil {
+			return nil, teamErr
+		}
+		for _, member := range members {
+			active, activeErr := pf14bUserActive(ctx, tx, member)
+			if activeErr != nil {
+				return nil, activeErr
+			}
+			if active {
+				userIDs = append(userIDs, member)
+			}
+		}
+	}
+	userIDs = pf14UniqueUserIDs(userIDs)
+	if len(in.UserIDs) > 0 && len(in.TeamCodes) > 0 {
+		problems["teamCodes"] = []string{"choose userIds or teamCodes, not both"}
+	}
+	if len(userIDs) == 0 && in.ActionType != model.ActionTypeNone {
+		problems["userIds"] = []string{"must identify at least one active user or team"}
+	}
+	if in.RequiredApprovalsNumber < 0 || in.RequiredApprovalsNumber > len(userIDs) || in.RequiredApprovalsPercent < 0 || in.RequiredApprovalsPercent > 100 || in.RequiredApprovalsNumber > 0 && in.RequiredApprovalsPercent > 0 {
+		problems["requiredApprovalsNumber"] = []string{"set a valid count or percentage, not both"}
 	}
 	after := t.CurrentStep
 	if in.AfterStepOrder != nil {
@@ -185,7 +215,11 @@ func (e *Engine) AddCustomStep(ctx context.Context, tx *store.Tx, a Actor, id st
 		return nil, err
 	}
 	author := a.UserID
-	step := model.TicketStep{ID: store.NewID(), TicketID: id, StepOrder: after + 1, Title: &title, ActionType: in.ActionType, RequiredApprovalsPercent: 100, Status: model.StepStatusPending, AuthorID: &author, Instruction: in.Instruction, CreatedAt: now, UpdatedAt: now}
+	requiredNumber, requiredPercent := in.RequiredApprovalsNumber, in.RequiredApprovalsPercent
+	if requiredNumber == 0 && requiredPercent == 0 && in.ActionType != model.ActionTypeNone {
+		requiredPercent = 100
+	}
+	step := model.TicketStep{ID: store.NewID(), TicketID: id, StepOrder: after + 1, Title: &title, ActionType: in.ActionType, RequiredApprovalsNumber: requiredNumber, RequiredApprovalsPercent: requiredPercent, Status: model.StepStatusPending, AuthorID: &author, Instruction: in.Instruction, CreatedAt: now, UpdatedAt: now}
 	if err = store.EngInsertStep(ctx, tx, step); err != nil {
 		return nil, err
 	}

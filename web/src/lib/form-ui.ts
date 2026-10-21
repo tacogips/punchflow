@@ -88,5 +88,6 @@ export function ticketCopyValue(mapping: TicketCopyMapping, ticket: Loose, targe
     if (!accepted) return undefined;
     return target.fieldType === "checkbox" ? choices : choices[0] ?? null;
   }
+  if (["text", "text_short", "text_long"].includes(target.fieldType)) return value == null ? null : String(value);
   return value;
 }

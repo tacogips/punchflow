@@ -385,7 +385,7 @@ func pf14Empty(v any) bool {
 // pf14ValidateApprovalInputs requires the approver-required form fields and the
 // approver-required cells of every detail (slip) row to be filled before an
 // approval. Hidden and calculated detail cells cannot be entered and are exempt.
-func pf14ValidateApprovalInputs(ctx context.Context, q store.Querier, ticket *model.Ticket, def model.WorkflowDef, rows []model.TicketInput, slips []model.TicketSlipItem) error {
+func pf14ValidateApprovalInputs(ctx context.Context, q store.Querier, ticket *model.Ticket, def model.WorkflowDef, rows []model.TicketInput, slips []model.TicketSlipItem, activeRouteStepCodes map[string]bool) error {
 	inputs := pf14InputsFromRows(def, rows)
 	values := pf14InputValues(def, inputs)
 	for _, section := range def.SectionList {
@@ -397,7 +397,7 @@ func pf14ValidateApprovalInputs(ctx context.Context, q store.Querier, ticket *mo
 			continue
 		}
 		for _, field := range section.FormFields {
-			if field.Approver && field.Required && pf14Empty(values[field.Code]) {
+			if field.Approver && pf14ApproverInputRequired(field.Required, field.ApproverEditRestriction, activeRouteStepCodes) && pf14Empty(values[field.Code]) {
 				return kferr.InputRequiredBeforeApprove()
 			}
 		}
@@ -415,7 +415,7 @@ func pf14ValidateApprovalInputs(ctx context.Context, q store.Querier, ticket *mo
 		}
 		for _, field := range section.SlipFields {
 			hidden := field.Hidden != nil && *field.Hidden
-			if !field.Approver || !field.Required || hidden || field.FieldType == "calculation" {
+			if !field.Approver || !pf14ApproverInputRequired(field.Required, field.ApproverEditRestriction, activeRouteStepCodes) || hidden || field.FieldType == "calculation" {
 				continue
 			}
 			if cell, _ := slipCell(row, field); pf14Empty(cell) {
@@ -424,4 +424,16 @@ func pf14ValidateApprovalInputs(ctx context.Context, q store.Querier, ticket *mo
 		}
 	}
 	return nil
+}
+
+func pf14ApproverInputRequired(required bool, restriction *model.ApproverEditRestriction, activeCodes map[string]bool) bool {
+	if restriction == nil || len(restriction.RouteStepCodes) == 0 {
+		return required
+	}
+	for _, code := range restriction.RouteStepCodes {
+		if activeCodes[code] {
+			return true
+		}
+	}
+	return false
 }

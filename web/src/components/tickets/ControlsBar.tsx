@@ -2,7 +2,7 @@ import { For, Show, createSignal } from "solid-js";
 import type { CustomStepBody, TicketControls } from "../../api/types";
 import { customStepBody, customStepProblem, hasAnyControl, raiseTargetLabel, type CustomStepForm } from "../../lib/ticket-controls";
 
-const emptyForm = (): CustomStepForm => ({ title: "", actionType: "approve", userIds: "", instruction: "", afterStepOrder: "" });
+const emptyForm = (): CustomStepForm => ({ title: "", actionType: "approve", assignmentType: "user", userIds: "", teamCodes: "", requiredApprovalsNumber: "", requiredApprovalsPercent: "", instruction: "", afterStepOrder: "" });
 
 /**
  * Runtime lifecycle controls: cancel an approval, raise to a later step and add
@@ -44,8 +44,13 @@ export default function ControlsBar(props: {
       <button type="button" disabled={props.busy} aria-expanded={open()} onClick={() => setOpen(!open())}>Add step</button>
       <Show when={open()}><form class="custom-step-form" onSubmit={submit}>
         <label>Step title <input value={form().title} maxLength={100} onInput={(event) => patch({ title: event.currentTarget.value })} /></label>
-        <label>Action <select value={form().actionType} onChange={(event) => patch({ actionType: event.currentTarget.value })}><option value="approve">Approve / send back</option><option value="confirm">Circulate with confirmation</option></select></label>
-        <label>Approvers <input value={form().userIds} onInput={(event) => patch({ userIds: event.currentTarget.value })} placeholder="User IDs separated by commas" /></label>
+        <label>Action <select value={form().actionType} onChange={(event) => patch({ actionType: event.currentTarget.value })}><option value="approve">Approve / send back</option><option value="confirm">Circulate with confirmation</option><option value="none">Circulate without confirmation</option></select></label>
+        <Show when={form().actionType !== "none"}><label>Assignment rule <select value={form().assignmentType} onChange={(event) => patch({ assignmentType: event.currentTarget.value as CustomStepForm["assignmentType"] })}><option value="user">Specify users</option><option value="team">Specify teams</option></select></label>
+          <Show when={form().assignmentType === "user"} fallback={<label>Teams <input value={form().teamCodes} onInput={(event) => patch({ teamCodes: event.currentTarget.value })} placeholder="Team codes separated by commas" /></label>}>
+            <label>Approvers <input value={form().userIds} onInput={(event) => patch({ userIds: event.currentTarget.value })} placeholder="User IDs separated by commas" /></label>
+          </Show>
+          <fieldset><legend>Next step threshold</legend><label>Required approval count <input type="number" min="1" step="1" value={form().requiredApprovalsNumber} onInput={(event) => patch({ requiredApprovalsNumber: event.currentTarget.value, requiredApprovalsPercent: "" })} /></label><label>Required approval percent <input type="number" min="1" max="100" step="1" value={form().requiredApprovalsPercent} onInput={(event) => patch({ requiredApprovalsPercent: event.currentTarget.value, requiredApprovalsNumber: "" })} /></label><small>Leave both blank to require every approver.</small></fieldset>
+        </Show>
         <label>Instruction <input value={form().instruction} onInput={(event) => patch({ instruction: event.currentTarget.value })} /></label>
         <Show when={props.controls.customStepInsertAfter.length > 1}>
           <label>Insert after <select value={form().afterStepOrder} onChange={(event) => patch({ afterStepOrder: event.currentTarget.value })}><option value="">Current step</option><For each={props.controls.customStepInsertAfter}>{(order) => <option value={order}>{raiseTargetLabel(order, props.steps)}</option>}</For></select></label>

@@ -144,6 +144,7 @@ type FormField struct {
 	Description                   *string                     `json:"description"`
 	FieldType                     string                      `json:"fieldType"`
 	Required                      bool                        `json:"required"`
+	ApproverEditRestriction       *ApproverEditRestriction    `json:"approverEditRestriction,omitempty"`
 	Approver                      bool                        `json:"approver"`
 	Author                        bool                        `json:"author"`
 	Options                       []string                    `json:"options"`
@@ -180,6 +181,7 @@ type SlipField struct {
 	Title                         string                          `json:"title"`
 	FieldType                     string                          `json:"fieldType"`
 	Required                      bool                            `json:"required"`
+	ApproverEditRestriction       *ApproverEditRestriction        `json:"approverEditRestriction,omitempty"`
 	ShowTotal                     bool                            `json:"showTotal"`
 	Options                       []string                        `json:"options"`
 	RegexpFormat                  *string                         `json:"regexpFormat"`
@@ -207,6 +209,11 @@ type SlipField struct {
 	DefaultGeneralMasterItemCode  string                          `json:"defaultGeneralMasterItemCode,omitempty"`
 	GeneralMasterSearchFilters    []SlipGeneralMasterSearchFilter `json:"generalMasterSearchFilters,omitempty"`
 	CustomValidations             []SlipCustomValidation          `json:"customValidations,omitempty"`
+}
+
+// ApproverEditRestriction configures route steps at which approver input is required.
+type ApproverEditRestriction struct {
+	RouteStepCodes []string `json:"routeStepCodes"`
 }
 
 // GeneralMasterSearchFilter maps a form value to a general-master item field

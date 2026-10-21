@@ -204,7 +204,33 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 	if err != nil {
 		return nil, err
 	}
-	if err = pf14ValidateApprovalInputs(ctx, tx, &t, def, inputs, slips); err != nil {
+	activeCodes := make(map[string]bool)
+	for _, step := range active {
+		if step.RouteStepCode == nil {
+			continue
+		}
+		assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, assignee := range assignees {
+			if assignee.Completed {
+				continue
+			}
+			acting := assignee.UserID == a.UserID
+			if !acting {
+				acting, err = store.EngActiveProxyApprovers(ctx, tx, assignee.UserID, a.UserID, t.WorkflowID, kftime.FormatDate(e.clock.Now()))
+				if err != nil {
+					return nil, err
+				}
+			}
+			if acting {
+				activeCodes[*step.RouteStepCode] = true
+				break
+			}
+		}
+	}
+	if err = pf14ValidateApprovalInputs(ctx, tx, &t, def, inputs, slips, activeCodes); err != nil {
 		return nil, err
 	}
 	if err = pf14CheckNextCustomApprovers(ctx, tx, t); err != nil {
@@ -380,7 +406,7 @@ func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket,
 					}
 				}
 			}
-			if step.ActionType == model.ActionTypeNone && len(assignees) > 0 {
+			if step.ActionType == model.ActionTypeNone && (len(assignees) > 0 || step.RouteStepID == nil) {
 				step.Status = model.StepStatusCompleted
 				step.CompletedAt = &now
 			} else {

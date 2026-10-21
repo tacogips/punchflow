@@ -347,6 +347,9 @@ func Validate(s *Set) error {
 			if numberingIDs[numbering.ID] {
 				add(FileWorkflows, path+".id", "duplicate custom numbering id")
 			}
+			if numbering.ResetPeriod != "" && !pf06Contains([]string{"monthly", "yearly", "fiscal_year"}, numbering.ResetPeriod) {
+				add(FileWorkflows, path+".resetPeriod", "must be empty, monthly, yearly, or fiscal_year")
+			}
 			numberingIDs[numbering.ID] = true
 		}
 		for j, setting := range w.CustomNumberingSettings {

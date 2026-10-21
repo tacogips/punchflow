@@ -28,13 +28,18 @@ describe("ticket controls", () => {
   });
 
   test("validates and builds the custom step request", () => {
-    const form = { title: " Legal check ", actionType: "confirm", userIds: "u1,u2", instruction: " read it ", afterStepOrder: "2" };
+    const form = { title: " Legal check ", actionType: "confirm", assignmentType: "user" as const, userIds: "u1,u2", teamCodes: "", requiredApprovalsNumber: "", requiredApprovalsPercent: "", instruction: " read it ", afterStepOrder: "2" };
     expect(customStepProblem(form)).toBeNull();
     expect(customStepBody(form)).toEqual({ title: "Legal check", actionType: "confirm", userIds: ["u1", "u2"], instruction: "read it", afterStepOrder: 2 });
     expect(customStepBody({ ...form, instruction: "", afterStepOrder: "" })).toEqual({ title: "Legal check", actionType: "confirm", userIds: ["u1", "u2"] });
     expect(customStepProblem({ ...form, title: "  " })).toContain("title");
     expect(customStepProblem({ ...form, userIds: "" })).toContain("approver");
-    expect(customStepProblem({ ...form, actionType: "none" })).toContain("approval");
+    expect(customStepProblem({ ...form, actionType: "unsupported" })).toContain("action");
+    expect(customStepBody({ ...form, assignmentType: "team", teamCodes: "sales,finance", requiredApprovalsNumber: "1" })).toEqual({ title: "Legal check", actionType: "confirm", teamCodes: ["sales", "finance"], requiredApprovalsNumber: 1, instruction: "read it", afterStepOrder: 2 });
+    const noConfirmation = { ...form, actionType: "none", userIds: "", requiredApprovalsNumber: "", requiredApprovalsPercent: "" };
+    expect(customStepProblem(noConfirmation)).toBeNull();
+    expect(customStepBody(noConfirmation)).toEqual({ title: "Legal check", actionType: "none", instruction: "read it", afterStepOrder: 2 });
+    expect(customStepProblem({ ...form, requiredApprovalsNumber: "1", requiredApprovalsPercent: "50" })).toContain("either");
   });
 
   test("offers only labels that are not attached yet", () => {

@@ -6,6 +6,35 @@ import (
 	"punchflow/internal/model"
 )
 
+func TestApproverRequiredInputUsesCurrentRouteStepCode(t *testing.T) {
+	setup := func(t *testing.T, requiredAt string) (*pf14TestEnv, string) {
+		e := pf14Setup(t)
+		compatSetRoute(t, e, "expense-claim", pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"))
+		pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+			def.Overwritable = false
+			section := &def.SectionList[0]
+			section.FormFields = append(section.FormFields, model.FormField{ID: "approver-input-id", Code: "approval-note", FieldType: "text", Approver: true, ApproverEditRestriction: &model.ApproverEditRestriction{RouteStepCodes: []string{requiredAt}}})
+		})
+		id, err := pf16Create(e, "sales-rep", model.TicketStatusInProgress, pf16Inputs(t, e, pf16Base), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e, id
+	}
+	t.Run("only matching step requires input", func(t *testing.T) {
+		e, id := setup(t, "review")
+		_, err := pf15Approve(e, "sales-manager", id)
+		pf15WantCode(t, "approve at configured step", err, "input_required_before_approve")
+	})
+	t.Run("unconfigured step is not blocked", func(t *testing.T) {
+		e, id := setup(t, "accounting")
+		compatApprove(t, e, "sales-manager", id)
+		if got := e.ticket(id).Status; got != model.TicketStatusCompleted {
+			t.Fatalf("status=%s, want completed", got)
+		}
+	})
+}
+
 // PF-15/item 3: approver-required detail cells block approval like form fields.
 func TestApproveRequiresApproverDetailCells(t *testing.T) {
 	setup := func(t *testing.T, mutate func(*model.SlipField)) (*pf14TestEnv, string) {

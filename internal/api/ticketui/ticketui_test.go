@@ -283,6 +283,42 @@ func TestSubmitAndCancelApprovalAcceptUIComments(t *testing.T) {
 	}
 }
 
+func TestApplicantHandoverTransfersOpenUnproxiedTicketAndApprovalHandoverReassignsPendingTask(t *testing.T) {
+	env := testutil.New(t)
+	salesTeamID, err := store.ResolveID(t.Context(), env.DB.Q(), "teams", "sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	applicantTicket := createTicketStatus(t, env, "draft", 5000)
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/admin/tickets/applicant-handover", map[string]any{
+		"fromUserId": env.UserID(t, "sales-rep"), "toUserId": env.UserID(t, "sales-manager"),
+		"teamId": salesTeamID, "ticketIds": []string{applicantTicket},
+	})
+	if response.Status != http.StatusOK {
+		t.Fatalf("applicant handover: %d %s", response.Status, response.Body)
+	}
+	transferred, err := store.Ticket(t.Context(), env.DB.Q(), applicantTicket)
+	if err != nil || transferred.AuthorID == nil || *transferred.AuthorID != env.UserID(t, "sales-manager") || transferred.AuthorTeamID == nil || *transferred.AuthorTeamID != salesTeamID {
+		t.Fatalf("transferred applicant ticket=%+v err=%v", transferred, err)
+	}
+
+	approvalTicket := createTicket(t, env)
+	var pendingUserID string
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT a.user_id FROM ticket_assignees a JOIN ticket_steps s ON s.id=a.ticket_step_id WHERE a.ticket_id=? AND s.status='in_progress' AND a.completed=0 LIMIT 1`, approvalTicket).Scan(&pendingUserID); err != nil {
+		t.Fatalf("find pending approver: %v", err)
+	}
+	response = env.Do(t, testutil.Admin, http.MethodPost, "/ui/api/admin/tickets/approval-handover", map[string]any{
+		"fromUserId": pendingUserID, "toUserId": env.UserID(t, "ceo"), "ticketIds": []string{approvalTicket},
+	})
+	if response.Status != http.StatusOK {
+		t.Fatalf("approval handover: %d %s", response.Status, response.Body)
+	}
+	var assignedUserID string
+	if err = env.DB.Q().QueryRowContext(t.Context(), `SELECT a.user_id FROM ticket_assignees a JOIN ticket_steps s ON s.id=a.ticket_step_id WHERE a.ticket_id=? AND s.status='in_progress' AND a.completed=0 LIMIT 1`, approvalTicket).Scan(&assignedUserID); err != nil || assignedUserID != env.UserID(t, "ceo") {
+		t.Fatalf("pending approver=%q err=%v, want ceo", assignedUserID, err)
+	}
+}
+
 func TestRaiseEndpoint(t *testing.T) {
 	env := testutil.New(t)
 	env.RegisterReceiverWebhook(t, "secret")

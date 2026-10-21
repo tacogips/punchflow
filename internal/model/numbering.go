@@ -8,6 +8,7 @@ type CustomNumbering struct {
 	Name              string  `json:"name"`
 	Value             int64   `json:"value"`
 	TicketNumberKeyID *string `json:"ticketNumberKeyId"`
+	ResetPeriod       string  `json:"resetPeriod,omitempty"`
 }
 
 // CustomNumberingSetting configures a numbering format and issuance event for

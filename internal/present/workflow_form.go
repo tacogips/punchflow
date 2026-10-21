@@ -171,12 +171,23 @@ func pf08FormField(ctx context.Context, q store.Querier, f model.FormField) map[
 	out["kintoneAppSetting"] = nil
 	out["climberCloudSetting"] = nil
 	out["generalMasterSearchFilters"] = pf08FormMasterFilters(f.GeneralMasterSearchFilters)
-	out["approverEditRestriction"] = nil
+	out["approverEditRestriction"] = pf08ApproverEditRestriction(f.ApproverEditRestriction)
 	out["approverEditSetting"] = map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}
 	out["customValidations"] = []any{}
 	out["ticketCopySetting"] = pf08TicketCopySetting(ctx, q, f.TicketCopySetting)
 	out["selectableTicketWorkflows"] = pf08SelectableTicketWorkflows(ctx, q, f.SelectableTicketWorkflowCodes)
 	return out
+}
+
+func pf08ApproverEditRestriction(restriction *model.ApproverEditRestriction) any {
+	if restriction == nil {
+		return nil
+	}
+	codes := restriction.RouteStepCodes
+	if codes == nil {
+		codes = []string{}
+	}
+	return map[string]any{"routeStepCodes": codes}
 }
 
 func pf08FormMasterFilters(filters []model.GeneralMasterSearchFilter) []any {
@@ -250,6 +261,6 @@ func pf08SlipField(f model.SlipField) map[string]any {
 	if opts == nil {
 		opts = []string{}
 	}
-	out := map[string]any{"id": f.ID, "fieldType": f.FieldType, "code": f.Code, "title": f.Title, "required": f.Required, "showTotal": f.ShowTotal, "options": opts, "regexpFormat": f.RegexpFormat, "formula": f.Formula, "maxValue": f.MaxValue, "minValue": f.MinValue, "defaultValue": f.DefaultValue, "decimalDigit": f.DecimalDigit, "delimited": f.Delimited, "allowedExtensions": allowed, "prefix": f.Prefix, "suffix": f.Suffix, "approver": f.Approver, "author": f.Author, "hidden": f.Hidden, "readonlyOnUi": f.ReadonlyOnUI, "minLength": f.MinLength, "maxLength": f.MaxLength, "multiple": f.Multiple, "autoLink": f.AutoLink, "useTodayForDefaultValue": f.UseTodayForDefaultValue, "allowedTicketStatus": statuses, "generalMaster": nil, "defaultGeneralMasterItem": nil, "generalMasterSearchFilters": []any{}, "approverEditRestriction": nil, "approverEditSetting": map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}, "customValidations": []any{}, "selectableTicketWorkflows": []any{}}
+	out := map[string]any{"id": f.ID, "fieldType": f.FieldType, "code": f.Code, "title": f.Title, "required": f.Required, "showTotal": f.ShowTotal, "options": opts, "regexpFormat": f.RegexpFormat, "formula": f.Formula, "maxValue": f.MaxValue, "minValue": f.MinValue, "defaultValue": f.DefaultValue, "decimalDigit": f.DecimalDigit, "delimited": f.Delimited, "allowedExtensions": allowed, "prefix": f.Prefix, "suffix": f.Suffix, "approver": f.Approver, "author": f.Author, "hidden": f.Hidden, "readonlyOnUi": f.ReadonlyOnUI, "minLength": f.MinLength, "maxLength": f.MaxLength, "multiple": f.Multiple, "autoLink": f.AutoLink, "useTodayForDefaultValue": f.UseTodayForDefaultValue, "allowedTicketStatus": statuses, "generalMaster": nil, "defaultGeneralMasterItem": nil, "generalMasterSearchFilters": []any{}, "approverEditRestriction": pf08ApproverEditRestriction(f.ApproverEditRestriction), "approverEditSetting": map[string]any{"permissionType": "all", "descendants": false, "gradeSymbol": nil, "grade": nil, "team": nil, "users": []any{}}, "customValidations": []any{}, "selectableTicketWorkflows": []any{}}
 	return out
 }

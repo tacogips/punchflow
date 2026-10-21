@@ -304,7 +304,7 @@ func TestAddCustomStepEligibilityAndValidation(t *testing.T) {
 	noUsers.UserIDs = nil
 	pf15WantCode(t, "no approvers", add("sales-rep", noUsers), "validation_failed")
 	badAction := valid
-	badAction.ActionType = model.ActionTypeNone
+	badAction.ActionType = "unsupported"
 	pf15WantCode(t, "bad action", add("sales-rep", badAction), "validation_failed")
 	unknown := valid
 	unknown.UserIDs = []string{"00000000-0000-4000-8000-00000000ffff"}
@@ -321,6 +321,91 @@ func TestAddCustomStepEligibilityAndValidation(t *testing.T) {
 	pf15WantCode(t, "workflow disabled", add("sales-rep", valid), "invalid_state")
 	if pf15Controls(t, e, "sales-rep", id).AddCustomStep {
 		t.Fatal("controls offer custom steps although the workflow disables them")
+	}
+}
+
+func TestCustomStepApprovalCountCanBeBelowUnanimous(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetRoute(t, e, "expense-claim",
+		pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"),
+		pf15RouteStep("finance", 2, model.ActionTypeApprove, "", false, "finance-manager"),
+	)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	users := []string{e.user("hr-manager"), e.user("accountant")}
+	_, err := pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
+		return e.engine.AddCustomStep(e.ctx, tx, e.actor("sales-rep"), id, CustomStepInput{Title: "One of two", ActionType: model.ActionTypeApprove, UserIDs: users, RequiredApprovalsNumber: 1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	compatApprove(t, e, "sales-manager", id)
+	custom := pf15StepByTitle(t, e, id, "One of two")
+	if custom.RequiredApprovalsNumber != 1 || custom.RequiredApprovalsPercent != 0 {
+		t.Fatalf("threshold=%d/%d", custom.RequiredApprovalsNumber, custom.RequiredApprovalsPercent)
+	}
+	compatApprove(t, e, "hr-manager", id)
+	if got := pf15StepByTitle(t, e, id, "One of two").Status; got != model.StepStatusCompleted {
+		t.Fatalf("custom status=%s, want completed after first approval", got)
+	}
+	if got := e.ticket(id).CurrentStep; got != 3 {
+		t.Fatalf("current step=%d, want next route step 3", got)
+	}
+}
+
+func TestCustomStepSupportsTeamAssignmentAndNoConfirmation(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetRoute(t, e, "expense-claim",
+		pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"),
+		pf15RouteStep("finance", 2, model.ActionTypeApprove, "", false, "finance-manager"),
+	)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	_, err := pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
+		return e.engine.AddCustomStep(e.ctx, tx, e.actor("sales-rep"), id, CustomStepInput{Title: "Team notice", ActionType: model.ActionTypeNone, TeamCodes: []string{"finance"}})
+	})
+	if err != nil {
+		t.Fatalf("add no-confirmation team step: %v", err)
+	}
+	if len(pf15StepByTitle(t, e, id, "Team notice").ID) == 0 {
+		t.Fatal("custom step was not stored")
+	}
+	compatApprove(t, e, "sales-manager", id)
+	step := pf15StepByTitle(t, e, id, "Team notice")
+	if step.Status != model.StepStatusCompleted {
+		t.Fatalf("no-confirmation step status=%s, want completed", step.Status)
+	}
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), step.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) == 0 {
+		t.Fatal("team assignment did not resolve active members")
+	}
+}
+
+func TestCustomNoConfirmationStepWithoutAssigneesDoesNotBlock(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetRoute(t, e, "expense-claim", pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"))
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	_, err := pf15Run(e, func(tx *store.Tx) ([]model.WebhookEvent, error) {
+		return e.engine.AddCustomStep(e.ctx, tx, e.actor("sales-rep"), id, CustomStepInput{Title: "Notice", ActionType: model.ActionTypeNone})
+	})
+	if err != nil {
+		t.Fatalf("add no-confirmation step without assignees: %v", err)
+	}
+	compatApprove(t, e, "sales-manager", id)
+	step := pf15StepByTitle(t, e, id, "Notice")
+	if step.Status != model.StepStatusCompleted {
+		t.Fatalf("no-confirmation step status=%s, want completed", step.Status)
+	}
+	assignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), step.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignees) != 0 {
+		t.Fatalf("no-confirmation step has %d assignees, want none", len(assignees))
+	}
+	if got := e.ticket(id).Status; got != model.TicketStatusCompleted {
+		t.Fatalf("ticket status=%s, want completed after auto-advancing past custom step", got)
 	}
 }
 

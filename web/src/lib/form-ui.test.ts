@@ -22,6 +22,7 @@ describe("form UI metadata", () => {
     ] as unknown as GeneralMasterItem[];
     expect(filterMasterItems(items, picker, { region: { value: "East" } }, [source]).map((item) => item.id)).toEqual(["tokyo"]);
     expect(filterMasterItems(items, picker, { region: { value: "" } }, [source])).toEqual(items);
+    expect(filterMasterItems(items, picker, { region: { value: "West" } }, [source]).map((item) => item.id)).toEqual(["osaka"]);
   });
 
   test("ticket copy checks compatible type and destination actor permissions", () => {
@@ -29,6 +30,7 @@ describe("form UI metadata", () => {
     expect(ticketCopyCompatible("ticket_title", target)).toBe(true);
     expect(ticketCopyValue({ fieldType: "ticket_title", fieldCode: null, targetFieldCode: "summary" }, { title: "Copied" }, target, "applicant")).toBe("Copied");
     expect(ticketCopyValue({ fieldType: "form_field", fieldCode: "source", targetFieldCode: "summary" }, { inputs: [{ formFieldCode: "source", value: "Copied from source", formField: { fieldType: "text" } }] }, target, "applicant")).toBe("Copied from source");
+    expect(ticketCopyValue({ fieldType: "form_field", fieldCode: "total", targetFieldCode: "summary" }, { inputs: [{ formFieldCode: "total", value: 123.5, formField: { fieldType: "calculation" } }] }, target, "applicant")).toBe("123.5");
     expect(ticketCopyValue({ fieldType: "ticket_title", fieldCode: null, targetFieldCode: "summary" }, { title: "Copied" }, field("locked", "text", { author: false }), "applicant")).toBeUndefined();
     expect(ticketCopyCompatible("date", field("date-time", "datetime"))).toBe(false);
     expect(ticketCopyValue({ fieldType: "form_field", fieldCode: "choice", targetFieldCode: "target" }, { inputs: [{ formFieldCode: "choice", value: "Other", formField: { fieldType: "pull_down" } }] }, field("target", "pull_down", { author: true, options: ["Allowed"] }), "applicant")).toBeUndefined();

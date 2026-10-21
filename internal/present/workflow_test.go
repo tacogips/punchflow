@@ -2,6 +2,7 @@ package present
 
 import (
 	"encoding/json"
+	"punchflow/internal/model"
 	"punchflow/internal/store"
 	"testing"
 )
@@ -15,6 +16,7 @@ func TestWorkflowPresenterResolvesTicketWorkflowChoicesAndSlipDefaults(t *testin
 	}
 	definition.SectionList[0].FormFields[0].FieldType = "ticket"
 	definition.SectionList[0].FormFields[0].SelectableTicketWorkflowCodes = []string{"WF2"}
+	definition.SectionList[0].FormFields[0].ApproverEditRestriction = &model.ApproverEditRestriction{RouteStepCodes: []string{"accounting"}}
 	definition.SectionList[0].SlipFields[0].FieldType = "master"
 	definition.SectionList[0].SlipFields[0].GeneralMasterCode = "GM"
 	definition.SectionList[0].SlipFields[0].DefaultGeneralMasterItemCode = "I1"
@@ -42,6 +44,10 @@ func TestWorkflowPresenterResolvesTicketWorkflowChoicesAndSlipDefaults(t *testin
 	section := got["sectionList"].([]any)[0].(map[string]any)
 	formField := section["formFields"].([]any)[0].(map[string]any)
 	choices := formField["selectableTicketWorkflows"].([]any)
+	restriction := formField["approverEditRestriction"].(map[string]any)
+	if codes := restriction["routeStepCodes"].([]string); len(codes) != 1 || codes[0] != "accounting" {
+		t.Fatalf("approver required route step codes=%v", codes)
+	}
 	if len(choices) != 1 {
 		t.Fatalf("ticket workflow choices=%v", choices)
 	}

@@ -134,7 +134,7 @@ describe("restoring a stored ticket", () => {
 });
 
 describe("browser form permission payloads", () => {
-  test("omits hidden, read-only, and other-actor fields", () => {
+  test("sends a complete applicant form while preserving noneditable values", () => {
     const restricted: WorkflowDetail = { ...workflow, sectionList: [{ id: "permissions", sectionType: "form", title: "Permissions", formFields: [
       { id: "hidden", code: "hidden", name: "Hidden", fieldType: "text", author: true, hidden: true },
       { id: "locked", code: "locked", name: "Locked", fieldType: "text", author: true, readonlyOnUi: true },
@@ -143,7 +143,24 @@ describe("browser form permission payloads", () => {
     ] }] };
     const form = Object.fromEntries(restricted.sectionList[0].formFields!.map((field) => [field.code, { code: field.code, fieldType: field.fieldType, value: "value" }]));
     const applicant = buildFormPayload(restricted, form, {}, { viewable: always, approver: false, editable: (field) => field.fieldType === "calculation" || fieldInputAllowed(field, "applicant") });
-    expect(applicant.inputs).toEqual([{ formFieldCode: "author", value: "value" }]);
+    expect(applicant.inputs).toEqual([
+      { formFieldCode: "hidden", value: "value" },
+      { formFieldCode: "locked", value: "value" },
+      { formFieldCode: "approver", value: "value" },
+      { formFieldCode: "author", value: "value" },
+    ]);
+    const createState = Object.fromEntries(restricted.sectionList[0].formFields!.map((field) => [field.code, { code: field.code, fieldType: field.fieldType, value: null }]));
+    const create = buildFormPayload(restricted, createState, {}, { viewable: always, approver: false, editable: (field) => fieldInputAllowed(field, "applicant") });
+    expect(create.inputs).toEqual([
+      { formFieldCode: "hidden", value: null },
+      { formFieldCode: "locked", value: null },
+      { formFieldCode: "approver", value: null },
+      { formFieldCode: "author", value: null },
+    ]);
+    const hiddenSection = { id: "hidden-section", sectionType: "form", title: "Restricted", formFields: [{ id: "private", code: "private", name: "Private", fieldType: "text", author: true }] } as unknown as WorkflowDetail["sectionList"][number];
+    const withRestrictedSection = { ...restricted, sectionList: [...restricted.sectionList, hiddenSection] };
+    const restrictedPayload = buildFormPayload(withRestrictedSection, { ...form, private: { code: "private", fieldType: "text", value: null } }, {}, { viewable: (section) => section.id !== "hidden-section", approver: false });
+    expect(restrictedPayload.inputs?.map((input) => input.formFieldCode)).toContain("private");
     const approver = buildFormPayload(restricted, form, {}, { viewable: always, approver: true, editable: (field) => field.fieldType === "calculation" || fieldInputAllowed(field, "approver") });
     expect(approver.inputs).toEqual([{ formFieldCode: "approver", value: "value" }]);
   });
@@ -199,7 +216,7 @@ describe("section view restrictions", () => {
     expect(sectionViewable(viewers([{ user: null, team: { id: "team-a" }, grade: { id: "g" } }]), undefined, { userId: "u1", teamIds: ["team-a"] })).toBe(false);
   });
 
-  test("non-viewable sections receive no inputs", () => {
+  test("non-viewable sections receive null placeholders", () => {
     const state = formStateFromTicket(restrictedWorkflow);
     state.amount.value = "10"; state.salary.value = "999";
     const viewable = (section: SectionListItem) => sectionViewable(section, undefined, { userId: "u1" });
@@ -208,6 +225,7 @@ describe("section view restrictions", () => {
       { formFieldCode: "amount", value: "10" }, { formFieldCode: "kind", value: null },
       { formFieldCode: "owner", userId: null }, { formFieldCode: "teams", teamId: [] },
       { formFieldCode: "category", generalMasterItemId: null }, { formFieldCode: "document", files: [] }, { formFieldCode: "meeting", value: null },
+      { formFieldCode: "salary", value: null },
     ]);
   });
 });

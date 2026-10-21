@@ -27,22 +27,30 @@ export function parseUserIds(raw: string): string[] {
   return [...new Set(raw.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean))];
 }
 
-export interface CustomStepForm { title: string; actionType: string; userIds: string; instruction: string; afterStepOrder: string }
+export interface CustomStepForm { title: string; actionType: string; assignmentType: "user" | "team"; userIds: string; teamCodes: string; requiredApprovalsNumber: string; requiredApprovalsPercent: string; instruction: string; afterStepOrder: string }
 
 /** Returns the first validation problem of the form, or null when it can be submitted. */
 export function customStepProblem(form: CustomStepForm): string | null {
   if (!form.title.trim()) return "Enter a step title.";
-  if (form.actionType !== "approve" && form.actionType !== "confirm") return "Choose approval or confirmation.";
-  if (parseUserIds(form.userIds).length === 0) return "Enter at least one approver user ID.";
+  if (form.actionType !== "approve" && form.actionType !== "confirm" && form.actionType !== "none") return "Choose a valid action.";
+  if (form.actionType !== "none" && (form.assignmentType === "user" ? parseUserIds(form.userIds).length : parseUserIds(form.teamCodes).length) === 0) return "Enter at least one approver or team.";
+  const requiredNumber = form.requiredApprovalsNumber === "" ? 0 : Number(form.requiredApprovalsNumber);
+  const requiredPercent = form.requiredApprovalsPercent === "" ? 0 : Number(form.requiredApprovalsPercent);
+  if (!Number.isInteger(requiredNumber) || requiredNumber < 0 || !Number.isInteger(requiredPercent) || requiredPercent < 0 || requiredPercent > 100 || requiredNumber > 0 && requiredPercent > 0) return "Set either a valid approval count or percentage.";
   return null;
 }
 
 export function customStepBody(form: CustomStepForm): CustomStepBody {
   const body: CustomStepBody = {
     title: form.title.trim(),
-    actionType: form.actionType === "confirm" ? "confirm" : "approve",
-    userIds: parseUserIds(form.userIds),
+    actionType: form.actionType === "confirm" || form.actionType === "none" ? form.actionType : "approve",
   };
+  if (form.actionType !== "none") {
+    if (form.assignmentType === "team") body.teamCodes = parseUserIds(form.teamCodes);
+    else body.userIds = parseUserIds(form.userIds);
+  }
+  if (form.requiredApprovalsNumber !== "" && Number(form.requiredApprovalsNumber) > 0) body.requiredApprovalsNumber = Number(form.requiredApprovalsNumber);
+  if (form.requiredApprovalsPercent !== "" && Number(form.requiredApprovalsPercent) > 0) body.requiredApprovalsPercent = Number(form.requiredApprovalsPercent);
   if (form.instruction.trim()) body.instruction = form.instruction.trim();
   if (form.afterStepOrder !== "") body.afterStepOrder = Number(form.afterStepOrder);
   return body;
