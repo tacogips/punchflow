@@ -12,14 +12,9 @@ import (
 
 // pf14VariableName normalizes a route or condition variable reference. The
 // documented syntax is "$field_code"; "${field_code}" and the bare field code
-// are accepted as well.
+// are accepted as well. The shared normalization lives in model.VariableName.
 func pf14VariableName(variable string) string {
-	name := strings.TrimSpace(variable)
-	name = strings.TrimPrefix(name, "$")
-	if strings.HasPrefix(name, "{") && strings.HasSuffix(name, "}") {
-		name = strings.TrimSuffix(strings.TrimPrefix(name, "{"), "}")
-	}
-	return name
+	return model.VariableName(variable)
 }
 
 // pf14VariableValue looks up the form value a variable reference points to.

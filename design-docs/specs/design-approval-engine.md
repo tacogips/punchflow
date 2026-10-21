@@ -41,6 +41,23 @@ Every method first checks the tenant `admin_working` mode (after existence and v
 - Errors are `*kferr.Error` values (`status`, `code`, `message`, `fieldErrors`) and map directly to the kickflow error body.
 - Time comes from an injected `kftime.Clock` so tests control `openedAt`, `completedAt`, proxy date ranges and numbering.
 
+### Source files
+
+| Path | Responsibility |
+|---|---|
+| `internal/engine/engine.go` | Exported surface, `Actor`, input types |
+| `create.go`, `update.go`, `submit.go` | Create, Update/UpdateForm, submission (`pf14FinishSubmission`: `openedAt`, numbering, `ticket_opened`/`ticket_completed`), application eligibility (INF-28) and applicant nominations (INF-70) |
+| `routing.go`, `dynamic_refs.go`, `conditions.go` | Route branch selection, route building (ends in `pf14Advance`), assignee and fallback resolution, `$field_code` variables (INF-73), condition operators and section visibility conditions |
+| `actions.go` | Approve, SendBack, Deny, Withdraw, Archive and the single advancement routine `pf14Advance` |
+| `forms.go`, `forms_normalize.go`, `forms_patch.go`, `forms_slips.go`, `forms_calc.go`, `forms_update.go`, `forms_links.go` | Actor-aware normalization of form fields and detail rows, differential `/form` patches, detail-row merge (INF-75), calculation evaluation (INF-21), file attachments and `autoLink` links (INF-76, INF-78) |
+| `visibility.go`, `scope.go` | The effective-visibility evaluator `CanView` (INF-36) and restricted `ticket_read` folder scope (INF-84) |
+| `numbering.go` | Ticket number allocation at the configured timing (INF-35) |
+| `comments.go` | Comments and mentions |
+| `substatus.go`, `labels.go`, `controls.go`, `controls_custom_steps.go` | Sub-status sync, labels, cancel approval, raise and custom steps (PF-15, PF-19) |
+| `user_cleanup.go` | User deletion cleanup and step re-evaluation (INF-79) |
+| `internal/formula/` | Formula parser and evaluator used by `forms_calc.go` |
+| `internal/access/section.go` | Form-section view restrictions shared with the presenter (INF-77) |
+
 ### Data owned by the engine
 
 | Table | Purpose |
@@ -59,17 +76,19 @@ Every method first checks the tenant `admin_working` mode (after existence and v
 
 | From | Action | Guard | To | Events |
 |---|---|---|---|---|
-| (none) | Create `status: draft` | INF-28; inputs shape valid | `draft` | `ticket_created` |
-| (none) | Create `status: in_progress` | as above + full validation + route resolution | `in_progress` | `ticket_created`, `ticket_opened` |
+| (none) | Create `status: draft` | INF-28 (the author team must be eligible); inputs shape valid | `draft` | `ticket_created` |
+| (none) | Create `status: in_progress` | as above + full validation + route resolution | `in_progress`, or `completed` when no user action is needed (INF-72) | `ticket_created`, `ticket_opened` (+ `ticket_completed`) |
 | `draft` | Update fields | author | `draft` | `ticket_updated` |
-| `draft` | Update `status: in_progress` | author; full validation; route resolution | `in_progress` | (`ticket_updated`), `ticket_opened` |
+| `draft` | Update `status` equal to the current status | author | `draft` | `ticket_updated` only when something changed (INF-71) |
+| `draft` | Update `status: in_progress` | author; INF-28 re-checked; full validation; route resolution | `in_progress`, or `completed` when no user action is needed | (`ticket_updated`), `ticket_opened` (+ `ticket_completed`) |
 | `rejected` | Update fields | author | `rejected` | `ticket_updated` |
-| `rejected` | Update `status: in_progress` (re-submit) | author; full validation; route re-resolved | `in_progress` | (`ticket_updated`), `ticket_opened` |
+| `rejected` | Update `status` equal to the current status | author | `rejected` | `ticket_updated` only when something changed (INF-71) |
+| `rejected` | Update `status: in_progress` (re-submit) | author; INF-28 re-checked; full validation; route re-resolved | `in_progress`, or `completed` when no user action is needed | (`ticket_updated`), `ticket_opened` (+ `ticket_completed`) |
 | `rejected` | Update `status: draft` | - | error `422 invalid_state` (Confirmed rule) | - |
 | `in_progress` | Update / UpdateForm by current approver | approver-editable fields only; `overwritable` rule | `in_progress` | `ticket_updated` |
-| `in_progress` | Approve | INF-41 order; assignee or proxy | `in_progress` / `completed` | `ticket_approved` or `ticket_confirmed` (+ `ticket_completed`) |
+| `in_progress` | Approve | INF-41 order; assignee or proxy | `in_progress` / `completed` | `ticket_approved` or `ticket_confirmed` for the step acted on, even when the step needs more approvals (INF-74) (+ `ticket_completed`) |
 | `in_progress` | SendBack `to: 0` | assignee or proxy; current step `actionType: approve` | `rejected`, currentStep 0 | `ticket_rejected` |
-| `in_progress` | SendBack `to: N` | `1 <= N < currentStep` (INF-12) | `in_progress`, currentStep N | `ticket_rejected` |
+| `in_progress` | SendBack `to: N` | `1 <= N < currentStep` (INF-12) | `in_progress`, currentStep N (the next unskipped group when all of group N was skipped) | `ticket_rejected` |
 | `in_progress` | Deny | assignee or proxy; current step `approve` | `denied` (terminal) | `ticket_denied` |
 | `in_progress` | Withdraw | author / proxy client (INF-25) | `rejected`, currentStep 0 | `ticket_withdrawn` |
 | `draft`, `rejected` | Archive | author, proxy client, or `ticket_write` | `archived` | `ticket_archived` |
@@ -84,15 +103,18 @@ Timestamps: `openedAt` set on every transition to `in_progress` from draft/rejec
 
 ### Form validation
 
-Applies to `inputs` and `slipItems` on Create, Update and UpdateForm.
+Applies to `inputs` and `slipItems` on Create, Update and UpdateForm. One normalizer (`forms_normalize.go`) serves form fields and detail fields; approvers are limited to `approver: true` fields (or all when the workflow is `overwritable`), applicants may enter every field.
 
 1. Field resolution: `formFieldId` wins over `formFieldCode`; unknown id/code -> `400 invalid_parameter` ("invalid field code"). Duplicates -> `400 invalid_parameter`.
 2. Completeness: Create and applicant Update must include every form field of the workflow version (calculation fields with `value: null`); missing -> `400 invalid_parameter`. `inputs` may be omitted only when the workflow has no form fields. Approver Update may include only fields with `approver: true` (or all fields when `overwritable` is true); violations -> `400 invalid_parameter` "invalid field code". UpdateForm accepts any non-empty subset of editable fields; both `inputs` and `slipItems` empty -> `400 invalid_parameter`.
-3. Typing per `fieldType`: `text`/`text_long` string (min/max length, `regexpFormat`); `number`/`integer` numeric string or number (min/max value, `decimalDigit`); `checkbox` string array within `options`; `pull_down`/`radio_button` one of `options`; `date` `YYYY-MM-DD`; `datetime` `YYYY-MM-DD HH:mm`; `master` -> `generalMasterItemId` of the field's master; `user`/`team`/`ticket` -> existing ids (`ticket` also `allowedTicketStatus`); `file` -> uploaded signed ids; `calculation` -> stored null (INF-21); `button_api`/`button_kintone` -> stored as given, never executed (DIV-03). Type errors -> `422 validation_failed` with `errors.<fieldCode>`.
+3. Typing per `fieldType`: `text`/`text_long` string (min/max length, `regexpFormat`); `number`/`integer` numeric string or number (min/max value, `decimalDigit`); `checkbox` string array within `options`; `pull_down`/`radio_button` one of `options`; `date` `YYYY-MM-DD`; `datetime` `YYYY-MM-DD HH:mm`; `master` -> `generalMasterItemId` of the field's master; `user`/`team`/`ticket` -> existing ids (`ticket` also `allowedTicketStatus`); `file` -> uploaded signed ids; `calculation` -> evaluated server-side from its `formula`, never entered (INF-21); `button_api`/`button_kintone` -> stored as given, never executed (DIV-03). Type errors -> `422 validation_failed` with `errors.<fieldCode>`.
 4. Required check (only when the ticket is or becomes `in_progress`): every visible section's `required` field (author-side fields on submit) must be non-empty -> `422 validation_failed`. Drafts skip required checks.
 5. Section visibility: a form section with `conditional: true` is visible when its `conditionFields` hold under `combinationType` `all`/`any` (`custom` rejected at fixture load, INF-18). Hidden sections are excluded from required checks and returned with `visible: false`.
+   Sections with `viewRestriction` are viewable only by the author (`allowViewAuthor`), assignees (`allowViewApprover`), designated `sectionViewers` and `ticket_read` holders (INF-77). Values entered for a section the actor cannot view are rejected (`400 invalid_parameter`), stored values are kept on edits and the presenter returns the section with `viewable: false` and no values.
 6. Approve-time check: fields with `approver: true` and `required: true` that are empty -> `422 input_required_before_approve`. Detail (slip) cells are checked the same way (INF-69): every stored row of every slip section must have a non-empty value in each `approver: true`, `required: true` cell; hidden and `calculation` cells are exempt.
-7. Title: `titleInputMode` `input` uses request `title` (title on other modes -> `400 invalid_parameter`); `calculate` -> workflow name (INF-21); `none` -> null.
+7. Title: `titleInputMode` `input` uses request `title` (title on other modes -> `400 invalid_parameter`); `calculate` -> the result of `titleFormula`, re-evaluated on every form edit (INF-21; a formula that yields nothing leaves the title unchanged); `none` -> null.
+8. Calculation: after normalization the calculation fields, detail calculation cells and the title are evaluated in dependency order. Unsupported syntax, unknown references and cycles are `422 validation_failed`; runtime failures store `null`. The results feed route condition matching (INF-21).
+9. Detail rows: `PATCH /v1/tickets/{id}` replaces every row, `PATCH /v1/tickets/{id}/form` replaces only the supplied detail sections and preserves omitted sections and omitted cells the actor cannot enter (INF-75). Required detail cells are checked on submission, including stored rows, and approver cells on approval (INF-69). `file` values and `autoLink` ticket values maintain attachments and reciprocal links (INF-76, INF-78).
 
 ### Route resolution (on submit and re-submit)
 
@@ -121,17 +143,18 @@ Condition operators (`equal`, `not_equal`, `greater_than(_or_equal)`, `less_than
 | `dynamic_user` | Users selected in the form field whose code is the target `variable` |
 | `dynamic_team` | Members of the teams selected in the form field `variable`, filtered by grade targets |
 
-A resolved non-skipped step with zero assignees fails submit with `422 validation_failed` (`errors.base`), except `assignee_customizable` steps, which are filled before they become current.
+A resolved non-skipped step with zero assignees takes its `fallbackType` assignees (`direct_manager`, `higher_manager`, `higher_team`); when that yields nobody, fallback `skip` skips the step and anything else (including no fallback and `no_fallback`) fails submit with `422 validation_failed` (`errors.base`). Exceptions: `assignee_customizable` steps are filled before they become current, and an `author_customizable` step with no nominations is skipped when its minimum is 0 (otherwise `422`, "custom approver is required"). `dynamic_user`/`dynamic_team` targets read the form field named by `variable` (`$code`, `${code}` and `code` are equivalent, INF-73) and accept user or team codes or IDs.
 
 ### Step progression
 
-- Current group = lowest `stepOrder` with a step that is not `completed` or `skipped`. `ticket.currentStep` = that `stepOrder`. When a group becomes current, its steps get status `in_progress` and their assignees get `assignedAt`; `actionType: none` steps complete immediately (INF-15).
+- One routine, `pf14Advance`, moves a ticket forward. It is used by route building (submission), Approve, Raise, cancel approval, send back over skipped groups and user deletion cleanup. Current group = lowest `stepOrder` with a step that is not finished (`completed`, `skipped` or `raised`). `ticket.currentStep` = that `stepOrder`. When a group becomes current, its steps get status `in_progress` and their assignees get `assignedAt`; `actionType: none` steps complete immediately (INF-15) and the routine continues to the next group. When no unfinished group remains the ticket becomes `completed`.
+- Auto-advancement on build: `pf14BuildRoute` materializes all ticket steps (with skipped steps already marked) and then calls `pf14Advance` from `currentStep` 0, so submission lands on the first group that needs a user, or completes the ticket at once when none does (INF-72). `pf14FinishSubmission` then records `openedAt`, allocates the number at the `opened` (and, if completed, `completed`) timing and returns `ticket_opened` (+ `ticket_completed`).
 - Approve: the actor acts for every assignee row of every in-progress step of the current group where `assignee.user == actor` or the actor is an active proxy for `assignee.user` (INF-16). No such row -> `403 user_not_assigned`. Each such row becomes `completed` with `actualApprover = actor`.
 - A step completes per INF-14; the group completes when all its non-skipped steps complete; then the next group becomes current, or the ticket becomes `completed`.
-- Event type for Approve: `ticket_approved` if any acted row belongs to an `approve` step, otherwise `ticket_confirmed`; `ticket_completed` is appended when the ticket completed.
+- Event type for Approve: `ticket_approved` if any acted row belongs to an `approve` step, otherwise `ticket_confirmed`, whether or not the step reached its threshold (INF-74); `ticket_completed` is appended when the ticket completed.
 - Before approving a step that is followed by an `assignee_customizable` step with no approvers -> `422 assignment_required_before_approve`.
 - SendBack and Deny are allowed only when the actor holds a row in an `approve` step of the current group (otherwise `403 user_not_assigned`, or `422 invalid_state` when only on `confirm`/`none` steps).
-- SendBack resets: `to: 0` resets all steps to `pending` and clears all assignee completions; `to: N` resets steps with `stepOrder >= N`. Re-submit rebuilds steps from scratch (route re-resolved).
+- SendBack resets: `to: 0` resets all steps to `pending` and clears all assignee completions; `to: N` resets steps with `stepOrder >= N`. Steps that were `skipped` stay skipped (they are never approvable again), and when every step of group `N` was skipped the ticket advances to the next group that needs an approval. Re-submit rebuilds steps from scratch (route re-resolved).
 
 ### Labels and sub-status (PF-15)
 
@@ -155,6 +178,14 @@ Definitions come from the fixtures `labels.json` (`id`, `name`, `description`, `
 | `RemoveCustomStep` | `DELETE /ui/api/tickets/{id}/custom-steps/{stepId}` | The author of a still `pending` custom step | The step is deleted and the order gap closed | `ticket_updated` |
 
 `GET /ui/api/tickets/{id}/controls` returns the same eligibility as booleans (`cancelApproval`, `raise` + `raiseTargetStepOrders`, `addCustomStep` + `customStepInsertAfter`, `removableCustomStepIds`) so the UI shows only valid buttons. Raised steps count as finished for progression (`pf15StepDone`), and the assignment check before approving matches the next group to route steps by step code because custom steps shift ticket step orders away from route orders. Every UI API mutation writes an audit log (`ticket.label_attach`, `ticket.label_detach`, `ticket.cancel_approval`, `ticket.raise`, `ticket.add_custom_step`, `ticket.remove_custom_step`).
+
+### User deletion cleanup
+
+`Engine.CleanupDeletedUser` runs in the transaction of `DELETE /v1/users/{id}` (INF-79). It archives the user's `draft`, `in_progress` and `rejected` tickets (`ticket_archived` each), removes the user's outstanding assignments on other in-progress tickets and then re-evaluates every step that lost an assignment with the rules above:
+
+1. A step left without assignees takes the fallback assignees of its route step. If the fallback finds nobody and is `skip`, the step is skipped; `author_customizable` steps and ad-hoc custom steps (nobody can be nominated any more) are skipped; a step without a usable fallback keeps waiting.
+2. A current step whose remaining assignees already meet its approval threshold (`pf14RequiredApprovals`, shared with Approve) completes.
+3. When anything changed the ticket advances through `pf14Advance`; if it completes, the number is allocated at the `completed` timing and `ticket_completed` is returned.
 
 ### Comments with actions
 

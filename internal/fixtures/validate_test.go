@@ -38,6 +38,7 @@ func TestValidateInvalidCases(t *testing.T) {
 		{"event-ticket-submitted", FileWebhooks, "[0].eventTypes[0]"},
 		{"user-type-member", FileUsers, "[0].userType"},
 		{"route-status-active", FileRoutes, "[0].status"},
+		{"bad-numbering-timing", FileWorkflows, "[0].ticketNumberingTiming"},
 		{"section-viewer-unknown-user", FileWorkflows, "[0].sectionList[0].sectionViewers[0].userCode"},
 	}
 	for _, tc := range cases {

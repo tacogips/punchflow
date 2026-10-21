@@ -23,9 +23,20 @@ How callers authenticate to `/v1` and `/admin/api`, how the browser UI logs in t
 2. Look up `sha256(token)` in `api_tokens` (`kind` = `pat` | `sat`). Update `last_used_at`.
 3. `pat`: effective user = token owner. `sat`: apply INF-05 to `X-Caller-Id`; effective user = caller.
 4. Apply INF-06 to the effective user.
-5. Permissions = union of `permissionList` of the effective user's admin roles. `restricted` scoping (folders, masters, teams) is stored and returned but not enforced (DIV-08).
+5. Permissions = union of `permissionList` of the effective user's admin roles, kept as per-permission grants (see "Restricted scopes"). `Principal.Has` means "held in any scope"; handlers that act on a resource additionally check that the grant covers it.
 6. Tenant checks: mode `suspended` / `maintenance` and the IP allowlist (see coverage doc). `admin_working` is not checked here; the engine checks it per action (INF-41).
 7. Update the user's `lastUsedOn` (JST date) at most once per day per user.
+8. Apply a due scheduled organization chart activation (INF-80): the chart whose plan `dueOn` is today or earlier in JST becomes the active chart in one transaction before the grants are loaded, so no background job is needed.
+
+### Restricted scopes (grant model)
+
+A role's `permissionList` entry may be `restricted` and name the folders, general masters or teams it covers. Which dimension applies depends on the permission (`model.PermissionScopeKind`, as in kickflow): `workflow`, `route`, `pipeline` and `ticket_read` by folder; `master` and `master_read` by general master; `team` by team. Every other permission ignores the flag and is always unrestricted. The restriction is enforced (INF-84); there is no longer a divergence for it.
+
+- `store.UserGrants` merges the entries of all of a user's roles into one `PermissionGrant` per permission: any unrestricted entry makes the grant unrestricted; otherwise `Targets` is the union of the restricted entries' targets, with folder and team targets expanded to their descendants. A restricted entry with no targets matches nothing.
+- `auth.Principal` carries the grants: `Has` (held in any scope), `Unrestricted`, `Allows(permission, target)`, `AllowsAny` and `Targets`.
+- Handlers use `requireTarget` (the grant covers a given folder, master or team) and `requireUnrestricted` (operations without a single target). Out-of-scope access returns `403 missing_permission`; list endpoints filter to the covered resources. Deleting a folder needs `workflow`/`route` coverage of every folder it retires (INF-83).
+- `ticket_read` is the one restricted permission the engine consults: `actorFor` does not pass it as a global permission; it hands the engine the granted folder IDs (`Actor.ReadFolderIDs`) and `Engine.CanView` lets the actor read tickets of workflows in those folders (INF-36).
+- Roles loaded from fixtures use the same persisted entry shape (`permission`, `restricted`, `folderIds`, `generalMasterIds`, `teamIds`), so a restricted fixture role is enforced like one created through the API. The default fixtures define no restricted role.
 
 Token issuing: PATs belong to the creating user; SATs (service accounts) are tenant-wide and need `integration`. The plaintext token is returned exactly once. Fixture-seeded tokens keep their plaintext in `fixture_plaintext` so fixture export can reproduce them; runtime-issued tokens never store plaintext (INF-04).
 

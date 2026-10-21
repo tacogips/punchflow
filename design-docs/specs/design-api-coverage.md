@@ -29,7 +29,7 @@ Single source of truth for which kickflow operation and webhook event punchflow 
 | Sorting | INF-02 | `internal/httpx` |
 | Array query | `key[]=a&key[]=b`. For parameters typed "string or string[]" a bare `key=a` is also accepted. A bare repeated key for an array-only parameter returns `400 invalid_parameter` with message `Invalid request: value at root is not an array` | `internal/httpx` |
 | Auth | Bearer PAT / SAT with `X-Caller-Id`, or UI session cookie; see `design-auth-admin.md` | `internal/auth` |
-| Permissions | RBAC from admin roles; `403 missing_permission`. Endpoints whose description names no permission are open to any authenticated active user (INF-42) | `internal/auth` |
+| Permissions | RBAC from admin roles; `403 missing_permission`. Restricted role entries (folders, general masters, teams) are enforced per resource and list endpoints filter to the covered resources (INF-84, `design-auth-admin.md`). Endpoints whose description names no permission are open to any authenticated active user (INF-42) | `internal/auth` |
 | Tenant modes and IP allowlist | Middleware: `suspended` -> `403 tenant_suspended`, `maintenance` -> `403 tenant_maintenance` on every `/v1` request; IP allowlist -> `403 ip_address_denied`. Engine (ordering per INF-41): `admin_working` -> `403 admin_is_working` on ticket create/update/updateForm/approve/reject/deny/withdraw/archive | `internal/auth`, `internal/engine` |
 | CORS | `Access-Control-Allow-Origin: *`, preflight `OPTIONS` answered with 200 before routing; allowed headers `Authorization, Content-Type, X-Caller-Id, X-Rate-Limit-Secret`; exposed headers `Link, Page, Per-Page, Total, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, X-Request-Id`. Cookies are never honored on cross-origin requests because of the `*` origin | `internal/httpx` |
 | Rate limit | INF-07 | `internal/httpx` |
@@ -87,10 +87,10 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 |---|---|---|---|---|---|---|
 | 1 | getCurrentUser | GET | /v1/user | any | users.go | Returns the effective user (SAT: caller) |
 | 2 | listUsers | GET | /v1/users | user | users.go | Filters per spec; `lastUsedOn` included |
-| 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed` |
+| 3 | createUser | POST | /v1/users | user | users.go | Status `invited`, invitation expires in 7 days, no e-mail (DIV-02); `domain_not_allowed`; `customFields` only for defined codes (`user-custom-fields.json`), else 422 (INF-81) |
 | 4 | getUser | GET | /v1/users/{userId} | user | users.go | id or code |
-| 5 | deleteUser | DELETE | /v1/users/{userId} | user | users.go | Soft delete -> `deactivated`, returns UserDetail |
-| 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `domain_not_allowed` |
+| 5 | deleteUser | DELETE | /v1/users/{userId} | user | users.go | Soft delete -> `deactivated`, returns UserDetail; archives the user's open tickets (`ticket_archived`), removes pending approver assignments and re-evaluates the affected steps (INF-79) |
+| 6 | updateUser | PATCH | /v1/users/{userId} | user | users.go | Partial update; `domain_not_allowed`; `customFields` validated against the definitions (INF-81) |
 | 7 | lookupUserByEmail | GET | /v1/users/lookupByEmail | user | users.go | Exact, case-insensitive match |
 | 8 | reinviteUser | POST | /v1/users/{userId}/reinvite | user | users.go | `deactivated`/`invited` -> `invited` with a new invitation; else INF-24 |
 | 9 | suspendUser | POST | /v1/users/{userId}/suspend | user | users.go | `activated` -> `suspended`; else INF-24 |
@@ -105,11 +105,11 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 18 | setDefaultGrade | POST | /v1/grades/{gradeId}/default | user | grades.go | Clears previous default |
 | 19 | listProxyApplicants | GET | /v1/proxyApplicants | user | proxies.go | |
 | 20 | createProxyApplicant | POST | /v1/proxyApplicants | user, or self when tenant `selfServiceProxy` | proxies.go | One per (user, proxyUser) pair -> 422 |
-| 21 | updateProxyApplicant | PATCH | /v1/proxyApplicants/{proxyApplicantId} | user, or self | proxies.go | Partial; empty `workflowIds` = all workflows; de-duplicated |
+| 21 | updateProxyApplicant | PATCH | /v1/proxyApplicants/{proxyApplicantId} | user, or self | proxies.go | Partial (absent keeps, `null` clears `startsOn`/`endsOn`, INF-82); empty `workflowIds` = all workflows; de-duplicated |
 | 22 | deleteProxyApplicant | DELETE | /v1/proxyApplicants/{proxyApplicantId} | user, or self | proxies.go | |
 | 23 | listProxyApprovers | GET | /v1/proxyApprovers | user | proxies.go | |
 | 24 | createProxyApprover | POST | /v1/proxyApprovers | user, or self | proxies.go | Effective immediately (INF-16, INF-23) |
-| 25 | updateProxyApprover | PATCH | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | De-duplicates `workflowIds` |
+| 25 | updateProxyApprover | PATCH | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | De-duplicates `workflowIds`; `null` clears `startsOn`/`endsOn` (INF-82) |
 | 26 | deleteProxyApprover | DELETE | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | |
 | 27 | listOrganizationCharts | GET | /v1/organizationCharts | team | orgcharts.go | Without teams |
 | 28 | createOrganizationChart | POST | /v1/organizationCharts | team | orgcharts.go | Inactive on create |
@@ -117,7 +117,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 30 | getOrganizationChart | GET | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | |
 | 31 | updateOrganizationChart | PATCH | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | |
 | 32 | getCurrentOrganizationChart | GET | /v1/organizationChart | team | orgcharts.go | |
-| 33 | activateOrganizationChart | POST | /v1/organizationCharts/{organizationChartId}/activate | team | orgcharts.go | Synchronous (INF-23) |
+| 33 | activateOrganizationChart | POST | /v1/organizationCharts/{organizationChartId}/activate | team | orgcharts.go | Optional `dueOn` (JST date) schedules the activation and sets `activationPlan`; due plans are applied lazily on the next authenticated request (INF-80); otherwise synchronous (INF-23) |
 | 34 | listTeams | GET | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | `parentId` filter, roots when absent |
 | 35 | createTeam | POST | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | |
 | 36 | getTeam | GET | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | id or code |
@@ -132,8 +132,8 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 45 | deleteCategory | DELETE | /v1/categories/{categoryId} | workflow_misc | categories.go | |
 | 46 | updateCategory | PATCH | /v1/categories/{categoryId} | workflow_misc | categories.go | |
 | 47 | listFolders | GET | /v1/folders | any | folders.go | |
-| 48 | createFolder | POST | /v1/folders | workflow_misc | folders.go | Parent required except root (root exists from fixtures) |
-| 49 | deleteFolder | DELETE | /v1/folders/{folderId} | workflow_misc | folders.go | Root -> `resource_not_editable`; folder with workflows/routes -> 422 `validation_failed` (punchflow cannot delete fixture definitions, DIV-05) |
+| 48 | createFolder | POST | /v1/folders | workflow_misc | folders.go | Omitted/null parent places the folder under the root folder (root exists from fixtures, INF-83) |
+| 49 | deleteFolder | DELETE | /v1/folders/{folderId} | workflow_misc | folders.go | Root -> `resource_not_editable`; deletes the folder with its descendants in one transaction, retiring (status `deleted`) the workflows and routes inside; needs `workflow`/`route` coverage of each affected folder (INF-83, INF-84) |
 | 50 | updateFolder | PATCH | /v1/folders/{folderId} | workflow_misc | folders.go | Root -> `resource_not_editable` |
 | 51 | getFolder | GET | /v1/folders/{folderId} | any | folders.go | id or code |
 | 52 | listRoutes | GET | /v1/routes | any | definitions.go | Fixture-defined, read-only (DIV-05) |
@@ -141,17 +141,17 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 54 | listWorkflows | GET | /v1/workflows | any | definitions.go | `status` filter per spec |
 | 55 | getWorkflow | GET | /v1/workflows/{workflowId} | any | definitions.go | WorkflowDetail; integration fields null (DIV-03) |
 | 56 | listTickets | GET | /v1/tickets | visible (all with ticket_read) | tickets.go | All documented filters; TicketWithStep without inputs/route; INF-02 |
-| 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, INF-11) |
+| 57 | createTicket | POST | /v1/tickets | any (INF-28) | tickets.go | Engine `Create`; events `ticket_created` (+ `ticket_opened`, and `ticket_completed` when the route needs no user action, INF-11, INF-72); `403 ticket_create_restricted` per INF-28; formulas evaluated (INF-21) |
 | 58 | listTasks | GET | /v1/tickets/tasks | any | tickets.go | INF-34, INF-40 |
 | 59 | getTicket | GET | /v1/tickets/{ticketId} | visible | tickets.go | TicketDetail incl. `actualApprover` |
-| 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, approver fields only) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (INF-11) |
-| 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; `ticket_updated` |
-| 62 | approveTicket | POST | /v1/tickets/{ticketId}/approve | current assignee or proxy | ticket_actions.go | Engine `Approve`; `ticket_approved`/`ticket_confirmed` (+ `ticket_completed`); INF-22, INF-41 |
-| 63 | rejectTicket | POST | /v1/tickets/{ticketId}/reject | current assignee or proxy | ticket_actions.go | Engine `SendBack`; `ticket_rejected`; INF-12 |
+| 60 | updateTicket | PATCH | /v1/tickets/{ticketId} | author (draft/rejected) or current approver (in_progress, approver fields only) | tickets.go | Engine `Update`; `ticket_updated`, `ticket_opened` (+ `ticket_completed`, INF-11, INF-72); same-state `status` saves (INF-71); `approvers[]` by the author nominates `author_customizable` approvers (INF-70); `slipItems` replace all rows (INF-75) |
+| 61 | updateTicketForm | PATCH | /v1/tickets/{ticketId}/form | same as #60 | tickets.go | Engine `UpdateForm`; empty body -> 400; duplicates -> 400; per-section differential detail rows (INF-75); `ticket_updated` |
+| 62 | approveTicket | POST | /v1/tickets/{ticketId}/approve | current assignee or proxy | ticket_actions.go | Engine `Approve`; `ticket_approved`/`ticket_confirmed` for the step acted on even when it needs more approvals (INF-74) (+ `ticket_completed`); approver-required form and detail cells checked (INF-69); INF-22, INF-41 |
+| 63 | rejectTicket | POST | /v1/tickets/{ticketId}/reject | current assignee or proxy | ticket_actions.go | Engine `SendBack`; `ticket_rejected`; INF-12 (skipped steps stay skipped); sub-status restriction INF-61 |
 | 64 | denyTicket | POST | /v1/tickets/{ticketId}/deny | current assignee or proxy | ticket_actions.go | Engine `Deny`; `ticket_denied` |
 | 65 | withdrawTicket | POST | /v1/tickets/{ticketId}/withdraw | author / proxy client | ticket_actions.go | Engine `Withdraw`; `ticket_withdrawn`; INF-25 |
 | 66 | archiveTicket | POST | /v1/tickets/{ticketId}/archive | author (draft/rejected) or ticket_write | ticket_actions.go | Engine `Archive`; `ticket_archived`; INF-24 |
-| 67 | listTicketLinks | GET | /v1/tickets/{ticketId}/links | visible | ticket_viewers.go | Links come from `ticket` fields with `autoLink` |
+| 67 | listTicketLinks | GET | /v1/tickets/{ticketId}/links | visible | ticket_viewers.go | Links come from `ticket` fields with `autoLink`, maintained as reciprocal links on every edit (INF-78) |
 | 68 | listViewers | GET | /v1/tickets/{ticketId}/viewers | visible | ticket_viewers.go | Default order team name, user email |
 | 69 | createViewer | POST | /v1/tickets/{ticketId}/viewers | visible; workflow `allowEditingOfViewers` or ticket_write | ticket_viewers.go | Exactly one of userId/teamId -> else 400 |
 | 70 | deleteViewer | DELETE | /v1/tickets/{ticketId}/viewers/{viewerId} | same as #69 | ticket_viewers.go | |
@@ -160,7 +160,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 73 | listGeneralMasters | GET | /v1/generalMasters | master_read or master | general_masters.go | |
 | 74 | createGeneralMaster | POST | /v1/generalMasters | master | general_masters.go | Fields (custom fields) included |
 | 75 | getGeneralMaster | GET | /v1/generalMasters/{generalMasterId} | master_read or master | general_masters.go | id or code |
-| 76 | updateGeneralMaster | PATCH | /v1/generalMasters/{generalMasterId} | master | general_masters.go | |
+| 76 | updateGeneralMaster | PATCH | /v1/generalMasters/{generalMasterId} | master | general_masters.go | `fields` merge by `code` (INF-82) |
 | 77 | deleteGeneralMaster | DELETE | /v1/generalMasters/{generalMasterId} | master | general_masters.go | Deletes items |
 | 78 | listGeneralMasterItems | GET | /v1/generalMasters/{generalMasterId}/items | master_read or master | general_masters.go | Default order `defaultSortBy` |
 | 79 | createGeneralMasterItem | POST | /v1/generalMasters/{generalMasterId}/items | master | general_masters.go | Custom field values validated by field type |
@@ -192,15 +192,15 @@ All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads a
 |---|---|---|---|---|---|
 | 1 | ping | Admin API webhook create; update that changes `url` or `secret`; admin "send test" | Acting admin | `{message: "ping"}` | Not filtered by workflow/event selection |
 | 2 | ticket_created | createTicket (#57) | Actor | ticket | |
-| 3 | ticket_updated | updateTicket (#60) with field changes, updateTicketForm (#61) | Actor | ticket | INF-11 |
-| 4 | ticket_opened | createTicket with `in_progress`; updateTicket draft/rejected -> in_progress | Actor | ticket | INF-11 |
-| 5 | ticket_approved | approveTicket on an `approve` step | Actor (assignee or proxy) | ticket | One event per call even when the call completes several parallel steps |
+| 3 | ticket_updated | updateTicket (#60) with field changes, updateTicketForm (#61); punchflow UI control operations (cancel approval, raise, custom steps, labels; INF-66) | Actor | ticket | INF-11; same-state `status` saves emit it only when something changed (INF-71) |
+| 4 | ticket_opened | createTicket with `in_progress`; updateTicket draft/rejected -> in_progress | Actor | ticket | INF-11; followed by `ticket_completed` when the route needs no user action (INF-72) |
+| 5 | ticket_approved | approveTicket on an `approve` step, including a partial approval that leaves the step open | Actor (assignee or proxy) | ticket | One event per call even when the call completes several parallel steps (INF-74) |
 | 6 | ticket_confirmed | approveTicket on a `confirm` step | Actor | ticket | If the call covers both approve and confirm steps of one group, `ticket_approved` is emitted once (approve wins) |
 | 7 | ticket_rejected | rejectTicket | Actor | ticket | INF-12 |
 | 8 | ticket_denied | denyTicket | Actor | ticket | |
-| 9 | ticket_completed | approveTicket that completes the last group | Actor | ticket | After #5/#6 (INF-11) |
+| 9 | ticket_completed | approveTicket that completes the last group; a submission (createTicket / updateTicket) whose route needs no user action; user deletion that leaves a ticket with nothing to do | Actor (the acting administrator for user deletion) | ticket | After #5/#6 or after #4 (INF-11, INF-72, INF-79) |
 | 10 | ticket_withdrawn | withdrawTicket | Actor | ticket | |
-| 11 | ticket_archived | archiveTicket | Actor | ticket | |
+| 11 | ticket_archived | archiveTicket; deleteUser (#5) for each archived open ticket of the user | Actor | ticket | INF-79 |
 | 12 | comment_created | createComment; comments attached to approve/reject/deny (INF-22) | Comment author | comment + ticket | |
 | 13 | comment_updated | updateComment, deleteComment | Actor | comment + ticket | Delete payload has `deletedAt` set (INF-30) |
 

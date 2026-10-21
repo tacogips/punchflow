@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Workflow struct {
 	ID                  string    `json:"id"`
@@ -255,4 +258,18 @@ type RouteStepCondition struct {
 	ConditionType            string           `json:"conditionType"`
 	CombinationType          string           `json:"combinationType"`
 	RouteStepConditionFields []ConditionField `json:"routeStepConditionFields"`
+}
+
+// VariableName normalizes a form-field variable reference used by route and
+// condition definitions. The documented syntax is "$field_code"; the
+// "${field_code}" form and the bare field code are accepted as well. It is
+// shared by the engine (value lookup) and the presenter (form field lookup) so
+// both resolve the same field.
+func VariableName(variable string) string {
+	name := strings.TrimSpace(variable)
+	name = strings.TrimPrefix(name, "$")
+	if strings.HasPrefix(name, "{") && strings.HasSuffix(name, "}") {
+		name = strings.TrimSuffix(strings.TrimPrefix(name, "{"), "}")
+	}
+	return name
 }

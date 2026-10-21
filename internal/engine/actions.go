@@ -250,21 +250,7 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 				completed++
 			}
 		}
-		required := step.RequiredApprovalsNumber
-		if required < 1 {
-			if step.RequiredApprovalsPercent > 0 {
-				required = (step.RequiredApprovalsPercent*len(assignees) + 99) / 100
-				if required < 1 {
-					required = 1
-				}
-			} else {
-				required = len(assignees)
-			}
-		}
-		if len(assignees) == 0 {
-			required = 0
-		}
-		if completed >= required {
+		if completed >= pf14RequiredApprovals(step, len(assignees)) {
 			step.Status = model.StepStatusCompleted
 			step.CompletedAt = &now
 			step.UpdatedAt = now
@@ -304,6 +290,28 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 	}
 	return events, nil
 }
+
+// pf14RequiredApprovals returns how many assignees of a step must act before
+// the step is complete: the configured number, else the configured percentage
+// rounded up, else every assignee. A step without assignees needs none.
+func pf14RequiredApprovals(step model.TicketStep, assignees int) int {
+	if assignees == 0 {
+		return 0
+	}
+	required := step.RequiredApprovalsNumber
+	if required < 1 {
+		if step.RequiredApprovalsPercent > 0 {
+			required = (step.RequiredApprovalsPercent*assignees + 99) / 100
+			if required < 1 {
+				required = 1
+			}
+		} else {
+			required = assignees
+		}
+	}
+	return required
+}
+
 func (e *Engine) pf14Advance(ctx context.Context, tx *store.Tx, t *model.Ticket, now time.Time) error {
 	steps, err := store.EngTicketSteps(ctx, tx, t.ID)
 	if err != nil {
@@ -403,26 +411,30 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 	if err != nil {
 		return nil, err
 	}
-	for _, step := range steps {
-		if step.StepOrder >= to {
-			step.Status = model.StepStatusPending
-			step.CompletedAt = nil
-			step.UpdatedAt = now
-			if err = store.EngUpdateStep(ctx, tx, step); err != nil {
+	for i := range steps {
+		step := &steps[i]
+		// Steps skipped by their condition or fallback stay skipped; resetting
+		// them to pending would make them wait for approval again.
+		if step.StepOrder < to || step.Status == model.StepStatusSkipped {
+			continue
+		}
+		step.Status = model.StepStatusPending
+		step.CompletedAt = nil
+		step.UpdatedAt = now
+		if err = store.EngUpdateStep(ctx, tx, *step); err != nil {
+			return nil, err
+		}
+		assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, as := range assignees {
+			as.Completed = false
+			as.CompletedAt = nil
+			as.ActualApproverID = nil
+			as.UpdatedAt = now
+			if err = store.EngUpdateAssignee(ctx, tx, as); err != nil {
 				return nil, err
-			}
-			assignees, err := store.EngStepAssignees(ctx, tx, step.ID)
-			if err != nil {
-				return nil, err
-			}
-			for _, as := range assignees {
-				as.Completed = false
-				as.CompletedAt = nil
-				as.ActualApproverID = nil
-				as.UpdatedAt = now
-				if err = store.EngUpdateAssignee(ctx, tx, as); err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
@@ -431,12 +443,23 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 		t.CurrentStep = 0
 	} else {
 		t.CurrentStep = to
-		for _, step := range steps {
-			if step.StepOrder == to {
-				step.Status = model.StepStatusInProgress
-				if err = store.EngUpdateStep(ctx, tx, step); err != nil {
-					return nil, err
-				}
+		reactivated := false
+		for i := range steps {
+			step := &steps[i]
+			if step.StepOrder != to || step.Status == model.StepStatusSkipped {
+				continue
+			}
+			step.Status = model.StepStatusInProgress
+			if err = store.EngUpdateStep(ctx, tx, *step); err != nil {
+				return nil, err
+			}
+			reactivated = true
+		}
+		if !reactivated {
+			// Every step of the target group was skipped: continue with the
+			// next group that still needs an approval.
+			if err = e.pf14Advance(ctx, tx, &t, now); err != nil {
+				return nil, err
 			}
 		}
 	}

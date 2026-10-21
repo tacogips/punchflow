@@ -451,6 +451,17 @@ func pf14bUserMatchesGrade(ctx context.Context, tx store.Querier, userID, teamID
 	return false, nil
 }
 
+// pf14bUserActive reports whether the user is activated; fallback assignment
+// never picks invited, suspended or deactivated users (for example a leader
+// who was deleted moments ago).
+func pf14bUserActive(ctx context.Context, q store.Querier, userID string) (bool, error) {
+	user, err := store.GetUser(ctx, q, userID)
+	if err != nil {
+		return false, err
+	}
+	return user.Status == model.UserStatusActive, nil
+}
+
 func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Ticket, step model.RouteStep, values map[string]any) ([]string, error) {
 	if step.FallbackType == nil {
 		return nil, nil
@@ -471,6 +482,11 @@ func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Tic
 			ids := []string{}
 			for _, id := range leaders {
 				if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+					continue
+				}
+				if active, er := pf14bUserActive(ctx, tx, id); er != nil {
+					return nil, er
+				} else if !active {
 					continue
 				}
 				matches, er := pf14bUserMatchesTargets(ctx, tx, id, team.ID, step.Targets)
@@ -511,6 +527,11 @@ func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Tic
 			}
 			for _, id := range members {
 				if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+					continue
+				}
+				if active, er := pf14bUserActive(ctx, tx, id); er != nil {
+					return nil, er
+				} else if !active {
 					continue
 				}
 				matches, er := pf14bUserMatchesGrade(ctx, tx, id, *team.ParentID, target.GradeSymbol, target.GradeCodes)

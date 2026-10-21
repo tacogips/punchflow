@@ -11,6 +11,11 @@ import (
 
 var pf06UUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
+// ticketNumberingTimings lists the accepted ticketNumberingTiming values (the
+// kickflow TicketNumberingTiming.timingType enum); an empty value defaults to
+// "opened".
+var ticketNumberingTimings = []string{"created", "opened", "completed", model.TicketNumberingTimingSubStatusAttached}
+
 // Validate checks fixture structure and all cross-file references.
 func Validate(s *Set) error {
 	if s == nil {
@@ -307,6 +312,9 @@ func Validate(s *Set) error {
 		p := fmt.Sprintf("[%d]", i)
 		if !pf06Contains(model.WorkflowStatuses, w.Status) {
 			add(FileWorkflows, p+".status", "invalid status")
+		}
+		if w.TicketNumberingTiming != "" && !pf06Contains(ticketNumberingTimings, w.TicketNumberingTiming) {
+			add(FileWorkflows, p+".ticketNumberingTiming", "invalid ticket numbering timing")
 		}
 		if !folderCodes[w.FolderCode] {
 			add(FileWorkflows, p+".folderCode", "unknown folder code")

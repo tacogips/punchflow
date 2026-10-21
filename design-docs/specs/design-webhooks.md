@@ -31,6 +31,27 @@ Delivery history is kept until DB reset. Secrets are stored in plaintext because
 - Delivery id: new UUID per row (INF-09).
 - Body bytes are built inside the transaction from the post-action state (INF-11) and stored; they never change afterwards.
 
+### Event emission matrix
+
+Events are produced by the engine (and the UI API) in this order within one action; every payload shows the state after the whole action (INF-11). The per-operation list is in `design-api-coverage.md` (webhook event matrix).
+
+| Action | Events (in order) | Notes |
+|---|---|---|
+| Create `draft` | `ticket_created` | |
+| Create `in_progress` | `ticket_created`, `ticket_opened`, and `ticket_completed` when the route needs no user action | Skipped groups and `actionType: none` steps are traversed at submission (INF-72) |
+| Update draft/rejected fields | `ticket_updated` | Same-state `status` saves emit it only when something changed (INF-71) |
+| Update + submit (`status: in_progress`) | optional `ticket_updated`, `ticket_opened`, and `ticket_completed` as above | |
+| Update by an approver | `ticket_updated` | |
+| Approve, step not yet complete | `ticket_approved` (`ticket_confirmed` for a confirm step) | Partial approval of a multi-assignee step still emits (INF-74) |
+| Approve, last group done | `ticket_approved` (or `ticket_confirmed`), `ticket_completed` | |
+| Send back (`to` any) | `ticket_rejected` | |
+| Deny | `ticket_denied` | |
+| Withdraw | `ticket_withdrawn` | |
+| Archive | `ticket_archived` | |
+| User deletion | one `ticket_archived` per archived ticket, attributed to the acting administrator; `ticket_completed` for a ticket that completes because a step lost its assignees | INF-79 |
+| UI control operations: cancel approval, raise, add/remove custom step, attach/detach label | `ticket_updated` (one per real change) | No new event type is invented (INF-66) |
+| Comment create / update / delete, or a comment sent with approve/reject/deny | `comment_created` / `comment_updated` | After the action event (INF-22) |
+
 ### Payload and headers
 
 | Item | Value |

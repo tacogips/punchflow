@@ -4,24 +4,13 @@ import type { FormField, GeneralMasterItem } from "../../api/types";
 import { apiList, apiUpload } from "../../api/client";
 import type { FieldState } from "../../lib/form-model";
 
+// Conditional display is section-level (kickflow conditions belong to form
+// sections); the ticket pages decide which sections to render with
+// lib/ticket-form.ts, so fields here are always rendered.
 type Loose = Record<string, unknown>;
 const obj = (v: unknown): Loose => v && typeof v === "object" ? v as Loose : {};
 const str = (v: unknown): string => typeof v === "string" ? v : "";
 const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
-
-function visible(field: FormField, state: Record<string, FieldState>): boolean {
-  const condition = obj(field.displayCondition ?? field.condition);
-  const code = str(condition.fieldCode ?? condition.formFieldCode);
-  if (!code) return true;
-  const actual = state[code]?.value;
-  const expected = condition.value;
-  switch (condition.operator ?? condition.conditionType) {
-    case "equal": case "equals": return actual === expected;
-    case "not_equal": case "notEquals": return actual !== expected;
-    case "include": return Array.isArray(actual) ? actual.includes(expected) : String(actual ?? "").includes(String(expected ?? ""));
-    default: return true;
-  }
-}
 
 function FieldControl(props: {
   field: FormField;
@@ -73,10 +62,10 @@ export default function FormFields(props: {
     const current = props.state()[field.code]?.value;
     update(field, [...(Array.isArray(current) ? current.map(String) : current ? [String(current)] : []), uploaded.signedId]);
   };
-  return <div class="form-fields"><For each={props.fields}>{(field) => <Show when={visible(field, props.state())}>
+  return <div class="form-fields"><For each={props.fields}>{(field) => (
     <div class="form-field"><label for={field.code}>{str((field as unknown as Loose).title) || field.name}{field.required ? " *" : ""}</label>
       <FieldControl field={field} value={props.state()[field.code]?.value} onChange={(value) => update(field, value)} onFile={(file) => addFile(field, file)} />
       <Show when={props.errors?.[field.code]}><ul class="field-errors"><For each={props.errors?.[field.code]}>{(error) => <li>{error}</li>}</For></ul></Show>
     </div>
-  </Show>}</For></div>;
+  )}</For></div>;
 }

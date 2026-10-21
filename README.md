@@ -119,7 +119,7 @@ Labels (`labels.json`) and sub-statuses (`sub-statuses.json`, referenced by rout
 
 ## CLI, fixtures and inferred behavior
 
-The CLI includes `serve`, `fixtures load`, `fixtures reset`, `fixtures export --out DIR`, `token issue` and `version`. Shared database options include `--data-dir`, `--db` and `--fixtures`; configuration flags have `PUNCHFLOW_...` environment forms. See the full [CLI reference](design-docs/specs/command.md). Default JSON fixtures are in `fixtures/default`; export them with `punchflow fixtures export --out DIR` or restore them with `punchflow fixtures reset`. Some behavior is inferred from public kickflow materials; the inference register is in [notes.md](design-docs/specs/notes.md), and endpoint and event coverage is in the [API coverage matrix](design-docs/specs/design-api-coverage.md).
+The CLI includes `serve`, `fixtures load`, `fixtures reset`, `fixtures export --out DIR`, `token issue` and `version`. Shared database options include `--data-dir`, `--db` and `--fixtures`; configuration flags have `PUNCHFLOW_...` environment forms. See the full [CLI reference](design-docs/specs/command.md). Default JSON fixtures are in `fixtures/default` (17 files, including `user-custom-fields.json`, `labels.json` and `sub-statuses.json`); export them with `punchflow fixtures export --out DIR` or restore them with `punchflow fixtures reset`. Some behavior is inferred from public kickflow materials; the inference register is in [notes.md](design-docs/specs/notes.md), and endpoint and event coverage is in the [API coverage matrix](design-docs/specs/design-api-coverage.md).
 
 ## Development
 

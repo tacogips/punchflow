@@ -170,7 +170,11 @@ func pf08ConditionValue(v any) any {
 
 func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.ConditionField, formFields map[string]model.FormField) map[string]any {
 	out := map[string]any{"id": f.ID, "symbol": f.Symbol, "value": pf08ConditionValue(f.Value), "formField": nil, "grade": nil, "team": nil, "generalMasterItem": nil}
-	if field, ok := formFields[f.Variable]; ok {
+	field, ok := formFields[f.Variable]
+	if !ok {
+		field, ok = formFields[model.VariableName(f.Variable)]
+	}
+	if ok {
 		out["formField"] = pf08FormField(ctx, q, field)
 	}
 	code, _ := f.Value.(string)
