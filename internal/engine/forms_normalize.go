@@ -163,6 +163,22 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 			return nil, kferr.InvalidParameter("Form field must be unique")
 		}
 		seen[field.ID] = true
+		if field.FieldType == "calculation" && !n.calculationEditable(field.Author, field.Approver) {
+			if old, ok := n.existingInput(field.ID); ok {
+				normalized = append(normalized, old)
+				continue
+			}
+		}
+		if !n.opts.Approver && !field.Author && field.FieldType != "calculation" {
+			value, _, err := pf14FieldValue(in)
+			if err != nil || !pf14Empty(value) {
+				return nil, kferr.InvalidParameter("Invalid form field code")
+			}
+			if old, ok := n.existingInput(field.ID); ok {
+				normalized = append(normalized, old)
+				continue
+			}
+		}
 		if pf14ReferenceField(field.FieldType) && n.opts.Supplied != nil && !n.opts.Supplied[field.ID] {
 			var unchanged *model.TicketInput
 			for _, old := range n.opts.ExistingInputs {
@@ -234,7 +250,7 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 			}
 			for _, field := range section.FormFields {
 				hidden := field.Hidden != nil && *field.Hidden
-				if field.Required && !field.Approver && !hidden && field.FieldType != "calculation" {
+				if field.Required && field.Author && !hidden && field.FieldType != "calculation" {
 					if !seen[field.ID] || pf14Empty(values[field.Code]) {
 						n.fail(field.Code, "is required")
 					}
@@ -243,6 +259,15 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 		}
 	}
 	return normalized, nil
+}
+
+func (n *normalizer) existingInput(fieldID string) (model.TicketInput, bool) {
+	for _, input := range n.opts.ExistingInputs {
+		if input.FormFieldID == fieldID {
+			return input, true
+		}
+	}
+	return model.TicketInput{}, false
 }
 
 func pf14ReferenceField(fieldType string) bool {
@@ -274,6 +299,9 @@ func (n *normalizer) actorInputValues(inputs []FieldInput) map[string]any {
 // empty radio button).
 func (n *normalizer) radioMustBeSelected(field model.FormField, value any, values map[string]any) bool {
 	if field.FieldType != "radio_button" || !pf14Empty(value) {
+		return false
+	}
+	if (n.opts.Approver && !field.Approver && !n.def.Overwritable) || (!n.opts.Approver && !field.Author) {
 		return false
 	}
 	if !n.opts.Full && (!n.opts.Approver || n.opts.Supplied != nil && !n.opts.Supplied[field.ID]) {

@@ -23,7 +23,7 @@ func TestContractTicketSelectedUserSnapshotCustomFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	selectedUser := model.FormField{ID: f5SelectedUserFieldID, Code: "selected-user", Title: "Selected user", FieldType: "user", Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+	selectedUser := model.FormField{ID: f5SelectedUserFieldID, Code: "selected-user", Title: "Selected user", FieldType: "user", Author: true, Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
 	for i := range def.SectionList {
 		if def.SectionList[i].SectionType == model.SectionTypeForm {
 			def.SectionList[i].FormFields = append(def.SectionList[i].FormFields, selectedUser)

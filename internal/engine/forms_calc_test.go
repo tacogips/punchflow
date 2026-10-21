@@ -17,11 +17,14 @@ func pf16WithCalcs(t *testing.T, e *pf14TestEnv, mutate func(*model.WorkflowDef)
 	t.Helper()
 	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
 		subtotal := pf16SlipField("subtotal", "calculation")
+		subtotal.Author, subtotal.Approver = true, true
 		subtotal.Formula = pf16Formula("$qty * ${unit-price}")
 		pf16Section(def, "lines").SlipFields = append(pf16Section(def, "lines").SlipFields, subtotal)
 		total := pf16FormField("total", "calculation")
+		total.Author, total.Approver = true, true
 		total.Formula = pf16Formula("$amount * 2")
 		grand := pf16FormField("grand", "calculation")
+		grand.Author, grand.Approver = true, true
 		grand.Formula = pf16Formula("SUM(lines.subtotal) + $total + $sum${unit-price}")
 		for i := range pf16Section(def, "lines").SlipFields {
 			if pf16Section(def, "lines").SlipFields[i].Code == "unit-price" {

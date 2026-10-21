@@ -263,10 +263,12 @@ func TestNominationPathsEnforceActivationAndTargets(t *testing.T) {
 		compatSetRoute(t, e, "expense-claim", compatUserStep("first", 1, model.ActionTypeApprove, "accountant"), model.RouteStep{Code: "custom-next", StepOrder: 2, StepType: model.StepTypeAssigneeCustomizable, ActionType: model.ActionTypeApprove, Targets: []model.RouteTarget{{TeamCode: "sales", Descendants: true}}})
 		id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
 		_, err := compatUpdate(e, "accountant", id, UpdateInput{Approvers: &[]ApproverInput{{RouteStepCode: "custom-next", UserIDs: []string{e.user("ceo")}}}})
-		assertPF14ErrorCode(t, err, "validation_failed")
+		if err != nil {
+			t.Fatalf("in-progress approver update should ignore approvers: %v", err)
+		}
 		_, err = compatUpdate(e, "accountant", id, UpdateInput{Approvers: &[]ApproverInput{{RouteStepCode: "custom-next", UserIDs: []string{e.user("sales-deputy")}}}})
 		if err != nil {
-			t.Fatalf("valid descendant target nominee rejected: %v", err)
+			t.Fatalf("in-progress approver update should ignore approvers: %v", err)
 		}
 	})
 }

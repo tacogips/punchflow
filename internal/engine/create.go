@@ -23,6 +23,9 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	if err != nil {
 		return "", nil, err
 	}
+	if in.Title != nil && def.TitleInputMode != "input" {
+		return "", nil, kferr.InvalidParameter("Title can only be set when titleInputMode is input")
+	}
 	if in.Status != model.TicketStatusDraft && in.Status != model.TicketStatusInProgress {
 		return "", nil, kferr.InvalidParameter("Invalid ticket status")
 	}
@@ -87,6 +90,8 @@ func (e *Engine) pf14Create(ctx context.Context, tx *store.Tx, a Actor, in Creat
 	}
 	if form.Title != nil {
 		in.Title = form.Title
+	} else if def.TitleInputMode == "none" {
+		in.Title = nil
 	}
 	inputs = pf14cInputsFromRows(def, form.Inputs)
 	snapshot := teamJSON

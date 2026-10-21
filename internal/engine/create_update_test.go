@@ -54,7 +54,7 @@ func pf14cPurchaseValues(e *pf14TestEnv) map[string]any {
 	return map[string]any{
 		"amount": "100", "item": "Laptop", "urgent": []string{"yes"},
 		"reviewer": e.user("engineer"), "approving-team": e.team("engineering"),
-		"vendor": pf14cMasterItemID(e.t, e, "vendors", "vendor-acme"), "budget-code": "IT-2025",
+		"vendor": pf14cMasterItemID(e.t, e, "vendors", "vendor-acme"), "budget-code": nil,
 	}
 }
 
@@ -200,7 +200,7 @@ func TestProxyApplicantCreate(t *testing.T) {
 	t.Run("registration does not cover workflow", func(t *testing.T) {
 		e := pf14Setup(t)
 		client := e.user("ceo")
-		_, err := pf14cCreate(t, e, "purchase-request", "assistant", map[string]any{"amount": "100", "item": "Laptop", "budget-code": "IT"}, &client)
+		_, err := pf14cCreate(t, e, "purchase-request", "assistant", map[string]any{"amount": "100", "item": "Laptop", "budget-code": nil}, &client)
 		assertPF14FieldError(t, err, "validation_failed", "proxyClientUserId")
 	})
 	t.Run("expired registration is rejected", func(t *testing.T) {

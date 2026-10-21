@@ -31,7 +31,7 @@ func TestCommentRules(t *testing.T) {
 		ticketID := pf14CreateWorkflowTicket(t, e, "purchase-request", "sales-rep", model.TicketStatusInProgress, map[string]any{
 			"amount":         "10000",
 			"item":           "Laptop",
-			"budget-code":    "IT-2025",
+			"budget-code":    nil,
 			"reviewer":       e.user("engineer"),
 			"approving-team": e.team("engineering"),
 		}, []ApproverInput{{RouteStepCode: "purchase-nominee", UserIDs: []string{e.user("accountant")}}})

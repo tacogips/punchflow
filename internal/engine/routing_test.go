@@ -63,7 +63,7 @@ func TestPurchaseConditionsAndNomination(t *testing.T) {
 	}
 }
 
-func TestLeaveAssigneeCustomizableAndAuthorConfirm(t *testing.T) {
+func TestApproverUpdateIgnoresApproverAssignmentParameters(t *testing.T) {
 	e := pf14Setup(t)
 	workflow, fields := pf14FormDefinition(t, e, "leave-request")
 	inputs := pf14CompleteInputs(fields, map[string]any{"start-date": "2025-02-10", "reason": "vacation"})
@@ -103,40 +103,14 @@ func TestLeaveAssigneeCustomizableAndAuthorConfirm(t *testing.T) {
 		_, err := e.engine.Update(e.ctx, tx, e.actor("ceo"), ticketID, UpdateInput{Approvers: &delegates})
 		return err
 	}); err != nil {
-		t.Fatalf("set delegate: %v", err)
+		t.Fatalf("approver update with ignored approvers parameter: %v", err)
 	}
-	if err := e.db.WithTx(e.ctx, func(tx *store.Tx) error {
+	ignoredApproverErr := e.db.WithTx(e.ctx, func(tx *store.Tx) error {
 		_, err := e.engine.Approve(e.ctx, tx, e.actor("ceo"), ticketID, nil)
 		return err
-	}); err != nil {
-		t.Fatalf("CEO approve after setting delegate: %v", err)
-	}
-	if err := e.db.WithTx(e.ctx, func(tx *store.Tx) error {
-		_, err := e.engine.Approve(e.ctx, tx, e.actor("hr-manager"), ticketID, nil)
-		return err
-	}); err != nil {
-		t.Fatalf("delegate approve: %v", err)
-	}
-	steps, err = store.EngTicketSteps(e.ctx, e.db.Q(), ticketID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(steps) < 4 || steps[2].Status != model.StepStatusCompleted {
-		t.Fatalf("none action step did not auto-complete: %+v", steps)
-	}
-	var events []model.WebhookEvent
-	if err := e.db.WithTx(e.ctx, func(tx *store.Tx) error {
-		var err error
-		events, err = e.engine.Approve(e.ctx, tx, e.actor("hr-manager"), ticketID, nil)
-		return err
-	}); err != nil {
-		t.Fatalf("author confirmation: %v", err)
-	}
-	if len(events) != 2 || events[0].Type != model.WebhookEventTicketConfirmed || events[1].Type != model.WebhookEventTicketCompleted {
-		t.Fatalf("author confirmation events=%+v, want confirmed then completed", events)
-	}
-	if got := e.ticket(ticketID).Status; got != model.TicketStatusCompleted {
-		t.Fatalf("ticket status=%s, want completed", got)
+	})
+	if api, ok := kferr.As(ignoredApproverErr); !ok || api.Code != "assignment_required_before_approve" {
+		t.Fatalf("ignored delegate update error=%v, want assignment_required_before_approve", ignoredApproverErr)
 	}
 }
 

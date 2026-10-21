@@ -21,7 +21,7 @@ func TestApproverFormPatchPreservesOmittedDetailSections(t *testing.T) {
 				t.Fatal(err)
 			}
 			approver := Actor{UserID: pf14cCurrentApprover(t, e, id)}
-			rowsToPatch := []SlipItemInput{pf16Row("lines", map[string]any{"item": "pencil", "qty": 2, "unit-price": 20})}
+			rowsToPatch := []SlipItemInput{pf16Row("lines", map[string]any{"item": "pencil", "qty": 2, "unit-price": 20, "reviewer-note": nil})}
 			if endpoint == "ticket" {
 				err = pf16Update(e, approver, id, UpdateInput{SlipItems: &rowsToPatch})
 			} else {

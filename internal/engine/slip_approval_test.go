@@ -12,8 +12,9 @@ func TestApproveRequiresApproverDetailCells(t *testing.T) {
 		e := pf14Setup(t)
 		compatSetRoute(t, e, "expense-claim", pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"))
 		pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+			def.Overwritable = false
 			field := pf16SlipField("reviewer-note", "text")
-			field.Approver, field.Required = true, true
+			field.Approver, field.Author, field.Required = true, false, true
 			if mutate != nil {
 				mutate(&field)
 			}
@@ -50,8 +51,9 @@ func TestApproveRequiresApproverDetailCells(t *testing.T) {
 		e := pf14Setup(t)
 		compatSetRoute(t, e, "expense-claim", pf15RouteStep("review", 1, model.ActionTypeApprove, "", false, "sales-manager"))
 		pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+			def.Overwritable = false
 			field := pf16SlipField("reviewer-note", "text")
-			field.Approver, field.Required = true, true
+			field.Approver, field.Author, field.Required = true, false, true
 			lines := pf16Section(def, "lines")
 			lines.SlipFields = append(lines.SlipFields, field)
 		})

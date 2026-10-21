@@ -53,11 +53,11 @@ func pf16Section(def *model.WorkflowDef, code string) *model.WorkflowSection {
 }
 
 func pf16SlipField(code, fieldType string) model.SlipField {
-	return model.SlipField{ID: "slip-" + code + "-id", Code: code, Title: code, FieldType: fieldType, Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+	return model.SlipField{ID: "slip-" + code + "-id", Code: code, Title: code, FieldType: fieldType, Author: true, Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
 }
 
 func pf16FormField(code, fieldType string) model.FormField {
-	return model.FormField{ID: "form-" + code + "-id", Code: code, Title: code, FieldType: fieldType, Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+	return model.FormField{ID: "form-" + code + "-id", Code: code, Title: code, FieldType: fieldType, Author: true, Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
 }
 
 // pf16Row builds one submitted detail row addressed by section and field codes.
@@ -131,6 +131,20 @@ func pf16Cell(t *testing.T, def model.WorkflowDef, row model.TicketSlipItem, fie
 	}
 	t.Fatalf("no detail field %q in section %s", field, row.SlipSectionID)
 	return nil
+}
+
+func pf16SlipFieldByCode(t *testing.T, def model.WorkflowDef, sectionCode, fieldCode string) model.SlipField {
+	t.Helper()
+	section := pf16Section(&def, sectionCode)
+	if section != nil {
+		for _, field := range section.SlipFields {
+			if field.Code == fieldCode {
+				return field
+			}
+		}
+	}
+	t.Fatalf("no detail field %s.%s", sectionCode, fieldCode)
+	return model.SlipField{}
 }
 
 func pf16CountSlipRows(rows []model.TicketSlipItem, sectionID string) int {

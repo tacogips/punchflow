@@ -99,7 +99,7 @@ func TestRestrictedFieldsDoNotDriveRouteStepAssigneesOrConditions(t *testing.T) 
 	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
 		def.SectionList = append(def.SectionList, model.WorkflowSection{
 			ID: sectionID, SectionType: model.SectionTypeForm, ViewRestriction: true, AllowViewAuthor: true,
-			FormFields: []model.FormField{{ID: reviewerID, Code: "restricted_reviewer", FieldType: "text"}, {ID: flagID, Code: "restricted_flag", FieldType: "text"}},
+			FormFields: []model.FormField{{ID: reviewerID, Code: "restricted_reviewer", FieldType: "text", Author: true}, {ID: flagID, Code: "restricted_flag", FieldType: "text", Author: true}},
 		})
 	})
 	dynamic := model.RouteStep{Code: "restricted-dynamic", StepOrder: 1, Title: "Dynamic", StepType: model.StepTypeDynamicUser, ActionType: model.ActionTypeApprove, Targets: []model.RouteTarget{{Variable: "$restricted_reviewer"}}, FallbackType: compatStr(model.FallbackSkip)}

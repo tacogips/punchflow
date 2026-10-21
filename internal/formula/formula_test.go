@@ -13,7 +13,7 @@ func (m mapEnv) Lookup(name string) (any, bool) { v, ok := m[name]; return v, ok
 
 func TestEval(t *testing.T) {
 	env := mapEnv{
-		"qty": "3", "price": 1000.5, "empty": "", "text": "abc", "expense-date": "2025-02-03",
+		"qty": 3.0, "price": 1000.5, "empty": "", "text": "abc", "expense-date": "2025-02-03",
 		"lines.qty": []any{"2", 3.0, nil}, "lines.price": []any{"10.5", "4"},
 	}
 	cases := []struct {
@@ -85,6 +85,34 @@ func TestEvalErrors(t *testing.T) {
 		var e *EvalError
 		if _, err = expr.Eval(env); !errors.As(err, &e) {
 			t.Errorf("Eval(%q) error = %v, want EvalError", src, err)
+		}
+	}
+}
+
+func TestKickflow2025ComparisonTypes(t *testing.T) {
+	env := mapEnv{"numericText": "42", "number": 42.0, "textA": "8", "textB": "10"}
+	cases := []struct {
+		src  string
+		want any
+	}{
+		{`numericText == number`, false},
+		{`numericText != number`, false},
+		{`numericText > number`, false},
+		{`textA > textB`, true}, // strings use lexical comparison, not numeric coercion
+		{`"42" == "42"`, true},
+		{`42 == 42`, true},
+	}
+	for _, tc := range cases {
+		expr, err := Parse(tc.src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := expr.Eval(env)
+		if err != nil {
+			t.Fatalf("Eval(%q): %v", tc.src, err)
+		}
+		if got != tc.want {
+			t.Errorf("Eval(%q)=%v, want %v", tc.src, got, tc.want)
 		}
 	}
 }

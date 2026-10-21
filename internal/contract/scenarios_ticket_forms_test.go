@@ -23,7 +23,7 @@ const (
 )
 
 func pf16SlipFieldDef(id, code, fieldType string) model.SlipField {
-	return model.SlipField{ID: id, Code: code, Title: code, FieldType: fieldType, Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+	return model.SlipField{ID: id, Code: code, Title: code, FieldType: fieldType, Author: true, Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
 }
 
 // pf16PrepareExpenseWorkflow adds a file and a calculation detail column, a
@@ -67,7 +67,7 @@ func pf16PrepareExpenseWorkflow(t *testing.T, env *testutil.Env) {
 				}
 				kept = append(kept, f)
 			}
-			total := model.FormField{ID: pf16TotalFieldID, Code: "total", Title: "Total", FieldType: "calculation", Formula: &totalFormula, Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
+			total := model.FormField{ID: pf16TotalFieldID, Code: "total", Title: "Total", FieldType: "calculation", Formula: &totalFormula, Author: true, Size: "full", Orientation: "horizontal", Options: []string{}, AllowedExtensions: []string{}, AllowedTicketStatus: []string{}}
 			section.FormFields = append(kept, total)
 		}
 	}

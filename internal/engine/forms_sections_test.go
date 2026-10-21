@@ -24,6 +24,7 @@ func pf16RestrictApproverNote(t *testing.T, e *pf14TestEnv) {
 			for _, f := range def.SectionList[i].FormFields {
 				if f.Code == "approver-note" {
 					note = f
+					note.Author = true
 					continue
 				}
 				kept = append(kept, f)

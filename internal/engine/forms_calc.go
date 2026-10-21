@@ -100,13 +100,13 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 			if inputs[i].ReferenceSnapshot != nil {
 				r.formVals[f.Code] = calcFormulaReferenceValue(f.FieldType, inputs[i].ReferenceSnapshot)
 			} else {
-				r.formVals[f.Code] = n.calcReferenceValue(f.FieldType, inputs[i].RefIDs, inputs[i].Value)
+				r.formVals[f.Code] = calcTypedValue(f.FieldType, n.calcReferenceValue(f.FieldType, inputs[i].RefIDs, inputs[i].Value))
 			}
 		}
 	}
 	for _, section := range n.def.SectionList {
 		for _, f := range section.FormFields {
-			if f.FieldType == "calculation" && !n.opts.Blocked[section.ID] {
+			if f.FieldType == "calculation" && !n.opts.Blocked[section.ID] && n.calculationEditable(f.Author, f.Approver) {
 				r.formCalc[f.Code] = calcDef{id: f.ID, code: f.Code, sectionType: section.SectionType, formula: f.Formula, digits: f.DecimalDigit}
 			}
 		}
@@ -121,7 +121,7 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 			continue
 		}
 		for _, f := range sr.section.SlipFields {
-			if f.FieldType == "calculation" {
+			if f.FieldType == "calculation" && n.calculationEditable(f.Author, f.Approver) {
 				r.slipValue(sr, f)
 			}
 		}
@@ -141,6 +141,23 @@ func (n *normalizer) calculate(inputs []model.TicketInput, slips []model.TicketS
 		}
 	}
 	return r.title(), r.changed
+}
+
+func (n *normalizer) calculationEditable(author, approver bool) bool {
+	if n.opts.Approver {
+		return approver
+	}
+	return author
+}
+
+func calcTypedValue(fieldType string, value any) any {
+	if fieldType != "number" && fieldType != "integer" {
+		return value
+	}
+	if ok, number := pf14Float(value); ok {
+		return number
+	}
+	return value
 }
 
 func (n *normalizer) calcReferenceValue(fieldType string, ids []string, value any) any {
@@ -400,7 +417,7 @@ func (r *calcRun) cell(sr *slipRowRef, f model.SlipField) any {
 	if snapshot, ok := sr.row.ReferenceSnapshots[f.ID]; ok {
 		return calcFormulaReferenceValue(f.FieldType, snapshot)
 	}
-	return r.n.calcReferenceValue(f.FieldType, pf14StringsOf(v), v)
+	return calcTypedValue(f.FieldType, r.n.calcReferenceValue(f.FieldType, pf14StringsOf(v), v))
 }
 
 func calcJSONValue(value any) any {
@@ -451,30 +468,30 @@ type formScope struct{ r *calcRun }
 
 func (s formScope) Lookup(name string) (any, bool) {
 	r := s.r
-	if value, ok := r.metadata[name]; ok {
-		return value, true
-	}
-	// INF-FRM-03: workflow fields and metadata take precedence over globals.
+	// Kickflow resolves workflow form values before metadata, then globals.
 	if f, ok := r.n.idx.fieldByCode[name]; ok {
 		if cd, isCalc := r.formCalc[f.Code]; isCalc {
 			return r.formValue(cd), true
 		}
 		return r.formVals[f.Code], true
 	}
+	section, field, ok := r.n.slipColumn(name)
+	if ok {
+		column := []any{}
+		for _, sr := range r.rows {
+			if sr.section.ID == section.ID {
+				column = append(column, r.cell(sr, field))
+			}
+		}
+		return column, true
+	}
+	if value, ok := r.metadata[name]; ok {
+		return value, true
+	}
 	if value, ok := r.globals[name]; ok {
 		return value, true
 	}
-	section, field, ok := r.n.slipColumn(name)
-	if !ok {
-		return nil, false
-	}
-	column := []any{}
-	for _, sr := range r.rows {
-		if sr.section.ID == section.ID {
-			column = append(column, r.cell(sr, field))
-		}
-	}
-	return column, true
+	return nil, false
 }
 
 type rowScope struct {

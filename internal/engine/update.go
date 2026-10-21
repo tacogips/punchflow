@@ -37,11 +37,10 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 	if t.Status != model.TicketStatusDraft && t.Status != model.TicketStatusRejected && t.Status != model.TicketStatusInProgress {
 		return nil, kferr.InvalidState("Ticket cannot be updated")
 	}
-	if approver && in.Status != nil {
-		return nil, kferr.InvalidState("Approvers cannot change ticket status")
-	}
-	if err = pf14ValidateStatusRequest(t.Status, in.Status); err != nil {
-		return nil, err
+	if !approver {
+		if err = pf14ValidateStatusRequest(t.Status, in.Status); err != nil {
+			return nil, err
+		}
 	}
 	def, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
 	if err != nil {
@@ -50,6 +49,9 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 	now := e.clock.Now()
 	hasUpdate := false
 	if !approver {
+		if in.Title != nil && def.TitleInputMode != "input" {
+			return nil, kferr.InvalidParameter("Title can only be set when titleInputMode is input")
+		}
 		if in.Title != nil {
 			t.Title = in.Title
 			hasUpdate = true
@@ -126,12 +128,8 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		}
 		hasUpdate = true
 	}
-	if in.Approvers != nil {
+	if in.Approvers != nil && !approver {
 		switch {
-		case approver:
-			if err = pf14cCustomizeAssignees(ctx, tx, t, *in.Approvers, now); err != nil {
-				return nil, err
-			}
 		case author && (t.Status == model.TicketStatusDraft || t.Status == model.TicketStatusRejected):
 			// Applicant nominations for author_customizable steps (R05/PF-04).
 			if err = pf14SaveAuthorNominations(ctx, tx, id, def, *in.Approvers); err != nil {
@@ -142,7 +140,7 @@ func (e *Engine) pf14cUpdate(ctx context.Context, tx *store.Tx, a Actor, id stri
 		}
 		hasUpdate = true
 	}
-	if in.Viewers != nil || in.WatcherUserID != nil {
+	if (in.Viewers != nil || in.WatcherUserID != nil) && !approver {
 		if err = applyInlineViewers(ctx, tx, a, def, id, in.Viewers, in.WatcherUserID, now); err != nil {
 			return nil, err
 		}
@@ -366,79 +364,4 @@ func (e *Engine) pf14cSubmit(ctx context.Context, tx *store.Tx, a Actor, t *mode
 	}
 	t.Status = model.TicketStatusInProgress
 	return e.pf14BuildRoute(ctx, tx, t, def, inputValues, approvers, store.Millis(now))
-}
-
-// pf14cCustomizeAssignees applies approver customization by a current approver
-// for assignee_customizable steps of the materialized route.
-func pf14cCustomizeAssignees(ctx context.Context, tx *store.Tx, t model.Ticket, approvers []ApproverInput, now time.Time) error {
-	if t.RouteID == nil {
-		return kferr.InvalidState("Ticket route is unavailable")
-	}
-	route, err := store.RouteDefByID(ctx, tx, *t.RouteID)
-	if err != nil {
-		return err
-	}
-	definition, err := store.WorkflowDefByID(ctx, tx, t.WorkflowID)
-	if err != nil {
-		return err
-	}
-	inputRows, err := store.EngTicketInputs(ctx, tx, t.ID)
-	if err != nil {
-		return err
-	}
-	nominationValues := pf14RouteStepValues(definition, pf14InputValues(definition, pf14InputsFromRows(definition, inputRows)))
-	ticketSteps, err := store.EngTicketSteps(ctx, tx, t.ID)
-	if err != nil {
-		return err
-	}
-	for _, v := range approvers {
-		var selected *model.RouteStep
-		for _, routeStep := range route.Steps {
-			if routeStep.Code == v.RouteStepCode && routeStep.StepType == model.StepTypeAssigneeCustomizable {
-				selected = &routeStep
-				break
-			}
-		}
-		var step *model.TicketStep
-		for i := range ticketSteps {
-			if ticketSteps[i].RouteStepCode != nil && *ticketSteps[i].RouteStepCode == v.RouteStepCode {
-				step = &ticketSteps[i]
-				break
-			}
-		}
-		if selected == nil || step == nil {
-			return kferr.InvalidParameter("Invalid customizable route step")
-		}
-		for _, userID := range v.UserIDs {
-			if err = pf14bValidateNominee(ctx, tx, userID, selected.Targets, nominationValues); err != nil {
-				return err
-			}
-		}
-		uniqueUserIDs := pf14UniqueUserIDs(v.UserIDs)
-		if err = store.EngInsertCustomApprovers(ctx, tx, t.ID, v.RouteStepCode, uniqueUserIDs); err != nil {
-			return err
-		}
-		existing, err := store.EngStepAssignees(ctx, tx, step.ID)
-		if err != nil {
-			return err
-		}
-		present := map[string]bool{}
-		for _, assignee := range existing {
-			present[assignee.UserID] = true
-		}
-		for _, userID := range uniqueUserIDs {
-			if _, err = store.GetUser(ctx, tx, userID); err != nil {
-				return kferr.ValidationFailed(map[string][]string{"approvers": {"contains an unknown user"}})
-			}
-			if present[userID] {
-				continue
-			}
-			assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: t.ID, UserID: userID, CreatedAt: now, UpdatedAt: now}
-			if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
-				return err
-			}
-			present[userID] = true
-		}
-	}
-	return nil
 }

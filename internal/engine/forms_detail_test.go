@@ -7,6 +7,7 @@ import (
 
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
+	"punchflow/internal/store"
 )
 
 func TestSubmitRevalidatesMasterAndMultipleDetailReferences(t *testing.T) {
@@ -42,7 +43,7 @@ func pf16TwoSections(t *testing.T, e *pf14TestEnv) {
 		lines := pf16Section(def, "lines")
 		lines.SlipFields = append(lines.SlipFields, func() model.SlipField {
 			f := pf16SlipField("reviewer-note", "text")
-			f.Approver = true
+			f.Approver, f.Author = true, false
 			return f
 		}())
 		def.SectionList = append(def.SectionList, model.WorkflowSection{
@@ -56,7 +57,7 @@ func TestFormPatchReplacesOnlySuppliedDetailSections(t *testing.T) {
 	e := pf14Setup(t)
 	pf16TwoSections(t, e)
 	id, err := pf16Create(e, "sales-rep", model.TicketStatusDraft, pf16Inputs(t, e, pf16Base), []SlipItemInput{
-		pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10, "reviewer-note": "keep me"}),
+		pf16Row("lines", map[string]any{"item": "pen", "qty": 1, "unit-price": 10}),
 		pf16Row("extras", map[string]any{"memo": "extra memo"}),
 	})
 	if err != nil {
@@ -67,6 +68,8 @@ func TestFormPatchReplacesOnlySuppliedDetailSections(t *testing.T) {
 	if len(before) != 2 {
 		t.Fatalf("created %d detail rows, want 2", len(before))
 	}
+	before[0].Inputs[pf16SlipFieldByCode(t, def, "lines", "reviewer-note").ID] = "keep me"
+	e.apply(func(tx *store.Tx) error { return store.EngReplaceSlipItems(e.ctx, tx, id, before) })
 	// R03/PF-08: updating one section must neither drop the other section nor
 	// the omitted approver-only cell of the submitted row.
 	err = pf16UpdateForm(e, e.actor("sales-rep"), id, FormPatch{SlipItems: []SlipItemInput{

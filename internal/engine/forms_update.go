@@ -60,7 +60,9 @@ func (e *Engine) pf14cApplyFormEdit(ctx context.Context, tx *store.Tx, a Actor, 
 		}
 	}
 	opts := formOpts{
-		Full: in.Status != nil && *in.Status == model.TicketStatusInProgress, Partial: partial, Approver: approver,
+		// An in-progress approver's non-form parameters are ignored by the
+		// update contract, so a supplied status must not change form validation.
+		Full: !approver && in.Status != nil && *in.Status == model.TicketStatusInProgress, Partial: partial, Approver: approver,
 		LockReferenceSnapshots: t.Status == model.TicketStatusInProgress || t.Status == model.TicketStatusCompleted,
 		Blocked:                blocked, Supplied: supplied, ExistingInputs: existingInputs, ExistingSlips: existingSlips,
 		AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot,

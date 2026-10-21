@@ -40,21 +40,19 @@ func (n *normalizer) resolveSlipSection(item SlipItemInput) (model.WorkflowSecti
 	return model.WorkflowSection{}, kferr.ValidationFailed(map[string][]string{"slipItems": {"contains an unknown slip section"}})
 }
 
-// editableByActor reports whether the actor may enter the detail field. Only
-// approvers are restricted (to approver fields unless the workflow lets them
-// overwrite everything); applicants may enter every field.
+// editableByActor reports whether the actor may enter the detail field.
 func (n *normalizer) editableByActor(f model.SlipField) bool {
-	return !n.opts.Approver || f.Approver || n.def.Overwritable
+	if n.opts.Approver {
+		return f.Approver || n.def.Overwritable
+	}
+	return f.Author
 }
 
 // preserveOmitted reports whether an omitted cell keeps its stored value: the
 // fields the actor cannot (approvers) or need not (applicants, approver-only
 // fields) enter.
 func (n *normalizer) preserveOmitted(f model.SlipField) bool {
-	if n.opts.Approver {
-		return !n.editableByActor(f)
-	}
-	return f.Approver
+	return !n.editableByActor(f)
 }
 
 func slipRawValue(in SlipFieldInput) (any, error) {
@@ -136,7 +134,31 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 		}
 		supplied[field.ID] = true
 		if !n.editableByActor(field) {
-			return nil, nil, kferr.InvalidParameter("Invalid slip field code")
+			value, err := slipRawValue(in)
+			if err != nil || !pf14Empty(value) {
+				return nil, nil, kferr.InvalidParameter("Invalid slip field code")
+			}
+			if prev != nil {
+				if old, ok := slipCell(*prev, field); ok {
+					cells[field.ID] = old
+					if snapshot, ok := prev.ReferenceSnapshots[field.ID]; ok {
+						snapshots[field.ID] = snapshot
+					}
+				}
+			}
+			continue
+		}
+		if field.FieldType == "calculation" && !n.calculationEditable(field.Author, field.Approver) {
+			cells[field.ID] = nil
+			if prev != nil {
+				if old, ok := slipCell(*prev, field); ok {
+					cells[field.ID] = old
+				}
+				if snapshot, ok := prev.ReferenceSnapshots[field.ID]; ok {
+					snapshots[field.ID] = snapshot
+				}
+			}
+			continue
 		}
 		value, err := slipRawValue(in)
 		if err != nil {
@@ -179,9 +201,9 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 	}
 	// The /form partial detail contract is row based: every editable cell must
 	// be supplied, while inaccessible and role-specific cells are preserved.
-	if n.opts.Partial && !n.opts.Approver {
+	if n.opts.Partial {
 		for _, field := range section.SlipFields {
-			if field.FieldType == "calculation" || !n.editableByActor(field) || n.preserveOmitted(field) {
+			if field.FieldType == "calculation" || !n.editableByActor(field) {
 				continue
 			}
 			if !supplied[field.ID] {
@@ -191,7 +213,7 @@ func (n *normalizer) normalizeSlipCells(section model.WorkflowSection, item Slip
 	}
 	if prev != nil {
 		for _, f := range section.SlipFields {
-			if supplied[f.ID] || !n.preserveOmitted(f) {
+			if supplied[f.ID] || !n.preserveOmitted(f) && (f.FieldType != "calculation" || n.calculationEditable(f.Author, f.Approver)) {
 				continue
 			}
 			if v, ok := slipCell(*prev, f); ok {
@@ -325,7 +347,7 @@ func (n *normalizer) checkRequiredCells(rows []model.TicketSlipItem) {
 		}
 		for _, f := range section.SlipFields {
 			hidden := f.Hidden != nil && *f.Hidden
-			if hidden || f.FieldType == "calculation" {
+			if hidden || f.FieldType == "calculation" || !n.editableByActor(f) {
 				continue
 			}
 			v, exists := slipCell(row, f)
@@ -333,7 +355,7 @@ func (n *normalizer) checkRequiredCells(rows []model.TicketSlipItem) {
 				n.fail(f.Code, "must be selected")
 				continue
 			}
-			if f.Required && !f.Approver && pf14Empty(v) {
+			if f.Required && f.Author && pf14Empty(v) {
 				n.fail(f.Code, "is required")
 				continue
 			}

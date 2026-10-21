@@ -197,19 +197,38 @@ func evalBinary(n binaryNode, env Env) (any, error) {
 
 func compare(op string, l, r any) bool {
 	var cmp int
-	_, lerr := toNumber(l)
-	_, rerr := toNumber(r)
-	if lerr == nil && rerr == nil {
-		a, _ := toNumber(l)
-		b, _ := toNumber(r)
+	if l == nil || r == nil {
+		if l != nil || r != nil {
+			return false
+		}
+		cmp = 0
+	} else if a, ok := l.(float64); ok {
+		b, sameType := r.(float64)
+		if !sameType {
+			return false
+		}
 		switch {
 		case clean(a) < clean(b):
 			cmp = -1
 		case clean(a) > clean(b):
 			cmp = 1
 		}
+	} else if a, ok := l.(string); ok {
+		b, sameType := r.(string)
+		if !sameType {
+			return false
+		}
+		cmp = strings.Compare(a, b)
+	} else if a, ok := l.(bool); ok {
+		b, sameType := r.(bool)
+		if !sameType {
+			return false
+		}
+		if a != b {
+			cmp = 1
+		}
 	} else {
-		cmp = strings.Compare(toString(l), toString(r))
+		return false
 	}
 	switch op {
 	case "<":
