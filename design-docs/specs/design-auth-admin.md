@@ -8,6 +8,7 @@ How callers authenticate to `/v1` and `/admin/api`, how the browser UI logs in t
 |---|---|---|---|
 | kickflow-compatible API | `/v1/` | kickflow clients under test, the UI | Bearer PAT, Bearer SAT + `X-Caller-Id`, or UI session cookie (+ CSRF header) |
 | Dev admin API | `/admin/api/` | UI admin screens, test harnesses (curl) | Same as `/v1` |
+| UI helper API | `/ui/api/` | UI watch toggle, notification inbox, keyword search, CSV exports (see `design-notifications-export-search.md`) | Same as `/v1` |
 | Browser auth | `/auth/` | UI | OIDC redirect flow, local login (flag), session endpoints |
 | Signed file downloads | `/files/download/` | Anyone holding a signed URL | HMAC signature + expiry in the URL (INF-26) |
 | SPA | everything else | Browser | Static assets; `index.html` fallback |

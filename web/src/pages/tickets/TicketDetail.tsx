@@ -8,6 +8,7 @@ import { attachmentsOf, inputLabel, inputValueText, userLabel } from "../../lib/
 import ActionBar from "../../components/tickets/ActionBar";
 import Comments from "../../components/tickets/Comments";
 import StepList from "../../components/tickets/StepList";
+import WatchToggle from "../../components/notifications/WatchToggle";
 import Viewers from "../../components/tickets/Viewers";
 
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === "object" ? v as Record<string, unknown> : {};
@@ -23,7 +24,7 @@ function TicketContent(props: {
 }) {
   const t = props.ticket; const workflow = obj(t.workflow); const author = obj(t.author); const currentSession = session();
   return <>
-    <header class="page-header"><div><h1>{str(t.ticketNumber) || str(t.title) || "Ticket"}</h1><p>{str(t.title)} · {str(workflow.name)}</p></div><span class={`status status-${t.status}`}>{t.status.replaceAll("_", " ")}</span></header>
+    <header class="page-header"><div><h1>{str(t.ticketNumber) || str(t.title) || "Ticket"}</h1><p>{str(t.title)} · {str(workflow.name)}</p></div><span class={`status status-${t.status}`}>{t.status.replaceAll("_", " ")}</span><WatchToggle ticketId={t.id} /></header>
     <Show when={props.error}><p role="alert">{props.error}</p></Show>
     <dl class="ticket-metadata"><dt>Author</dt><dd>{userLabel(author) || "Unknown"}</dd><dt>Created</dt><dd>{formatJst(str(t.createdAt) || null)}</dd><dt>Updated</dt><dd>{formatJst(str(t.updatedAt) || null)}</dd><dt>Opened</dt><dd>{formatJst(str(t.openedAt) || null)}</dd><dt>Current step</dt><dd>{String(t.currentStep ?? "—")}</dd></dl>
     <Show when={currentSession}><ActionBar ticket={t} me={{ id: currentSession!.user.id, permissions: currentSession!.permissions }} busy={props.busy} onAction={props.onAction} /></Show>

@@ -21,7 +21,9 @@ import (
 	"punchflow/internal/fixtures"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kftime"
+	"punchflow/internal/notify"
 	"punchflow/internal/store"
+	"punchflow/internal/uiapi"
 	"punchflow/internal/webhook"
 	"punchflow/internal/webui"
 )
@@ -121,8 +123,11 @@ func New(ctx context.Context, cfg Config, clock kftime.Clock) (*Server, error) {
 	engineService := engine.New(clock)
 	webhooks := webhook.New(db, webhook.NewPayloads(), clock, nil, webhook.Config{RetryBase: cfg.WebhookRetryBase})
 	apiMux := http.NewServeMux()
+	// Engine events are fanned out to the local notification inbox inside the
+	// same transaction that enqueues the webhook deliveries.
+	events := notify.NewSink(webhooks, notify.New(engineService, clock))
 	v1.New(v1.Deps{
-		DB: db, Engine: engineService, Events: webhooks, Files: fileStore,
+		DB: db, Engine: engineService, Events: events, Files: fileStore,
 		Clock: clock, BaseURL: cfg.PublicBaseURL,
 	}).Register(apiMux, nil)
 	limiter := httpx.NewRateLimiter(cfg.RateLimit, cfg.RateLimitSecret, clock)
@@ -133,6 +138,14 @@ func New(ctx context.Context, cfg Config, clock kftime.Clock) (*Server, error) {
 		faults.Middleware,
 		httpx.LengthRequired,
 		limiter.Middleware,
+		authn.Middleware,
+	)
+
+	uiMux := http.NewServeMux()
+	uiapi.New(uiapi.Deps{DB: db, Engine: engineService, V1: apiMux, Clock: clock, BaseURL: cfg.PublicBaseURL}).Register(uiMux)
+	uiHandler := httpx.Chain(uiMux,
+		httpx.RequestID,
+		httpx.Recover,
 		authn.Middleware,
 	)
 
@@ -156,6 +169,7 @@ func New(ctx context.Context, cfg Config, clock kftime.Clock) (*Server, error) {
 	root := http.NewServeMux()
 	root.Handle("/v1/", v1Handler)
 	root.Handle("/admin/api/", adminHandler)
+	root.Handle("/ui/api/", uiHandler)
 	root.Handle("/auth/", authHandler)
 	root.Handle("/files/download/", fileStore.DownloadHandler(db))
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

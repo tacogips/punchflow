@@ -2,12 +2,14 @@ import { For, Show, createResource, lazy } from "solid-js";
 import type { JSX } from "solid-js";
 import { A, Route, Router, Navigate } from "@solidjs/router";
 import { loadSession, session } from "./session";
+import UnreadBadge from "./components/notifications/UnreadBadge";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const TicketSearch = lazy(() => import("./pages/tickets/TicketSearch"));
 const TicketDetail = lazy(() => import("./pages/tickets/TicketDetail"));
 const TicketEdit = lazy(() => import("./pages/tickets/TicketEdit"));
+const Notifications = lazy(() => import("./pages/Notifications"));
 const Workflows = lazy(() => import("./pages/definitions/Workflows"));
 const WorkflowView = lazy(() => import("./pages/definitions/WorkflowView"));
 const RouteList = lazy(() => import("./pages/definitions/Routes"));
@@ -27,7 +29,7 @@ const WebhookEvents = lazy(() => import("./pages/admin/WebhookEvents"));
 const DevTools = lazy(() => import("./pages/admin/DevTools"));
 
 const navigation = [
-  ["Dashboard", "/"], ["Tickets", "/tickets"], ["New ticket", "/tickets/new"],
+  ["Dashboard", "/"], ["Tickets", "/tickets"], ["New ticket", "/tickets/new"], ["Notifications", "/notifications"],
   ["Workflows", "/workflows"], ["Routes", "/routes"], ["Users", "/admin/users"],
   ["Organization", "/admin/org"], ["Grades", "/admin/grades"], ["Roles", "/admin/roles"],
   ["Masters", "/admin/masters"], ["Classification", "/admin/classification"],
@@ -42,7 +44,7 @@ function Layout(props: { children?: JSX.Element }) {
     <Show when={session()} fallback={<Navigate href="/login" />}>
       <div class="app-shell">
         <aside class="sidebar"><A class="brand" href="/">Punchflow</A><nav aria-label="Main navigation">
-          <For each={navigation}>{([label, href]) => <A href={href} end={href === "/"}>{label}</A>}</For>
+          <For each={navigation}>{([label, href]) => <A href={href} end={href === "/"}>{label}<Show when={href === "/notifications"}><UnreadBadge /></Show></A>}</For>
         </nav><div class="user-label">{session()?.user.name}</div></aside>
         <main class="content">{props.children}</main>
       </div>
@@ -57,6 +59,7 @@ export default function App() {
     <Route path="/login" component={Login} />
     <Route path="/" component={() => <Protected><Dashboard /></Protected>} />
     <Route path="/tickets" component={() => <Protected><TicketSearch /></Protected>} />
+    <Route path="/notifications" component={() => <Protected><Notifications /></Protected>} />
     <Route path="/tickets/new" component={() => <Protected><TicketEdit /></Protected>} />
     <Route path="/tickets/:id" component={() => <Protected><TicketDetail /></Protected>} />
     <Route path="/tickets/:id/edit" component={() => <Protected><TicketEdit /></Protected>} />

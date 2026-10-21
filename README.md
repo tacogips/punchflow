@@ -79,6 +79,25 @@ The 13 event types are `ping`, `ticket_created`, `ticket_updated`, `ticket_opene
 
 Deliveries include `Content-Type: application/json`, `User-Agent: kickflow-Hookshot/v1`, `X-Kickflow-Delivery` and, when a secret is configured, `X-Kickflow-Signature: sha256=<hex>`. Verify the lowercase hexadecimal HMAC-SHA256 using your secret and the exact raw request body bytes. The initial delivery is followed by up to 10 retries with exponential backoff (10 seconds by default, capped at one hour). Use **Resend** in the delivery log or `POST /admin/api/webhook-events/{eventId}/resend` to retry manually; test delivery uses `POST /admin/api/webhooks/{id}/ping`. The dev admin endpoint `POST /admin/api/webhook-events` fires an event for a ticket or comment. See [webhook design](design-docs/specs/design-webhooks.md) for payload and delivery details.
 
+## Watching, notifications, search and CSV export (UI helper API)
+
+kickflow's public API does not document these, so punchflow serves them under `/ui/api/` (same authentication as `/v1`):
+
+```sh
+# Watch a ticket and read your notification inbox
+curl -X POST -H 'Authorization: Bearer pf_pat_dev_manager' http://localhost:8080/ui/api/tickets/<ticket-id>/watch
+curl -H 'Authorization: Bearer pf_pat_dev_manager' 'http://localhost:8080/ui/api/notifications?unread=true'
+
+# Keyword search (ticket number, title, form values, detail rows, comments) with the usual /v1 filters
+curl -H 'Authorization: Bearer pf_pat_dev_employee' 'http://localhost:8080/ui/api/tickets/search?q=lunch&status[]=in_progress'
+
+# CSV exports (UTF-8 with BOM): ticket layout, detail-row layout and audit logs
+curl -OJ -H 'Authorization: Bearer pf_pat_dev_employee' 'http://localhost:8080/ui/api/tickets/export?layout=detail'
+curl -OJ -H 'Authorization: Bearer pf_pat_dev_admin' 'http://localhost:8080/ui/api/audit-logs/export'
+```
+
+Notifications are local only (no email or chat). The UI has a watch toggle on ticket detail, a **Notifications** inbox with an unread badge, a keyword box and CSV links on ticket search, and an export link on audit logs. See [the design](design-docs/specs/design-notifications-export-search.md).
+
 ## Keycloak SSO (manual check)
 
 Start Keycloak, then start punchflow with its realm as the OIDC issuer:

@@ -32,6 +32,7 @@ Non-goals: production hardening, multi-tenancy, billing, high availability, kick
 | `design-docs/specs/design-approval-engine.md` | Ticket state machine, route resolution, step progression, form validation |
 | `design-docs/specs/design-webhooks.md` | Webhook outbox, payloads, signing, dispatcher, retries, manual operations |
 | `design-docs/specs/design-auth-admin.md` | Tokens, sessions, OIDC, local login, CSRF, Keycloak deployment, dev admin API |
+| `design-docs/specs/design-notifications-export-search.md` | Watch subscriptions, notification inbox, CSV export, keyword ticket search (`/ui/api/`) |
 | `design-docs/user-qa/pending-punchflow-defaults.md` | Defaults chosen where the user may want a different value |
 
 ### Component view
