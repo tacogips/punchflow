@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	apiv1 "punchflow/internal/api/v1"
+	"punchflow/internal/store"
 	"punchflow/internal/testutil"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -38,7 +39,7 @@ func TestContractLiveOrgChartsTeams(t *testing.T) {
 	}
 
 	chartPath := "/v1/organizationCharts"
-	var chartID, disposableChartID, childID string
+	var chartID, disposableChartID, childID, rootID string
 	rootPath := ""
 	childPath := ""
 	gradeID := "00000000-0000-4000-8000-000000000006"
@@ -77,6 +78,11 @@ func TestContractLiveOrgChartsTeams(t *testing.T) {
 				childPath = teamPath + "/pf26d-child"
 				root := env.Do(t, testutil.Admin, http.MethodPost, teamPath, map[string]any{"name": "PF26d root", "code": "pf26d-root"})
 				pf26dCheck(t, spec, compiler, schemas, operation, root)
+				var rootBody map[string]any
+				if err := json.Unmarshal(root.Body, &rootBody); err != nil {
+					t.Fatalf("decode created root team: %v", err)
+				}
+				rootID, _ = rootBody["id"].(string)
 				child := env.Do(t, testutil.Admin, http.MethodPost, teamPath, map[string]any{"name": "PF26d child", "code": "pf26d-child", "parentId": "pf26d-root"})
 				pf26dCheck(t, spec, compiler, schemas, operation, child)
 				var body map[string]any
@@ -95,6 +101,34 @@ func TestContractLiveOrgChartsTeams(t *testing.T) {
 					map[string]any{"id": env.UserID(t, "sales-deputy"), "leader": false, "gradeIds": []string{gradeID}},
 				}}
 				pf26dCheck(t, spec, compiler, schemas, operation, env.Do(t, testutil.Admin, http.MethodPost, rootPath+"/memberships", body))
+				// Omitting gradeIds on creation uses the configured default grade.
+				defaultGradeUser := env.UserID(t, "engineer")
+				pf26dCheck(t, spec, compiler, schemas, operation, env.Do(t, testutil.Admin, http.MethodPost, rootPath+"/memberships", map[string]any{"users": []any{
+					map[string]any{"id": defaultGradeUser, "leader": false},
+				}}))
+				members, err := store.GetTeamMemberships(t.Context(), env.DB.Q(), rootID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defaultGrade, err := store.DefaultGradeID(t.Context(), env.DB.Q())
+				if err != nil {
+					t.Fatal(err)
+				}
+				foundDefault := false
+				for _, member := range members {
+					if member.UserID == defaultGradeUser && len(member.GradeIDs) == 1 && member.GradeIDs[0] == defaultGrade {
+						foundDefault = true
+					}
+				}
+				if !foundDefault {
+					t.Fatal("created membership did not receive the configured default grade")
+				}
+				t.Run("error_empty_grade_ids", func(t *testing.T) {
+					response := env.Do(t, testutil.Admin, http.MethodPost, rootPath+"/memberships", map[string]any{"users": []any{
+						map[string]any{"id": env.UserID(t, "accountant"), "leader": false, "gradeIds": []string{}},
+					}})
+					pf26dCheckError(t, compiler, schemas, response, http.StatusUnprocessableEntity, "validation_failed")
+				})
 				t.Run("error_validation_failed", func(t *testing.T) {
 					response := env.Do(t, testutil.Admin, http.MethodPost, childPath+"/memberships", map[string]any{"users": []any{
 						map[string]any{"id": env.UserID(t, "sales-rep"), "leader": false, "gradeIds": []string{gradeID}},
@@ -111,6 +145,10 @@ func TestContractLiveOrgChartsTeams(t *testing.T) {
 				}
 			case "updateTeamMember":
 				path := rootPath + "/memberships/" + env.UserID(t, "sales-rep")
+				t.Run("error_missing_required_fields", func(t *testing.T) {
+					response := env.Do(t, testutil.Admin, http.MethodPatch, path, map[string]any{})
+					pf26dCheckError(t, compiler, schemas, response, http.StatusUnprocessableEntity, "validation_failed")
+				})
 				pf26dCheck(t, spec, compiler, schemas, operation, env.Do(t, testutil.Admin, http.MethodPatch, path, map[string]any{"leader": true, "gradeIds": []string{gradeID}}))
 			case "deleteTeamMembers":
 				path := rootPath + "/memberships"

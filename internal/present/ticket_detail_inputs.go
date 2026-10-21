@@ -154,15 +154,7 @@ func formInputJSON(ctx context.Context, q store.Querier, def model.WorkflowDef, 
 }
 
 func slipFieldInTicket(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
-	out := pf08SlipFieldWithCustomValidations(f, fields)
-	if f.GeneralMasterCode != "" {
-		if id, err := store.ResolveID(ctx, q, "general_masters", f.GeneralMasterCode); err == nil {
-			if m, err := GeneralMaster(ctx, q, id); err == nil {
-				out["generalMaster"] = m
-			}
-		}
-	}
-	return out
+	return pf08SlipFieldInContext(ctx, q, f, fields)
 }
 
 // slipItemsJSON presents the detail rows. Every field of the row's section is

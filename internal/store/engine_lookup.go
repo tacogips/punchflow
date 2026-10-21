@@ -70,6 +70,31 @@ func EngActiveMemberships(ctx context.Context, q Querier, userID, teamID string)
 	return out, rows.Err()
 }
 
+// EngActiveTeamMemberIDs returns active users currently assigned to teamID.
+// Callers use it to snapshot an automatic sharing relationship at the event
+// when kickflow would add the members as individual viewers.
+func EngActiveTeamMemberIDs(ctx context.Context, q Querier, teamID string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT m.user_id FROM team_memberships m
+		JOIN users u ON u.id=m.user_id
+		WHERE m.team_id=? AND u.status=? ORDER BY m.user_id`, teamID, model.UserStatusActive)
+	if err != nil {
+		return nil, fmt.Errorf("store: query active team members: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("store: scan active team member: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate active team members: %w", err)
+	}
+	return ids, nil
+}
+
 func EngTeamAncestors(ctx context.Context, q Querier, teamID string) ([]model.Team, error) {
 	out := []model.Team{}
 	seen := map[string]bool{}

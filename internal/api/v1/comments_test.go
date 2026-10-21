@@ -125,7 +125,8 @@ func TestCommentAuthorAndVisibilityRules(t *testing.T) {
 	}
 	created.JSON(t, &comment)
 	other := env.Do(t, testutil.Manager, http.MethodPatch, base+"/"+comment.ID, map[string]any{"body": "unauthorized"})
-	testutil.AssertError(t, other, http.StatusForbidden, "missing_permission")
+	// Applicant-team membership does not share drafts before application.
+	testutil.AssertError(t, other, http.StatusForbidden, "invisible_ticket")
 	invisibleTicket := pf23CreateExpenseTicket(t, env, "accountant", "finance", "")
 	invisible := env.Do(t, testutil.Employee, http.MethodGet, "/v1/tickets/"+invisibleTicket+"/comments", nil)
 	testutil.AssertError(t, invisible, http.StatusForbidden, "invisible_ticket")

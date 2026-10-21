@@ -22,17 +22,17 @@ type pf19TeamBody struct {
 	ApproveOnly *bool   `json:"approveOnly"`
 }
 type pf19MemberInput struct {
-	ID       string   `json:"id"`
-	Leader   bool     `json:"leader"`
-	GradeIDs []string `json:"gradeIds"`
+	ID       string    `json:"id"`
+	Leader   *bool     `json:"leader"`
+	GradeIDs *[]string `json:"gradeIds"`
 }
 type pf19MembersBody struct {
 	Users   []pf19MemberInput `json:"users"`
 	UserIDs []string          `json:"userIds"`
 }
 type pf19MemberUpdate struct {
-	Leader   *bool    `json:"leader"`
-	GradeIDs []string `json:"gradeIds"`
+	Leader   *bool     `json:"leader"`
+	GradeIDs *[]string `json:"gradeIds"`
 }
 
 func (a *API) pf19TeamAuth(r *http.Request) error { return auth.Require(r, model.PermissionTeam) }
@@ -366,6 +366,12 @@ func (a *API) deleteTeam(w http.ResponseWriter, r *http.Request) {
 		if er != nil {
 			return er
 		}
+		if er = store.InvalidateRoutesReferencing(r.Context(), tx, team.Code, false, a.d.Clock.Now()); er != nil {
+			return er
+		}
+		if er = store.RemoveTeamFromRoleTargets(r.Context(), tx, id, a.d.Clock.Now()); er != nil {
+			return er
+		}
 		if er = store.TeamReparentChildren(r.Context(), tx, id, team.ParentID, a.d.Clock.Now()); er != nil {
 			return er
 		}
@@ -460,6 +466,9 @@ func (a *API) createTeamMembers(w http.ResponseWriter, r *http.Request) {
 		}
 		seen := map[string]bool{}
 		for _, u := range b.Users {
+			if u.Leader == nil {
+				return kferr.ValidationFailed(map[string][]string{"leader": {"is required"}})
+			}
 			uid, er := store.ResolveID(r.Context(), tx, "users", u.ID)
 			if er != nil {
 				return kferr.ValidationFailed(map[string][]string{"users": {"must reference existing users"}})
@@ -475,8 +484,21 @@ func (a *API) createTeamMembers(w http.ResponseWriter, r *http.Request) {
 			if exists {
 				return kferr.ValidationFailed(map[string][]string{"users": {"user is already a team member"}})
 			}
+			gradeRefs := []string{}
+			if u.GradeIDs == nil {
+				defaultGrade, err := store.DefaultGradeID(r.Context(), tx)
+				if err != nil {
+					return kferr.ValidationFailed(map[string][]string{"gradeIds": {"default grade is not configured"}})
+				}
+				gradeRefs = append(gradeRefs, defaultGrade)
+			} else {
+				gradeRefs = *u.GradeIDs
+			}
+			if len(gradeRefs) == 0 {
+				return kferr.ValidationFailed(map[string][]string{"gradeIds": {"must contain at least one grade"}})
+			}
 			grades := []string{}
-			for _, g := range u.GradeIDs {
+			for _, g := range gradeRefs {
 				gid, er := store.ResolveID(r.Context(), tx, "grades", g)
 				if er != nil {
 					return kferr.ValidationFailed(map[string][]string{"gradeIds": {"must reference existing grades"}})
@@ -490,10 +512,10 @@ func (a *API) createTeamMembers(w http.ResponseWriter, r *http.Request) {
 			if er != nil || !active {
 				return kferr.ValidationFailed(map[string][]string{"users": {"must be active users"}})
 			}
-			if er = store.TeamMembershipInsert(r.Context(), tx, model.TeamMembership{ID: store.NewID(), TeamID: id, UserID: uid, Leader: u.Leader, GradeIDs: grades, CreatedAt: now, UpdatedAt: now}); er != nil {
+			if er = store.TeamMembershipInsert(r.Context(), tx, model.TeamMembership{ID: store.NewID(), TeamID: id, UserID: uid, Leader: *u.Leader, GradeIDs: grades, CreatedAt: now, UpdatedAt: now}); er != nil {
 				return er
 			}
-			leaders = leaders || u.Leader
+			leaders = leaders || *u.Leader
 		}
 		if !leaders {
 			return kferr.ValidationFailed(map[string][]string{"users": {"team must have at least one leader"}})
@@ -602,6 +624,10 @@ func (a *API) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
+	if b.Leader == nil || b.GradeIDs == nil {
+		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"base": {"leader and gradeIds are required"}}))
+		return
+	}
 	members, e := store.GetTeamMemberships(r.Context(), a.d.DB.Q(), id)
 	if e != nil {
 		kferr.Write(w, kferr.Internal())
@@ -621,21 +647,15 @@ func (a *API) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
-	leader := target.Leader
-	if b.Leader != nil {
-		leader = *b.Leader
-	}
-	grades := target.GradeIDs
-	if b.GradeIDs != nil {
-		grades = []string{}
-		for _, g := range b.GradeIDs {
-			gid, er := store.ResolveID(r.Context(), a.d.DB.Q(), "grades", g)
-			if er != nil {
-				kferr.Write(w, kferr.ValidationFailed(map[string][]string{"gradeIds": {"must reference existing grades"}}))
-				return
-			}
-			grades = append(grades, gid)
+	leader := *b.Leader
+	grades := []string{}
+	for _, g := range *b.GradeIDs {
+		gid, er := store.ResolveID(r.Context(), a.d.DB.Q(), "grades", g)
+		if er != nil {
+			kferr.Write(w, kferr.ValidationFailed(map[string][]string{"gradeIds": {"must reference existing grades"}}))
+			return
 		}
+		grades = append(grades, gid)
 	}
 	if len(grades) == 0 {
 		kferr.Write(w, kferr.ValidationFailed(map[string][]string{"gradeIds": {"must contain at least one grade"}}))

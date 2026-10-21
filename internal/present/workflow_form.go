@@ -16,7 +16,7 @@ func pf08Sections(ctx context.Context, q store.Querier, sections []model.Workflo
 		}
 		slips := []any{}
 		for _, f := range s.SlipFields {
-			slips = append(slips, pf08SlipFieldWithCustomValidations(f, s.SlipFields))
+			slips = append(slips, pf08SlipFieldInContext(ctx, q, f, s.SlipFields))
 		}
 		cfs := []any{}
 		for _, f := range s.ConditionFields {
@@ -90,6 +90,28 @@ func pf08SlipFieldWithCustomValidations(f model.SlipField, fields []model.SlipFi
 		validations = append(validations, map[string]any{"id": validation.ID, "combinationType": validation.CombinationType, "errorMessage": validation.ErrorMessage, "fields": conditions})
 	}
 	out["customValidations"] = validations
+	return out
+}
+
+// pf08SlipFieldInContext presents a detail field and resolves metadata that
+// depends on the current database, keeping workflow and ticket definitions in
+// sync.
+func pf08SlipFieldInContext(ctx context.Context, q store.Querier, f model.SlipField, fields []model.SlipField) map[string]any {
+	out := pf08SlipFieldWithCustomValidations(f, fields)
+	if f.GeneralMasterCode == "" {
+		return out
+	}
+	id, err := store.ResolveID(ctx, q, "general_masters", f.GeneralMasterCode)
+	if err != nil {
+		out["generalMaster"] = nil
+		return out
+	}
+	master, err := GeneralMaster(ctx, q, id)
+	if err != nil {
+		out["generalMaster"] = nil
+		return out
+	}
+	out["generalMaster"] = master
 	return out
 }
 

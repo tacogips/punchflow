@@ -64,6 +64,30 @@ func OrgChartDelete(ctx context.Context, q Querier, id string) error {
 	return pf19RowsAffected(res, e)
 }
 func OrgChartActivate(ctx context.Context, q Querier, id string, at time.Time) error {
+	var current string
+	err := q.QueryRowContext(ctx, `SELECT id FROM organization_charts WHERE current=1 LIMIT 1`).Scan(&current)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("store: find current organization chart: %w", err)
+	}
+	if current != "" && current != id {
+		// Ticket-level team viewers follow a matching team code into the new
+		// chart. Historical applicant team fields are deliberately untouched.
+		if _, err = q.ExecContext(ctx, `UPDATE ticket_viewers SET team_id=(
+			SELECT new_team.id FROM teams old_team
+			JOIN teams new_team ON new_team.code=old_team.code AND new_team.organization_chart_id=?
+			WHERE old_team.id=ticket_viewers.team_id
+		) WHERE team_id IN (SELECT id FROM teams WHERE organization_chart_id=?)`, id, current); err != nil {
+			return fmt.Errorf("store: remap ticket team viewers: %w", err)
+		}
+		if _, err = q.ExecContext(ctx, `DELETE FROM ticket_viewers WHERE team_id IN (
+			SELECT old_team.id FROM teams old_team
+			WHERE old_team.organization_chart_id=? AND NOT EXISTS (
+				SELECT 1 FROM teams new_team WHERE new_team.organization_chart_id=? AND new_team.code=old_team.code
+			)
+		)`, current, id); err != nil {
+			return fmt.Errorf("store: remove unmapped ticket team viewers: %w", err)
+		}
+	}
 	if _, e := q.ExecContext(ctx, "UPDATE organization_charts SET current=0,updated_at=?", Millis(at)); e != nil {
 		return e
 	}

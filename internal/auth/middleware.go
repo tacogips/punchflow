@@ -168,6 +168,13 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			kferr.Write(w, err)
 			return
 		}
+		// Future-dated proxy registrations can become effective without a
+		// ticket transition. Materialize their sharing before authorization and
+		// reads so the first request on the start date sees the new access.
+		if err = store.ApplyEffectiveProxySharing(ctx, a.db, kftime.FormatDate(now), now); err != nil {
+			kferr.Write(w, err)
+			return
+		}
 		grants, err := store.UserGrants(ctx, q, user.ID)
 		if err != nil {
 			kferr.Write(w, err)

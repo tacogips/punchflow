@@ -114,7 +114,8 @@ func TestApplicantNominationsOnDraftAndRejectedTickets(t *testing.T) {
 		_, err = compatUpdate(e, "sales-rep", id, UpdateInput{Approvers: nominate("00000000-0000-4000-8000-0000000000ff")})
 		assertPF14ErrorCode(t, err, "validation_failed")
 		_, err = compatUpdate(e, "sales-manager", id, UpdateInput{Approvers: nominate(e.user("engineer"))})
-		assertPF14ErrorCode(t, err, "missing_permission")
+		// Drafts are not shared with applicant-team members until application.
+		assertPF14ErrorCode(t, err, "invisible_ticket")
 	})
 }
 

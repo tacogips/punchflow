@@ -73,6 +73,7 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 	if slipTarget == nil {
 		t.Fatal("expense-claim detail section has no item field")
 	}
+	slipTarget.GeneralMasterCode = "cost-centers"
 	slipTarget.CustomValidations = []model.SlipCustomValidation{{
 		ID: "00000000-0000-4000-8000-0000000000b7", CombinationType: "any", ErrorMessage: "Quantity is high",
 		Fields: []model.SlipCustomValidationField{{ID: "00000000-0000-4000-8000-0000000000b8", SlipFieldCode: "qty", Symbol: "greater_than", Value: &gt100}},
@@ -116,14 +117,23 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 			AllowApproverToAddItems bool   `json:"allowApproverToAddItems"`
 			CombinationType         string `json:"combinationType"`
 			CombinationExpression   string `json:"combinationExpression"`
+			SlipFields              []struct {
+				Code          string         `json:"code"`
+				GeneralMaster map[string]any `json:"generalMaster"`
+			} `json:"slipFields"`
 		} `json:"sectionList"`
 	}
 	response.JSON(t, &workflow)
-	found := false
+	found, foundMaster := false, false
 	for _, section := range workflow.SectionList {
 		if section.ID == slipSectionID && section.SectionType == model.SectionTypeSlip {
 			if !section.AllowApproverToAddItems {
 				t.Fatal("populated detail section did not present allowApproverToAddItems=true")
+			}
+			for _, field := range section.SlipFields {
+				if field.Code == "item" && field.GeneralMaster["code"] == "cost-centers" {
+					foundMaster = true
+				}
 			}
 			found = true
 			break
@@ -131,6 +141,9 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("response omitted the configured detail section")
+	}
+	if !foundMaster {
+		t.Fatal("workflow detail field omitted its populated general-master metadata")
 	}
 	var customExpressionFound bool
 	for _, section := range workflow.SectionList {

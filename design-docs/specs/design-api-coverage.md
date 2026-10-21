@@ -118,7 +118,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 21 | updateProxyApplicant | PATCH | /v1/proxyApplicants/{proxyApplicantId} | user, or self | proxies.go | Partial (absent keeps, `null` clears `startsOn`/`endsOn`, INF-82); empty `workflowIds` = all workflows; de-duplicated |
 | 22 | deleteProxyApplicant | DELETE | /v1/proxyApplicants/{proxyApplicantId} | user, or self | proxies.go | |
 | 23 | listProxyApprovers | GET | /v1/proxyApprovers | user | proxies.go | |
-| 24 | createProxyApprover | POST | /v1/proxyApprovers | user, or self | proxies.go | Effective immediately (INF-16, INF-23) |
+| 24 | createProxyApprover | POST | /v1/proxyApprovers | user, or self | proxies.go | Effective immediately; future `startsOn` registrations are applied lazily on the next authenticated request at/after their JST date; automatic watches preserve explicit opt-outs (INF-16, INF-23, INF-SHR-01) |
 | 25 | updateProxyApprover | PATCH | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | De-duplicates `workflowIds`; `null` clears `startsOn`/`endsOn` (INF-82) |
 | 26 | deleteProxyApprover | DELETE | /v1/proxyApprovers/{proxyApproverId} | user, or self | proxies.go | |
 | 27 | listOrganizationCharts | GET | /v1/organizationCharts | team | orgcharts.go | Without teams |
@@ -127,7 +127,7 @@ Permission column uses the kickflow permission identifiers; "any" means any auth
 | 30 | getOrganizationChart | GET | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | |
 | 31 | updateOrganizationChart | PATCH | /v1/organizationCharts/{organizationChartId} | team | orgcharts.go | |
 | 32 | getCurrentOrganizationChart | GET | /v1/organizationChart | team | orgcharts.go | |
-| 33 | activateOrganizationChart | POST | /v1/organizationCharts/{organizationChartId}/activate | team | orgcharts.go | Optional `dueOn` (JST date) schedules the activation and sets `activationPlan`; due plans are applied lazily on the next authenticated request (INF-80); otherwise synchronous (INF-23) |
+| 33 | activateOrganizationChart | POST | /v1/organizationCharts/{organizationChartId}/activate | team | orgcharts.go | Optional `dueOn` (JST date) schedules the activation and sets `activationPlan`; due plans are applied lazily on the next authenticated request (INF-80); otherwise synchronous (INF-23); ticket-level team viewers remap by team code (INF-SHR-04) |
 | 34 | listTeams | GET | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | `parentId` filter, roots when absent |
 | 35 | createTeam | POST | /v1/organizationCharts/{organizationChartId}/teams | team | teams.go | |
 | 36 | getTeam | GET | /v1/organizationCharts/{organizationChartId}/teams/{teamId} | team | teams.go | id or code |

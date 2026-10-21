@@ -259,6 +259,47 @@ func TestWorkflowVisibleToManagerSharesDirectAndAllManagers(t *testing.T) {
 	}
 }
 
+func TestDirectManagerSharingFindsNearestParentAndExcludesApplicant(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetWorkflow(t, e, "expense-claim", "$.visibleToManager", "direct")
+	compatSetWorkflow(t, e, "expense-claim", "$.visibleToTeamMembers", false)
+	id, _ := compatMustCreate(t, e, "sales-manager", model.TicketStatusInProgress)
+	ceoID := e.user("ceo")
+	viewers, err := store.TicketViewers(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ceoShared := false
+	for _, viewer := range viewers {
+		if viewer.UserID == nil {
+			continue
+		}
+		ceoShared = ceoShared || *viewer.UserID == ceoID
+	}
+	if !ceoShared {
+		t.Fatal("parent team's nearest eligible manager was not shared")
+	}
+}
+
+func TestWorkflowVisibleToTeamMembersPersistsIndividualViewers(t *testing.T) {
+	e := pf14Setup(t)
+	compatSetWorkflow(t, e, "expense-claim", "$.visibleToTeamMembers", true)
+	id, _ := compatMustCreate(t, e, "sales-rep", model.TicketStatusInProgress)
+	formerMember := e.user("sales-manager")
+	newMember := e.user("assistant")
+	e.apply(func(tx *store.Tx) error {
+		_, err := tx.ExecContext(e.ctx, `DELETE FROM team_memberships WHERE team_id=? AND user_id=?`, e.team("sales"), formerMember)
+		if err != nil {
+			return err
+		}
+		return store.TeamMembershipInsert(e.ctx, tx, model.TeamMembership{ID: store.NewID(), TeamID: e.team("sales"), UserID: newMember, GradeIDs: []string{}, CreatedAt: e.clock.Now(), UpdatedAt: e.clock.Now()})
+	})
+	compatAssertVisible(t, e, "sales-manager", id, true)
+	if err := e.engine.CanView(e.ctx, e.db.Q(), Actor{UserID: newMember}, id); err == nil {
+		t.Fatal("new team member gained access to a ticket submitted before joining")
+	}
+}
+
 func TestWorkflowWatchersAreSharedUsers(t *testing.T) {
 	e := pf14Setup(t)
 	watcherID := e.user("hr-manager")

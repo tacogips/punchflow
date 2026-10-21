@@ -374,7 +374,7 @@ func (a *API) createGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, e)
 		return
 	}
-	x.Inputs, x.InputIDs, e = pf20BuildInputs(r.Context(), a.d.DB.Q(), master, *b.Inputs, nil, nil)
+	x.Inputs, x.InputIDs, e = pf20BuildInputs(r.Context(), a.d.DB.Q(), master, *b.Inputs, nil)
 	if e != nil {
 		kferr.Write(w, e)
 		return
@@ -476,7 +476,7 @@ func (a *API) updateGeneralMasterItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if b.Inputs != nil {
-		x.Inputs, x.InputIDs, e = pf20BuildInputs(r.Context(), a.d.DB.Q(), master, *b.Inputs, x.Inputs, x.InputIDs)
+		x.Inputs, x.InputIDs, e = pf20BuildInputs(r.Context(), a.d.DB.Q(), master, *b.Inputs, x.InputIDs)
 		if e != nil {
 			kferr.Write(w, e)
 			return
@@ -565,7 +565,7 @@ func pf20MasterFields(in *[]pf20MasterFieldBody, master string, now time.Time) (
 	}
 	return out, nil
 }
-func pf20BuildInputs(ctx context.Context, q store.Querier, master string, items []pf20InputBody, existing map[string]any, oldIDs map[string]string) (map[string]any, map[string]string, error) {
+func pf20BuildInputs(ctx context.Context, q store.Querier, master string, items []pf20InputBody, oldIDs map[string]string) (map[string]any, map[string]string, error) {
 	fields, err := store.GetGeneralMasterFields(ctx, q, master)
 	if err != nil {
 		return nil, nil, err
@@ -601,15 +601,15 @@ func pf20BuildInputs(ctx context.Context, q store.Querier, master string, items 
 		}
 	}
 	for _, field := range fields {
+		if !seen[field.ID] {
+			return nil, nil, kferr.ValidationFailed(map[string][]string{"inputs": {"field " + field.Code + " is missing"}})
+		}
 		if field.Required {
 			v, ok := values[field.ID]
 			if !ok || v == nil || v == "" {
 				return nil, nil, kferr.ValidationFailed(map[string][]string{"inputs": {"required field " + field.Code + " is missing"}})
 			}
 		}
-	}
-	if len(items) == 0 && len(existing) > 0 {
-		return nil, nil, kferr.InvalidParameter("inputs must contain custom field values")
 	}
 	return values, ids, nil
 }

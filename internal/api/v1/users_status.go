@@ -240,6 +240,9 @@ func (a *API) pf18TransitionUser(w http.ResponseWriter, r *http.Request, action 
 			return err
 		}
 		if action == "delete" {
+			if err := store.InvalidateRoutesReferencing(r.Context(), tx, u.Code, true, now); err != nil {
+				return err
+			}
 			// Deletion (unlike suspension) archives the user's open tickets and
 			// drops their outstanding approver assignments.
 			events, err := a.d.Engine.CleanupDeletedUser(r.Context(), tx, actorFor(p), id)

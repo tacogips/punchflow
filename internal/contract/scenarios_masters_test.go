@@ -189,7 +189,10 @@ func TestContractLiveMasters(t *testing.T) {
 	run("createGeneralMaster", func(t *testing.T) {
 		response := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters", map[string]any{
 			"code": master, "name": "PF26e temporary master",
-			"fields": []any{map[string]any{"code": "note", "title": "Note", "required": false, "fieldType": "text"}},
+			"fields": []any{
+				map[string]any{"code": "note", "title": "Note", "required": false, "fieldType": "text"},
+				map[string]any{"code": "optional", "title": "Optional", "required": false, "fieldType": "text"},
+			},
 		})
 		pf26eCheck(t, "createGeneralMaster", response, spec, cache)
 		t.Run("error_missing_permission", func(t *testing.T) {
@@ -206,7 +209,10 @@ func TestContractLiveMasters(t *testing.T) {
 	itemInputID := ""
 	run("createGeneralMasterItem", func(t *testing.T) {
 		response := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/"+master+"/items", map[string]any{
-			"code": item, "name": "PF26e temporary item", "inputs": []any{map[string]any{"code": "note", "value": "first"}},
+			"code": item, "name": "PF26e temporary item", "inputs": []any{
+				map[string]any{"code": "note", "value": "first"},
+				map[string]any{"code": "optional", "value": nil},
+			},
 		})
 		pf26eCheck(t, "createGeneralMasterItem", response, spec, cache)
 		var createdItem struct {
@@ -215,12 +221,28 @@ func TestContractLiveMasters(t *testing.T) {
 			} `json:"inputs"`
 		}
 		response.JSON(t, &createdItem)
-		if len(createdItem.Inputs) == 0 {
-			t.Fatal("created general master item has no inputs")
+		if len(createdItem.Inputs) != 2 {
+			t.Fatalf("created general master item has %d inputs, want 2", len(createdItem.Inputs))
 		}
 		itemInputID = createdItem.Inputs[0].ID
+		t.Run("error_omitted_optional_input", func(t *testing.T) {
+			incomplete := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/"+master+"/items", map[string]any{
+				"code": "pf26e-incomplete", "name": "Incomplete item",
+				"inputs": []any{map[string]any{"code": "note", "value": "only one"}},
+			})
+			pf26eCheckError(t, incomplete, http.StatusUnprocessableEntity, "validation_failed", cache)
+		})
+		t.Run("error_empty_inputs", func(t *testing.T) {
+			incomplete := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/"+master+"/items", map[string]any{
+				"code": "pf26e-empty", "name": "Empty item", "inputs": []any{},
+			})
+			pf26eCheckError(t, incomplete, http.StatusUnprocessableEntity, "validation_failed", cache)
+		})
 		second := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/"+master+"/items", map[string]any{
-			"code": secondItem, "name": "PF26e second item", "inputs": []any{map[string]any{"code": "note", "value": "second"}},
+			"code": secondItem, "name": "PF26e second item", "inputs": []any{
+				map[string]any{"code": "note", "value": "second"},
+				map[string]any{"code": "optional", "value": "extra"},
+			},
 		})
 		pf26eCheck(t, "createGeneralMasterItem", second, spec, cache)
 	})
@@ -242,8 +264,15 @@ func TestContractLiveMasters(t *testing.T) {
 		}
 	})
 	run("updateGeneralMasterItem", func(t *testing.T) {
+		incomplete := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/"+master+"/items/"+item, map[string]any{
+			"inputs": []any{map[string]any{"code": "note", "value": "partial"}},
+		})
+		pf26eCheckError(t, incomplete, http.StatusUnprocessableEntity, "validation_failed", cache)
 		response := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/"+master+"/items/"+item, map[string]any{
-			"name": "PF26e updated item", "inputs": []any{map[string]any{"code": "note", "value": "updated"}},
+			"name": "PF26e updated item", "inputs": []any{
+				map[string]any{"code": "note", "value": "updated"},
+				map[string]any{"code": "optional", "value": nil},
+			},
 		})
 		pf26eCheck(t, "updateGeneralMasterItem", response, spec, cache)
 		var updatedItem struct {
@@ -254,6 +283,30 @@ func TestContractLiveMasters(t *testing.T) {
 		response.JSON(t, &updatedItem)
 		if len(updatedItem.Inputs) == 0 || updatedItem.Inputs[0].ID != itemInputID {
 			t.Errorf("updated general master item input id=%v, want stable id %q", updatedItem.Inputs, itemInputID)
+		}
+		beforeOmittedPatch := response.Body
+		omitted := env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/"+master+"/items/"+item, map[string]any{"name": "PF26e patched without inputs"})
+		pf26eCheck(t, "updateGeneralMasterItem", omitted, spec, cache)
+		var before, after struct {
+			Inputs []struct {
+				ID    string `json:"id"`
+				Value any    `json:"value"`
+				Field struct {
+					Code string `json:"code"`
+				} `json:"field"`
+			} `json:"inputs"`
+		}
+		if err := json.Unmarshal(beforeOmittedPatch, &before); err != nil {
+			t.Fatalf("decode item before omitted-input PATCH: %v", err)
+		}
+		omitted.JSON(t, &after)
+		if len(after.Inputs) != len(before.Inputs) {
+			t.Fatalf("omitted-input PATCH changed input count from %d to %d", len(before.Inputs), len(after.Inputs))
+		}
+		for i := range before.Inputs {
+			if after.Inputs[i].ID != before.Inputs[i].ID || after.Inputs[i].Field.Code != before.Inputs[i].Field.Code || after.Inputs[i].Value != before.Inputs[i].Value {
+				t.Errorf("omitted-input PATCH changed input %d: before=%+v after=%+v", i, before.Inputs[i], after.Inputs[i])
+			}
 		}
 	})
 	run("deleteGeneralMasterItem", func(t *testing.T) {

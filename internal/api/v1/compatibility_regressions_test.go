@@ -161,7 +161,7 @@ func TestAdminResourceMutationLengthsMatchOpenAPILimits(t *testing.T) {
 	assertValidation("master field code", env.Do(t, testutil.Admin, http.MethodPatch, "/v1/generalMasters/pf-api12", map[string]any{"fields": []any{map[string]any{"code": long(101), "title": "F", "fieldType": "text"}}}))
 	assertValidation("create item name", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/pf-api12/items", map[string]any{"name": long(101), "inputs": []any{}}))
 	assertValidation("create item code", env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/pf-api12/items", map[string]any{"code": long(101), "name": "item", "inputs": []any{}}))
-	validItem := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/pf-api12/items", map[string]any{"code": "valid", "name": "item", "inputs": []any{}})
+	validItem := env.Do(t, testutil.Admin, http.MethodPost, "/v1/generalMasters/pf-api12/items", map[string]any{"code": "valid", "name": "item", "inputs": []any{map[string]any{"code": "field", "value": nil}}})
 	if validItem.Status != http.StatusOK {
 		t.Fatalf("create valid item: %d %s", validItem.Status, validItem.Body)
 	}

@@ -40,7 +40,7 @@ func SyncProxySharingForTicket(ctx context.Context, tx *store.Tx, ticketID strin
 				if err := addUserViewer(ctx, tx, ticketID, proxyID); err != nil {
 					return err
 				}
-				if err := store.SetTicketWatchState(ctx, tx, ticketID, proxyID, store.WatchStateWatching, now); err != nil {
+				if err := store.SetTicketWatchStateIfUnset(ctx, tx, ticketID, proxyID, store.WatchStateWatching, now); err != nil {
 					return err
 				}
 			}
@@ -49,8 +49,9 @@ func SyncProxySharingForTicket(ctx context.Context, tx *store.Tx, ticketID strin
 	return nil
 }
 
-// SyncWorkflowManagerSharingForTicket snapshots the configured manager audience
-// when a ticket is submitted and when a later step becomes active.
+// SyncWorkflowManagerSharingForTicket snapshots configured team-member and
+// manager audiences when a ticket is submitted and when a later step becomes
+// active. Viewer additions remain after team membership changes.
 func SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, ticketID string) error {
 	ticket, err := store.EngLoadTicket(ctx, tx, ticketID)
 	if err != nil {
@@ -63,6 +64,20 @@ func SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, tick
 	if err != nil {
 		return err
 	}
+	if !def.VisibleToTeamMembers && def.VisibleToManager != "direct" && def.VisibleToManager != "all" {
+		return nil
+	}
+	if def.VisibleToTeamMembers {
+		members, err := store.EngActiveTeamMemberIDs(ctx, tx, *ticket.AuthorTeamID)
+		if err != nil {
+			return err
+		}
+		for _, userID := range members {
+			if err := addUserViewer(ctx, tx, ticketID, userID); err != nil {
+				return err
+			}
+		}
+	}
 	if def.VisibleToManager != "direct" && def.VisibleToManager != "all" {
 		return nil
 	}
@@ -70,15 +85,16 @@ func SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, tick
 	if err != nil {
 		return err
 	}
-	if def.VisibleToManager == "direct" && len(teams) > 1 {
-		teams = teams[:1]
-	}
 	for _, team := range teams {
 		leaders, err := store.EngLeadersOfTeam(ctx, tx, team.ID)
 		if err != nil {
 			return err
 		}
+		eligible := 0
 		for _, userID := range leaders {
+			if ticket.AuthorID != nil && userID == *ticket.AuthorID {
+				continue
+			}
 			active, err := store.EngUserActive(ctx, tx, userID)
 			if err != nil {
 				return err
@@ -87,6 +103,15 @@ func SyncWorkflowManagerSharingForTicket(ctx context.Context, tx *store.Tx, tick
 				if err := addUserViewer(ctx, tx, ticketID, userID); err != nil {
 					return err
 				}
+				eligible++
+			}
+		}
+		if def.VisibleToManager == "direct" {
+			// Direct manager sharing follows the same nearest eligible manager
+			// rule as direct-manager approval: skip the applicant and continue
+			// upward until a team contributes at least one active leader.
+			if eligible > 0 {
+				break
 			}
 		}
 	}
@@ -203,15 +228,6 @@ func pf14UserInTeam(ctx context.Context, q store.Querier, userID, teamID string,
 }
 
 func pf14WorkflowViewer(ctx context.Context, q store.Querier, a Actor, ticket model.Ticket, def model.WorkflowDef) (bool, error) {
-	if ticket.AuthorTeamID != nil && def.VisibleToTeamMembers {
-		ok, err := store.EngUserIsActiveMember(ctx, q, a.UserID, *ticket.AuthorTeamID)
-		if err != nil {
-			return false, err
-		}
-		if ok {
-			return true, nil
-		}
-	}
 	for _, viewer := range def.TicketViewers {
 		if viewer.UserCode != "" {
 			id, err := store.UserIDByCode(ctx, q, viewer.UserCode)

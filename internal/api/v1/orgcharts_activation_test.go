@@ -1,10 +1,14 @@
 package v1_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
 
+	"punchflow/internal/engine"
+	"punchflow/internal/model"
+	"punchflow/internal/store"
 	"punchflow/internal/testutil"
 )
 
@@ -135,5 +139,47 @@ func TestScheduledActivationIsReplacedAndClearedByImmediateActivation(t *testing
 	env.Clock.Set(time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC))
 	if chart := getChart(t, env, activationCurrentChart); !chart.Current {
 		t.Fatal("a discarded schedule must not activate its chart later")
+	}
+}
+
+func TestActivateOrganizationChartRemapsTicketTeamViewersByCode(t *testing.T) {
+	env := testutil.New(t)
+	ctx := context.Background()
+	oldTeam, err := store.TeamIDByCode(ctx, env.DB.Q(), activationCurrentChart, "sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID := env.UserID(t, "sales-manager")
+	newTeamID := store.NewID()
+	now := env.Clock.Now()
+	if err := store.TeamInsert(ctx, env.DB.Q(), model.Team{ID: newTeamID, OrganizationChartID: activationNextChart, Code: "sales", Name: "Sales New", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.TeamMembershipInsert(ctx, env.DB.Q(), model.TeamMembership{ID: store.NewID(), TeamID: newTeamID, UserID: userID, GradeIDs: []string{}, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	workflow, err := store.GetWorkflowByCode(ctx, env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticketID := store.NewID()
+	if _, err := env.DB.Q().ExecContext(ctx, `INSERT INTO tickets(id,workflow_id,status,author_team_id,created_at,updated_at) VALUES(?,?,?,?,?,?)`, ticketID, workflow.ID, model.TicketStatusInProgress, oldTeam, store.Millis(now), store.Millis(now)); err != nil {
+		t.Fatal(err)
+	}
+	oldTeamRef := oldTeam
+	if err := store.TicketQueryInsertViewer(ctx, env.DB.Q(), model.TicketViewer{ID: store.NewID(), TicketID: ticketID, TeamID: &oldTeamRef}); err != nil {
+		t.Fatal(err)
+	}
+	response := env.Do(t, testutil.Admin, http.MethodPost, "/v1/organizationCharts/"+activationNextChart+"/activate", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("activate chart: status=%d body=%s", response.Status, response.Body)
+	}
+	viewers, err := store.TicketViewers(ctx, env.DB.Q(), ticketID)
+	if err != nil || len(viewers) != 1 || viewers[0].TeamID == nil || *viewers[0].TeamID != newTeamID {
+		t.Fatalf("ticket viewers=%+v, err=%v; want new team %s", viewers, err, newTeamID)
+	}
+	service := engine.New(env.Clock)
+	if err := service.CanView(ctx, env.DB.Q(), engine.Actor{UserID: userID}, ticketID); err != nil {
+		t.Fatalf("member of mapped team cannot view ticket: %v", err)
 	}
 }

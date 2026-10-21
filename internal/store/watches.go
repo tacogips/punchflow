@@ -42,6 +42,20 @@ func SetTicketWatchState(ctx context.Context, q Querier, ticketID, userID, state
 	return nil
 }
 
+// SetTicketWatchStateIfUnset applies an automatic default without replacing a
+// user's explicit watch choice.
+func SetTicketWatchStateIfUnset(ctx context.Context, q Querier, ticketID, userID, state string, now time.Time) error {
+	if state != WatchStateWatching && state != WatchStateUnwatched {
+		return fmt.Errorf("store: invalid watch state %q", state)
+	}
+	_, err := q.ExecContext(ctx, `INSERT INTO ticket_watches(ticket_id,user_id,state,created_at,updated_at) VALUES(?,?,?,?,?)
+		ON CONFLICT(ticket_id,user_id) DO NOTHING`, ticketID, userID, state, Millis(now), Millis(now))
+	if err != nil {
+		return fmt.Errorf("store: apply default ticket watch: %w", err)
+	}
+	return nil
+}
+
 // TicketWatchStates returns every explicit watch row of the ticket keyed by
 // user ID.
 func TicketWatchStates(ctx context.Context, q Querier, ticketID string) (map[string]string, error) {

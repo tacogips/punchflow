@@ -154,3 +154,15 @@ func GradeSetDefault(ctx context.Context, q Querier, id string, updatedAt int64)
 	}
 	return nil
 }
+
+// DefaultGradeID returns the configured default grade.
+func DefaultGradeID(ctx context.Context, q Querier) (string, error) {
+	var id string
+	if err := q.QueryRowContext(ctx, `SELECT id FROM grades WHERE is_default=1 LIMIT 1`).Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("store: read default grade: %w", err)
+	}
+	return id, nil
+}
