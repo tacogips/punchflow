@@ -14,23 +14,7 @@ import (
 // restricted ticket_read grant is not exposed as a global permission; the
 // engine receives its folder scope instead.
 func actorFor(p *auth.Principal) engine.Actor {
-	actor := engine.Actor{UserID: p.User.ID, Permissions: make(map[string]bool, len(p.Permissions))}
-	for permission, held := range p.Permissions {
-		if !held {
-			continue
-		}
-		if permission == model.PermissionTicketRead && !p.Unrestricted(permission) {
-			continue
-		}
-		actor.Permissions[permission] = true
-	}
-	if p.Permissions[model.PermissionTicketRead] && !p.Unrestricted(model.PermissionTicketRead) {
-		actor.ReadFolderIDs = make(map[string]bool)
-		for _, id := range p.Targets(model.PermissionTicketRead) {
-			actor.ReadFolderIDs[id] = true
-		}
-	}
-	return actor
+	return engine.ActorFromPrincipal(p)
 }
 
 // errOutOfScope is returned when a restricted permission does not cover the

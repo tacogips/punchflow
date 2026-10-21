@@ -275,11 +275,11 @@ func (r *fanoutRun) checkEligible(ctx context.Context, ticket model.Ticket, user
 	if user.Status != model.UserStatusActive {
 		return false, nil
 	}
-	permissions, err := store.UserPermissions(ctx, r.q, userID)
+	actor, err := engine.ActorForUser(ctx, r.q, userID)
 	if err != nil {
 		return false, err
 	}
-	err = r.service.viewer.CanView(ctx, r.q, engine.Actor{UserID: userID, Permissions: permissions}, ticket.ID)
+	err = r.service.viewer.CanView(ctx, r.q, actor, ticket.ID)
 	if err == nil {
 		return true, nil
 	}

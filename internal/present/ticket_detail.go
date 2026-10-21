@@ -3,9 +3,10 @@ package present
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"punchflow/internal/access"
+	"punchflow/internal/auth"
+	"punchflow/internal/conditions"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
@@ -15,13 +16,33 @@ type TicketDetailJSON map[string]any
 // TicketDetail presents a ticket without any per-caller section filtering
 // (used for webhook payloads, which carry the complete ticket).
 func TicketDetail(ctx context.Context, q store.Querier, id string) (TicketDetailJSON, error) {
-	return TicketDetailFor(ctx, q, id, nil)
+	return ticketDetail(ctx, q, id, nil, false)
+}
+
+// TicketDetailWebhook presents ticket data with restricted form values redacted.
+// INF-SEC-02: Webhook bodies retain field definitions but never restricted values.
+func TicketDetailWebhook(ctx context.Context, q store.Querier, id string) (TicketDetailJSON, error) {
+	return ticketDetail(ctx, q, id, nil, true)
 }
 
 // TicketDetailFor presents a ticket for the caller. Inputs of restricted form
 // sections the caller may not view are omitted and the section is marked not
 // viewable. A nil caller sees every section.
 func TicketDetailFor(ctx context.Context, q store.Querier, id string, caller *access.Caller) (TicketDetailJSON, error) {
+	return ticketDetail(ctx, q, id, caller, false)
+}
+
+// TicketDetailForPrincipal resolves ticket_read against the ticket's folder
+// before applying section visibility.
+func TicketDetailForPrincipal(ctx context.Context, q store.Querier, id string, principal *auth.Principal) (TicketDetailJSON, error) {
+	caller, err := access.CallerForTicketID(ctx, q, principal, id)
+	if err != nil {
+		return nil, err
+	}
+	return ticketDetail(ctx, q, id, &caller, false)
+}
+
+func ticketDetail(ctx context.Context, q store.Querier, id string, caller *access.Caller, redactRestricted bool) (TicketDetailJSON, error) {
 	ticket, err := Ticket(ctx, q, id)
 	if err != nil {
 		return nil, err
@@ -76,12 +97,16 @@ func TicketDetailFor(ctx context.Context, q store.Querier, id string, caller *ac
 				}
 			}
 		}
-		if sid, known := fieldSection[in.FormFieldID]; known && !viewable[sid] {
+		sid, known := fieldSection[in.FormFieldID]
+		if known && !viewable[sid] {
 			continue
 		}
 		item, e := formInputJSON(ctx, q, def, in)
 		if e != nil {
 			return nil, e
+		}
+		if redactRestricted && known && restrictedFormSection(def, sid) {
+			redactFormInput(item)
 		}
 		inputMaps = append(inputMaps, item)
 		if sid, known := fieldSection[in.FormFieldID]; known {
@@ -96,7 +121,7 @@ func TicketDetailFor(ctx context.Context, q store.Querier, id string, caller *ac
 		}
 		visible := true
 		if s.Conditional {
-			visible = pf15SectionVisible(s, values)
+			visible = conditions.Match(s.ConditionFields, s.CombinationType, values)
 		}
 		restricted := s.SectionType == model.SectionTypeForm && s.ViewRestriction
 		viewers := []any{}
@@ -131,6 +156,24 @@ func TicketDetailFor(ctx context.Context, q store.Querier, id string, caller *ac
 	return out, nil
 }
 
+func restrictedFormSection(def model.WorkflowDef, sectionID string) bool {
+	for _, section := range def.SectionList {
+		if section.ID == sectionID {
+			return section.SectionType == model.SectionTypeForm && section.ViewRestriction
+		}
+	}
+	return false
+}
+
+func redactFormInput(item map[string]any) {
+	item["value"] = nil
+	item["generalMasterItems"] = []any{}
+	item["users"] = []any{}
+	item["teams"] = []any{}
+	item["inputTickets"] = []any{}
+	item["attachments"] = []any{}
+}
+
 func pf15ReferenceIDs(refs []string, value any) []string {
 	if len(refs) > 0 {
 		return append([]string{}, refs...)
@@ -149,73 +192,4 @@ func pf15ReferenceIDs(refs []string, value any) []string {
 		}
 	}
 	return ids
-}
-
-func pf15SectionVisible(s model.WorkflowSection, values map[string]any) bool {
-	if !s.Conditional {
-		return true
-	}
-	results := make([]bool, 0, len(s.ConditionFields))
-	for _, c := range s.ConditionFields {
-		actual := values[c.FieldKey]
-		switch c.Symbol {
-		case "equal":
-			results = append(results, reflect.DeepEqual(actual, c.Value))
-		case "not_equal":
-			results = append(results, !reflect.DeepEqual(actual, c.Value))
-		case "include":
-			results = append(results, pf15Includes(actual, c.Value))
-		case "exclude":
-			results = append(results, !pf15Includes(actual, c.Value))
-		case "is_empty":
-			results = append(results, actual == nil || (reflect.TypeOf(actual) == reflect.TypeOf("") && actual.(string) == ""))
-		case "is_not_empty":
-			results = append(results, actual != nil && (reflect.TypeOf(actual) != reflect.TypeOf("") || actual.(string) != ""))
-		default:
-			results = append(results, true)
-		}
-	}
-	if len(results) == 0 {
-		return true
-	}
-	if s.CombinationType == model.StepCombinationAny {
-		for _, v := range results {
-			if v {
-				return true
-			}
-		}
-		return false
-	}
-	for _, v := range results {
-		if !v {
-			return false
-		}
-	}
-	return true
-}
-func pf15Includes(actual, want any) bool {
-	switch xs := actual.(type) {
-	case []any:
-		for _, x := range xs {
-			if reflect.DeepEqual(x, want) {
-				return true
-			}
-		}
-	case string:
-		if w, ok := want.(string); ok {
-			return containsString(xs, w)
-		}
-	}
-	return false
-}
-func containsString(value, part string) bool {
-	if part == "" {
-		return true
-	}
-	for i := 0; i+len(part) <= len(value); i++ {
-		if value[i:i+len(part)] == part {
-			return true
-		}
-	}
-	return false
 }

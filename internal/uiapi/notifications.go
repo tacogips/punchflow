@@ -54,7 +54,7 @@ func (a *API) listNotifications(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := engine.ActorFromPrincipal(p)
 	out := make([]notificationJSON, 0, len(items))
 	for _, item := range items {
 		entry, err := a.presentNotification(r.Context(), actor, item)

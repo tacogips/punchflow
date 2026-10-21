@@ -84,7 +84,7 @@ func (a *API) pf22Action(w http.ResponseWriter, r *http.Request, action string, 
 		if e = a.d.Events.Enqueue(r.Context(), tx, events); e != nil {
 			return e
 		}
-		out, e = present.TicketDetailFor(r.Context(), tx, id, pf16Caller(p.User.ID, p.Permissions))
+		out, e = present.TicketDetailForPrincipal(r.Context(), tx, id, p)
 		return e
 	})
 	if err != nil {

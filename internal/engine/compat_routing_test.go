@@ -90,3 +90,65 @@ func TestDynamicUserRouteEndToEnd(t *testing.T) {
 		t.Fatalf("amount 5000 > 1000 should skip the only step via $amount; status=%s", got)
 	}
 }
+
+func TestRestrictedFieldsDoNotDriveRouteStepAssigneesOrConditions(t *testing.T) {
+	e := pf14Setup(t)
+	const sectionID = "00000000-0000-4000-8000-0000000000d1"
+	const reviewerID = "00000000-0000-4000-8000-0000000000d2"
+	const flagID = "00000000-0000-4000-8000-0000000000d3"
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		def.SectionList = append(def.SectionList, model.WorkflowSection{
+			ID: sectionID, SectionType: model.SectionTypeForm, ViewRestriction: true, AllowViewAuthor: true,
+			FormFields: []model.FormField{{ID: reviewerID, Code: "restricted_reviewer", FieldType: "text"}, {ID: flagID, Code: "restricted_flag", FieldType: "text"}},
+		})
+	})
+	dynamic := model.RouteStep{Code: "restricted-dynamic", StepOrder: 1, Title: "Dynamic", StepType: model.StepTypeDynamicUser, ActionType: model.ActionTypeApprove, Targets: []model.RouteTarget{{Variable: "$restricted_reviewer"}}, FallbackType: compatStr(model.FallbackSkip)}
+	conditional := compatUserStep("restricted-condition", 2, model.ActionTypeApprove, "finance-manager")
+	conditional.RouteStepCondition = &model.RouteStepCondition{ConditionType: model.StepConditionTypeConditional, CombinationType: model.StepCombinationAll,
+		RouteStepConditionFields: []model.ConditionField{{FieldKey: model.StepConditionFieldKeyTextVariable, Variable: "$restricted_flag", Symbol: "equal", Value: "true"}},
+	}
+	compatSetRoute(t, e, "expense-claim", dynamic, conditional)
+	workflow, fields := pf14FormDefinition(t, e, "expense-claim")
+	delete(fields, "restricted_reviewer")
+	delete(fields, "restricted_flag")
+	inputs := pf14CompleteInputs(fields, map[string]any{"amount": 5000, "purpose": "restricted-routing"})
+	inputs = append(inputs, pf14Input("restricted_reviewer", reviewerID, "engineer"), pf14Input("restricted_flag", flagID, "true"))
+	routeDef := model.WorkflowDef{SectionList: []model.WorkflowSection{{ID: sectionID, SectionType: model.SectionTypeForm, ViewRestriction: true, FormFields: []model.FormField{{ID: reviewerID, Code: "restricted_reviewer"}, {ID: flagID, Code: "restricted_flag"}}}}}
+	stepValues := pf14RouteStepValues(routeDef, pf14InputValues(routeDef, inputs))
+	var dynamicIDs []string
+	e.apply(func(tx *store.Tx) error {
+		var err error
+		dynamicIDs, err = e.engine.pf14ResolveAssignees(e.ctx, tx, &model.Ticket{AuthorID: compatStr(e.user("sales-rep")), AuthorTeamID: compatStr(e.team("sales"))}, dynamic, stepValues, nil)
+		return err
+	})
+	if len(dynamicIDs) != 0 {
+		t.Fatalf("restricted dynamic assignment=%v, want no assignees", dynamicIDs)
+	}
+	var id string
+	e.apply(func(tx *store.Tx) error {
+		var err error
+		id, _, err = e.engine.Create(e.ctx, tx, e.actor("sales-rep"), CreateInput{Status: model.TicketStatusInProgress, WorkflowID: workflow.ID, AuthorTeamID: e.team("sales"), Inputs: &inputs})
+		return err
+	})
+	if got := e.ticket(id).Status; got != model.TicketStatusCompleted {
+		t.Fatalf("ticket status=%s, want completed because both restricted-driven steps are skipped", got)
+	}
+	steps, err := store.EngTicketSteps(e.ctx, e.db.Q(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 || steps[0].Status != model.StepStatusSkipped || steps[1].Status != model.StepStatusSkipped {
+		t.Fatalf("step statuses=%+v, want both skipped", steps)
+	}
+	for _, step := range steps {
+		assignees, err := store.TicketAssignees(e.ctx, e.db.Q(), step.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, assignee := range assignees {
+			if assignee.UserID == e.user("engineer") {
+				t.Fatalf("restricted dynamic value assigned step %v to %+v", step.RouteStepCode, assignees)
+			}
+		}
+	}
+}

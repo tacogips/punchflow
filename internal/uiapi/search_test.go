@@ -170,9 +170,9 @@ func TestKeywordSearchRespectsSectionViewRestrictions(t *testing.T) {
 	hits, _ = e.search(t, testutil.Employee, q("restricted"))
 	assertHits(t, "author still matches the title", hits, id)
 	hits, _ = e.search(t, testutil.Manager, q("confidential"))
-	assertHits(t, "approver matches", hits, id)
+	assertHits(t, "approver cannot match a restricted value", hits)
 	hits, _ = e.search(t, testutil.Admin, q("confidential"))
-	assertHits(t, "administrator matches", hits, id)
+	assertHits(t, "administrator cannot match a restricted value", hits)
 	hits, _ = e.search(t, testutil.Employee, q("restricted confidential"))
 	assertHits(t, "a restricted term cannot be satisfied by title alone", hits)
 }

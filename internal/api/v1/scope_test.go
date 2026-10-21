@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"bytes"
 	"net/http"
 	"testing"
 
@@ -206,5 +207,38 @@ func TestRestrictedTicketReadCoversOnlyListedFolders(t *testing.T) {
 	}
 	if got := ids(t, env.Do(t, testutil.Integration, http.MethodGet, "/v1/tickets", nil)); len(got) != 1 || got[0] != ticketID {
 		t.Fatalf("in-scope ticket list = %v, want [%s]", got, ticketID)
+	}
+}
+
+func TestFolderScopedTicketReadDoesNotBypassSectionRestrictionOnSharedTicket(t *testing.T) {
+	env := testutil.New(t)
+	ticketID := pf22CreateTicket(t, env, testutil.Employee, "in_progress", 5000)
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE tickets SET forced_public_type='forced_public' WHERE id=?`, ticketID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=json_set(definition_json,'$.sectionList[0].viewRestriction',json('true'),'$.sectionList[0].allowViewAuthor',json('false'),'$.sectionList[0].allowViewApprover',json('false')) WHERE id=?`, pf22ExpenseWorkflow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.DB.Q().ExecContext(t.Context(), `UPDATE ticket_inputs SET value='"FOLDER_B_SECRET"' WHERE ticket_id=? AND form_field_id=?`, ticketID, pf22PurposeField); err != nil {
+		t.Fatal(err)
+	}
+	grantRole(t, env, "engineer", restricted("ticket_read", []string{scopeFolderGeneral}, nil, nil))
+	env.CallerFor = "engineer"
+	response := env.Do(t, testutil.Integration, http.MethodGet, "/v1/tickets/"+ticketID, nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("public ticket status=%d body=%s", response.Status, response.Body)
+	}
+	var detail map[string]any
+	response.JSON(t, &detail)
+	if bytes.Contains(response.Body, []byte("FOLDER_B_SECRET")) {
+		t.Fatalf("folder-A ticket_read grant exposed restricted folder-B input: %s", response.Body)
+	}
+	inputs := detail["inputs"].([]any)
+	for _, value := range inputs {
+		input := value.(map[string]any)
+		field := input["formField"].(map[string]any)
+		if field["id"] == pf22PurposeField && input["value"] != nil {
+			t.Fatalf("restricted folder-B field remained visible: %#v", input)
+		}
 	}
 }

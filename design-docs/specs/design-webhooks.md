@@ -63,7 +63,7 @@ Events are produced by the engine (and the UI API) in this order within one acti
 | `X-Kickflow-Delivery` | event row id |
 | `X-Kickflow-Signature` | `sha256=` + lowercase hex HMAC-SHA256(secret, body); omitted when the webhook has no secret (Confirmed prose) |
 
-Payloads reuse `internal/present` so they are identical to `getTicket` / `listTickets` / `getComment` output for the same state.
+Ticket payloads use the shared presenter with an explicit webhook policy. Values from restricted form sections are omitted from `inputs` and section inputs: `value` is null and resolved user/team/master/ticket references and attachments are empty. `formField` definitions remain present. This rule is independent of the event actor and differs from caller-filtered REST presentation (INF-SEC-02). Comment event ticket summaries keep their existing `TicketWithStep` shape.
 
 ### Dispatcher
 

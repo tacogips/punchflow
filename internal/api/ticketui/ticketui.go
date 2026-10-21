@@ -9,7 +9,6 @@ import (
 	"context"
 	"net/http"
 
-	"punchflow/internal/access"
 	"punchflow/internal/auth"
 	"punchflow/internal/engine"
 	"punchflow/internal/httpx"
@@ -115,7 +114,7 @@ func (a *API) getControls(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := auth.FromContext(r.Context())
-	controls, err := a.d.Engine.Controls(r.Context(), a.d.DB.Q(), engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}, r.PathValue("ticketId"))
+	controls, err := a.d.Engine.Controls(r.Context(), a.d.DB.Q(), engine.ActorFromPrincipal(p), r.PathValue("ticketId"))
 	if err != nil {
 		kferr.Write(w, err)
 		return
@@ -189,8 +188,7 @@ func (a *API) act(w http.ResponseWriter, r *http.Request, action string, mutate 
 	}
 	p, _ := auth.FromContext(r.Context())
 	id := r.PathValue("ticketId")
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
-	caller := &access.Caller{UserID: p.User.ID, TicketRead: p.Permissions[model.PermissionTicketRead]}
+	actor := engine.ActorFromPrincipal(p)
 	var out present.TicketDetailJSON
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		events, e := mutate(r.Context(), tx, actor, id)
@@ -205,7 +203,7 @@ func (a *API) act(w http.ResponseWriter, r *http.Request, action string, mutate 
 		if e = a.d.Events.Enqueue(r.Context(), tx, events); e != nil {
 			return e
 		}
-		out, e = present.TicketDetailFor(r.Context(), tx, id, caller)
+		out, e = present.TicketDetailForPrincipal(r.Context(), tx, id, p)
 		return e
 	})
 	if err != nil {

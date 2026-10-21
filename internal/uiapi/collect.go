@@ -12,7 +12,6 @@ import (
 	"punchflow/internal/access"
 	"punchflow/internal/auth"
 	"punchflow/internal/kferr"
-	"punchflow/internal/model"
 	"punchflow/internal/ticketsearch"
 )
 
@@ -56,7 +55,6 @@ func (a *API) collectTickets(w http.ResponseWriter, r *http.Request) ([]ticketIt
 		kferr.Write(w, err)
 		return nil, false
 	}
-	p, _ := auth.FromContext(r.Context())
 	forwarded := url.Values{}
 	for key, values := range r.URL.Query() {
 		if !ownParams[key] {
@@ -111,8 +109,7 @@ func (a *API) collectTickets(w http.ResponseWriter, r *http.Request) ([]ticketIt
 	if len(ticketsearch.Terms(keyword)) == 0 {
 		return items, true
 	}
-	caller := access.Caller{UserID: p.User.ID, TicketRead: p.Permissions[model.PermissionTicketRead]}
-	matched, err := ticketsearch.Match(r.Context(), a.d.DB.Q(), caller, keyword)
+	matched, err := ticketsearch.Match(r.Context(), a.d.DB.Q(), access.Caller{}, keyword)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return nil, false

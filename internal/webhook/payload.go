@@ -45,7 +45,7 @@ func (p *Payloads) Build(ctx context.Context, q store.Querier, ev model.WebhookE
 		}
 		data["comment"], data["ticket"] = comment, ticket
 	default:
-		ticket, e := present.TicketDetail(ctx, q, ev.TicketID)
+		ticket, e := present.TicketDetailWebhook(ctx, q, ev.TicketID)
 		if e != nil {
 			return nil, fmt.Errorf("webhook: build ticket: %w", e)
 		}

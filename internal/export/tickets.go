@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"punchflow/internal/access"
+	"punchflow/internal/auth"
 	"punchflow/internal/model"
 	"punchflow/internal/present"
 	"punchflow/internal/store"
@@ -44,7 +44,7 @@ func (c *columnSet) add(key, header string) {
 // content is presented for the caller, so inputs and detail rows of restricted
 // form sections the caller may not view are left empty. ids must already be
 // restricted to tickets the caller may read.
-func WriteTickets(ctx context.Context, q store.Querier, w io.Writer, layout string, ids []string, caller access.Caller) error {
+func WriteTickets(ctx context.Context, q store.Querier, w io.Writer, layout string, ids []string, principal *auth.Principal) error {
 	if layout != LayoutTicket && layout != LayoutDetail {
 		return fmt.Errorf("export: unknown ticket layout %q", layout)
 	}
@@ -52,7 +52,7 @@ func WriteTickets(ctx context.Context, q store.Querier, w io.Writer, layout stri
 	defs := map[string]model.WorkflowDef{}
 	var workflowOrder []string
 	for _, id := range ids {
-		detail, err := present.TicketDetailFor(ctx, q, id, &caller)
+		detail, err := present.TicketDetailForPrincipal(ctx, q, id, principal)
 		if err != nil {
 			return fmt.Errorf("export: present ticket: %w", err)
 		}

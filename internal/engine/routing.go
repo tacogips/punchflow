@@ -60,6 +60,9 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	if route.Status != model.RouteStatusVisible {
 		return kferr.ValidationFailed(map[string][]string{"route": {"is unavailable"}})
 	}
+	// INF-SEC-05: route selection uses applicant-visible values, while approval
+	// step conditions and dynamic targets always treat restricted fields as empty.
+	stepValues := pf14RouteStepValues(def, values)
 	ticket.RouteID = &routeID
 	for _, custom := range approvers {
 		if err = store.EngInsertCustomApprovers(ctx, tx, ticket.ID, custom.RouteStepCode, custom.UserIDs); err != nil {
@@ -73,7 +76,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 		conditionMatches := true
 		var er error
 		if step.RouteStepCondition != nil && step.RouteStepCondition.ConditionType != model.StepConditionTypeAlways {
-			conditionMatches, er = pf14bStepConditionMatch(ctx, tx, ticket, step.RouteStepCondition.RouteStepConditionFields, step.RouteStepCondition.CombinationType, values)
+			conditionMatches, er = pf14bStepConditionMatch(ctx, tx, ticket, step.RouteStepCondition.RouteStepConditionFields, step.RouteStepCondition.CombinationType, stepValues)
 			if er != nil {
 				return er
 			}
@@ -81,7 +84,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 		skip := step.RouteStepCondition != nil && (step.RouteStepCondition.ConditionType == model.StepConditionTypeConditionalSkip && conditionMatches || step.RouteStepCondition.ConditionType == model.StepConditionTypeConditional && !conditionMatches)
 		fb := false
 		result := ""
-		userIDs, er := e.pf14ResolveAssignees(ctx, tx, ticket, step, values, approvers)
+		userIDs, er := e.pf14ResolveAssignees(ctx, tx, ticket, step, stepValues, approvers)
 		if er != nil {
 			return er
 		}
@@ -101,7 +104,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 			if step.FallbackType == nil {
 				return kferr.ValidationFailed(map[string][]string{"base": {"step has no assignees"}})
 			}
-			userIDs, er = pf14bFallbackAssignees(ctx, tx, ticket, step, values)
+			userIDs, er = pf14bFallbackAssignees(ctx, tx, ticket, step, stepValues)
 			if er != nil {
 				return er
 			}
@@ -145,6 +148,24 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	}
 	ticket.CurrentStep = 0
 	return e.pf14Advance(ctx, tx, ticket, store.Time(nowTime))
+}
+
+func pf14RouteStepValues(def model.WorkflowDef, values map[string]any) map[string]any {
+	filtered := make(map[string]any, len(values))
+	for key, value := range values {
+		filtered[key] = value
+	}
+	for _, section := range def.SectionList {
+		if section.SectionType != model.SectionTypeForm || !section.ViewRestriction {
+			continue
+		}
+		for _, field := range section.FormFields {
+			delete(filtered, field.ID)
+			delete(filtered, field.Code)
+			delete(filtered, model.VariableName(field.Code))
+		}
+	}
+	return filtered
 }
 
 func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket *model.Ticket, step model.RouteStep, values map[string]any, approvers []ApproverInput) ([]string, error) {

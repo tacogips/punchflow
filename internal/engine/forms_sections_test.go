@@ -144,3 +144,82 @@ func TestRestrictedSectionValuesSurviveAuthorEdits(t *testing.T) {
 	}
 	check("partial form update")
 }
+
+func TestSectionAccessIncludesProxyApplicantsAndActiveProxyApprovers(t *testing.T) {
+	e := pf14Setup(t)
+	pf16RestrictApproverNote(t, e)
+	pf16Redefine(t, e, "expense-claim", func(def *model.WorkflowDef) {
+		for i := range def.SectionList {
+			if def.SectionList[i].ID == pf16ConfSection {
+				def.SectionList[i].AllowViewAuthor = true
+			}
+		}
+	})
+	inputs := pf16Inputs(t, e, pf16Base)
+	id, err := pf16Create(e, "sales-rep", model.TicketStatusInProgress, inputs, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approverID := pf14cCurrentApprover(t, e, id)
+	proxyID := e.user("hr-manager")
+	workflow, err := store.GetWorkflowByCode(e.ctx, e.db.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflowIDs := fmt.Sprintf(`["%s"]`, workflow.ID)
+	if _, err = e.db.Q().ExecContext(e.ctx, `INSERT INTO proxy_approvers(id,user_id,proxy_user_id,starts_on,ends_on,workflow_ids,created_at,updated_at) VALUES('active-proxy',?,?,NULL,NULL,?,?,?)`, approverID, proxyID, workflowIDs, e.clock.Now().UnixMilli(), e.clock.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	_, fields := pf14FormDefinition(t, e, "expense-claim")
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE tickets SET proxy_client_user_id=? WHERE id=?`, proxyID, id); err != nil {
+		t.Fatal(err)
+	}
+	detailFor := func(userID string) present.TicketDetailJSON {
+		t.Helper()
+		detail, err := present.TicketDetailFor(e.ctx, e.db.Q(), id, &access.Caller{UserID: userID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return detail
+	}
+	if !pf16SectionViewable(detailFor(proxyID)) {
+		t.Fatal("proxy applicant cannot view author-enabled restricted section")
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE tickets SET proxy_client_user_id=NULL WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if err = pf16UpdateForm(e, Actor{UserID: proxyID}, id, FormPatch{Inputs: []FieldInput{pf14Input("approver-note", fields["approver-note"], "proxy value")}}); err != nil {
+		t.Fatalf("active proxy approver cannot update restricted field: %v", err)
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE proxy_approvers SET ends_on='2025-02-02' WHERE id='active-proxy'`); err != nil {
+		t.Fatal(err)
+	}
+	if pf16SectionViewable(detailFor(proxyID)) {
+		t.Fatal("expired proxy approver can view restricted section")
+	}
+	if err = pf16UpdateForm(e, Actor{UserID: proxyID}, id, FormPatch{Inputs: []FieldInput{pf14Input("approver-note", fields["approver-note"], "expired proxy")}}); err == nil {
+		t.Fatal("expired proxy approver updated restricted field")
+	}
+	if _, err = e.db.Q().ExecContext(e.ctx, `UPDATE tickets SET proxy_client_user_id=NULL,status='rejected' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if pf16SectionViewable(detailFor(approverID)) {
+		t.Fatal("former approver can view restricted section on rejected ticket")
+	}
+	if pf16SectionViewable(detailFor(proxyID)) {
+		t.Fatal("proxy approver can view restricted section on rejected ticket")
+	}
+	if err = pf16UpdateForm(e, Actor{UserID: proxyID}, id, FormPatch{Inputs: []FieldInput{pf14Input("approver-note", fields["approver-note"], "not allowed")}}); err == nil {
+		t.Fatal("proxy approver updated restricted field after ticket left in-progress state")
+	}
+}
+
+func pf16SectionViewable(detail present.TicketDetailJSON) bool {
+	for _, raw := range detail["ticketSections"].([]any) {
+		section := raw.(map[string]any)
+		if section["sectionId"] == pf16ConfSection {
+			return section["viewable"].(bool)
+		}
+	}
+	return false
+}

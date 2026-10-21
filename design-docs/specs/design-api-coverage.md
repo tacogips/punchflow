@@ -186,7 +186,7 @@ Path count check: the 57 distinct paths are the distinct values of the Path colu
 
 ### Webhook event matrix (13 events)
 
-All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads are `TicketDetail` (same presenter as `getTicket`), comment payloads are `{comment: Comment, ticket: TicketWithStep}`. Emission happens inside the same database transaction as the state change (outbox, see `design-webhooks.md`). Tests live in `internal/engine/events_test.go` (which events, in which order) and `internal/webhook/*_test.go` (delivery, signature, retries).
+All events use the envelope `{eventType, tenant, user, data}`. Ticket payloads use `TicketDetail` with a webhook-specific policy: restricted form values and resolved references are redacted while field definitions remain (INF-SEC-02). Comment payloads are `{comment: Comment, ticket: TicketWithStep}`. Emission happens inside the same database transaction as the state change (outbox, see `design-webhooks.md`). Tests live in `internal/engine/events_test.go` (which events, in which order) and `internal/webhook/*_test.go` (delivery, signature, retries).
 
 | # | eventType | Emitted by | `user` | `data` | Notes |
 |---|---|---|---|---|---|

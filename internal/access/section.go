@@ -6,7 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"punchflow/internal/auth"
+	"punchflow/internal/kftime"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
 )
@@ -14,9 +17,39 @@ import (
 // Caller identifies who is reading or editing a ticket.
 type Caller struct {
 	UserID string
-	// TicketRead is true for administrators holding the ticket_read
-	// permission; they see every section (inferred administrator exception).
+	// TicketRead is true when the caller's ticket_read grant covers this
+	// ticket's workflow folder; that scoped grant bypasses section restrictions.
 	TicketRead bool
+}
+
+// CallerForTicket resolves a principal's ticket_read grant against the
+// ticket's workflow folder before it can bypass section-level restrictions.
+// INF-SEC-03: folder-scoped ticket_read applies only to tickets in its folders.
+func CallerForTicket(ctx context.Context, q store.Querier, principal *auth.Principal, ticket model.Ticket) (Caller, error) {
+	caller := Caller{}
+	if principal == nil {
+		return caller, nil
+	}
+	caller.UserID = principal.User.ID
+	if !principal.Has(model.PermissionTicketRead) {
+		return caller, nil
+	}
+	workflow, err := store.GetWorkflow(ctx, q, ticket.WorkflowID)
+	if err != nil {
+		return Caller{}, fmt.Errorf("access: resolve ticket workflow folder: %w", err)
+	}
+	caller.TicketRead = principal.Allows(model.PermissionTicketRead, workflow.FolderID)
+	return caller, nil
+}
+
+// CallerForTicketID resolves the persisted ticket before calculating its
+// resource-aware section caller.
+func CallerForTicketID(ctx context.Context, q store.Querier, principal *auth.Principal, ticketID string) (Caller, error) {
+	ticket, err := store.EngLoadTicket(ctx, q, ticketID)
+	if err != nil {
+		return Caller{}, err
+	}
+	return CallerForTicket(ctx, q, principal, ticket)
 }
 
 // SectionViewable reports whether the caller may view, and therefore enter,
@@ -30,11 +63,11 @@ func SectionViewable(ctx context.Context, q store.Querier, c Caller, t model.Tic
 	if s.SectionType != model.SectionTypeForm || !s.ViewRestriction || c.TicketRead {
 		return true, nil
 	}
-	if s.AllowViewAuthor && t.AuthorID != nil && *t.AuthorID == c.UserID {
+	if s.AllowViewAuthor && ((t.AuthorID != nil && *t.AuthorID == c.UserID) || (t.ProxyClientUserID != nil && *t.ProxyClientUserID == c.UserID)) {
 		return true, nil
 	}
 	if s.AllowViewApprover && t.ID != "" {
-		ok, err := store.EngIsTicketAssignee(ctx, q, t.ID, c.UserID)
+		ok, err := approverOrProxy(ctx, q, t, c.UserID)
 		if err != nil {
 			return false, err
 		}
@@ -49,6 +82,38 @@ func SectionViewable(ctx context.Context, q store.Querier, c Caller, t model.Tic
 		}
 		if ok {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// approverOrProxy implements INF-SEC-04's state and active-proxy rules.
+func approverOrProxy(ctx context.Context, q store.Querier, ticket model.Ticket, userID string) (bool, error) {
+	if ticket.Status != model.TicketStatusInProgress && ticket.Status != model.TicketStatusCompleted {
+		return false, nil
+	}
+	steps, err := store.TicketSteps(ctx, q, ticket.ID)
+	if err != nil {
+		return false, fmt.Errorf("access: list ticket steps: %w", err)
+	}
+	for _, step := range steps {
+		assignees, err := store.TicketAssignees(ctx, q, step.ID)
+		if err != nil {
+			return false, fmt.Errorf("access: list ticket assignees: %w", err)
+		}
+		for _, assignee := range assignees {
+			if assignee.UserID == userID || assignee.ActualApproverID != nil && *assignee.ActualApproverID == userID {
+				return true, nil
+			}
+			proxies, err := store.ProxyUserIDs(ctx, q, assignee.UserID, ticket.WorkflowID, time.Now().In(kftime.JST).Format("2006-01-02"))
+			if err != nil {
+				return false, fmt.Errorf("access: list active approver proxies: %w", err)
+			}
+			for _, proxyID := range proxies {
+				if proxyID == userID {
+					return true, nil
+				}
+			}
 		}
 	}
 	return false, nil

@@ -42,7 +42,7 @@ func (a *API) watch(w http.ResponseWriter, r *http.Request, state *string) {
 	}
 	p, _ := auth.FromContext(r.Context())
 	ticketID := r.PathValue("ticketId")
-	actor := engine.Actor{UserID: p.User.ID, Permissions: p.Permissions}
+	actor := engine.ActorFromPrincipal(p)
 	var out watchJSON
 	err := a.d.DB.WithTx(r.Context(), func(tx *store.Tx) error {
 		if err := a.d.Engine.CanView(r.Context(), tx, actor, ticketID); err != nil {

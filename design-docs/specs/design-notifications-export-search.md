@@ -109,7 +109,7 @@ Semantics:
 - A term matches, as a case-insensitive substring (SQLite `LIKE`, so ASCII case folding only; `%` and `_` are literal), any of: the ticket number, the title, a form input value, a detail (slip) row cell value, or the body of a comment that is not deleted. Different terms may match different sources.
 - Form input values are matched as stored: text, numbers and array elements. References (master items, users, teams, tickets) are matched by their stored identifiers, not by their display names. Keys of detail-row cells are never matched.
 - **Visibility.** The structured filters and effective ticket visibility are obtained by calling the `GET /v1/tickets` handler in-process with every parameter except `q`, `page`, `perPage` and `layout`, paging through its complete result. Search and export therefore always agree with the ticket list, including filters added to `/v1/tickets` later, and a `/v1` validation error (for example an invalid `status[]`) is returned unchanged. The keyword matches are then intersected with that result and re-paginated. At most 10 000 tickets are collected; a larger result returns `400 invalid_parameter` asking to narrow the filters.
-- **Section view restrictions.** Candidates come from SQL over all stored values. For tickets whose workflow has restricted form sections the caller may not view (`access.SectionAccess`; `ticket_read` administrators see everything), the keyword is re-evaluated in Go against only the visible text, so a value in a hidden section cannot be matched or inferred. Titles, numbers, comments and detail rows are not section-restricted.
+- **Section view restrictions.** Candidates come from SQL over all stored values. Before matching, every field in every restricted form section is excluded from the corpus for every caller, including designated section viewers and `ticket_read` administrators (INF-SEC-01). Titles, numbers, comments and detail rows are not section-restricted. Ticket-level visibility remains a separate authorization filter.
 
 ### CSV export
 
@@ -121,7 +121,7 @@ Semantics:
 | `detail` | one per detail (slip) row | Ticket ID, Ticket number, Title, Workflow, Status, Author, Section, Row no. | one per detail field of the workflows in the result |
 
 - Columns are keyed by field code, so workflows sharing a field code share one column; the header is the title of the first field seen. A workflow without detail rows contributes no rows to the `detail` layout.
-- Content is rendered from the per-caller ticket presentation (`present.TicketDetailFor`), so inputs and detail rows of restricted sections the caller cannot view are empty or absent.
+- Content is rendered from the per-ticket principal presentation (`present.TicketDetailForPrincipal`), which resolves `ticket_read` against that workflow's folder. Inputs and detail rows of restricted sections the caller cannot view are empty or absent (INF-SEC-03).
 - References are written by name (master item name, user full name, team full name, ticket number or title, attachment file names); arrays are joined with `, `; numbers are written without exponent. Timestamps use the API format (JST, millisecond precision).
 - `audit-logs/export` writes: Created at, Action, User ID, User name, User email, Ticket ID, System type, Remote IP, Request ID, Log ID, Data (the JSON object as text). Order follows `sortBy=createdAt[-asc|-desc]`, newest first by default.
 

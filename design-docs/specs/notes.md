@@ -197,6 +197,17 @@ Session 464 wave-A findings, carried into session 465 at checkpoint `ea385c7`. E
 - CF-09: Closed in session 467; `TestLoadExportRoundTripMinimal` passes (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
 - PF-26 split: Closed in session 467; `TestContractLiveTickets`, `TestContractLiveCommentsFiles`, `TestContractLiveUsersGrades`, `TestContractLiveOrgChartsTeams`, `TestContractLiveMasters`, `TestContractLiveProxiesRoles` and `TestContractOperationCoverage` (96 unique operations) pass (gate line 7). Evidence: `tmp/punchflow-kickflow-dummy-s467/PF-27/attempt-1/pf27-s467-test.log` (793 PASS, 0 FAIL, 0 SKIP).
 
+### Section restriction reconciliation (INF-SEC-*)
+
+| ID | Decision | Evidence |
+|---|---|---|
+| INF-SEC-01 | Keyword search excludes every form field in a restricted section for every caller, including designated viewers and `ticket_read` administrators. Ticket-level visibility remains a separate filter. | Search FAQ 40767576061081 (`https://support.kickflow.com/api/v2/help_center/ja/articles/40767576061081.json`) |
+| INF-SEC-02 | Webhook ticket bodies retain restricted form field definitions but redact values and all resolved references or attachments, regardless of actor. | Section restrictions 47269820740761, “External integrations” (`https://support.kickflow.com/api/v2/help_center/ja/articles/47269820740761.json`) |
+| INF-SEC-03 | A `ticket_read` section-visibility override is effective only when the grant covers the ticket workflow's folder. UI helpers, presentation, exports, search authorization, watch access and notification visibility use the ticket-scoped actor/caller. | Folder-scoped permissions 360044559254 (`https://support.kickflow.com/api/v2/help_center/ja/articles/360044559254.json`); implementation consistency inferred from repository grant semantics |
+| INF-SEC-04 | Applicant-side section access includes the proxy client. Approver-side access includes actual approvers and active workflow/date-matched proxy approvers, and only while ticket status is `in_progress` or `completed`; form edits use the same rule. | Section restrictions 47269820740761, applicant/approver rules and status list (`https://support.kickflow.com/api/v2/help_center/ja/articles/47269820740761.json`) |
+| INF-SEC-05 | Route branch selection keeps the applicant-context value map. Step execution conditions, dynamic user/team assignment and their fallback resolution always see restricted form fields as empty. | Section restrictions 47269820740761, “Approval routes” (`https://support.kickflow.com/api/v2/help_center/ja/articles/47269820740761.json`) |
+| INF-SEC-06 | Workflow execution and ticket-section visibility share normalized variable lookup and comparison operators; a section condition referencing a variable evaluates the same value and numeric comparisons as the engine. | Search/conditional behavior from fixture and implementation parity requirement; default `reason = other` section condition in `fixtures/default/workflows.json` |
+
 ### Intentional divergences from kickflow
 
 These are scope cuts, not inferences. Each is visible to API clients only as a constant value.

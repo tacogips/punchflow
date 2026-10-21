@@ -199,7 +199,7 @@ func (a *API) getTicket(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, err)
 		return
 	}
-	out, err := present.TicketDetailFor(r.Context(), a.d.DB.Q(), id, pf16Caller(p.User.ID, p.Permissions))
+	out, err := present.TicketDetailForPrincipal(r.Context(), a.d.DB.Q(), id, p)
 	if err != nil {
 		kferr.Write(w, err)
 		return
@@ -231,7 +231,7 @@ func (a *API) createTicket(w http.ResponseWriter, r *http.Request) {
 		if e = a.d.Events.Enqueue(r.Context(), tx, events); e != nil {
 			return e
 		}
-		out, e = present.TicketDetailFor(r.Context(), tx, id, pf16Caller(p.User.ID, p.Permissions))
+		out, e = present.TicketDetailForPrincipal(r.Context(), tx, id, p)
 		return e
 	})
 	if err != nil {
@@ -290,7 +290,7 @@ func (a *API) pf22Update(w http.ResponseWriter, r *http.Request, action string, 
 		if e = a.d.Events.Enqueue(r.Context(), tx, events); e != nil {
 			return e
 		}
-		out, e = present.TicketDetailFor(r.Context(), tx, id, pf16Caller(p.User.ID, p.Permissions))
+		out, e = present.TicketDetailForPrincipal(r.Context(), tx, id, p)
 		return e
 	})
 	if err != nil {

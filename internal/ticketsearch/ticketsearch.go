@@ -1,7 +1,7 @@
 // Package ticketsearch implements punchflow's free-text ticket keyword search
 // (PF-22). It matches ticket numbers, titles, form input values, detail row
-// cells and comments, and never matches text of a restricted form section the
-// requester may not view. Ticket visibility itself is applied by the caller.
+// cells and comments, and never matches text of any restricted form section.
+// Ticket visibility itself is applied by the caller.
 package ticketsearch
 
 import (
@@ -66,10 +66,7 @@ func Match(ctx context.Context, q store.Querier, caller access.Caller, keyword s
 			}
 			defs[ticket.WorkflowID] = def
 		}
-		hidden, err := hiddenFieldIDs(ctx, q, caller, ticket, def)
-		if err != nil {
-			return nil, err
-		}
+		hidden := restrictedFieldIDs(def)
 		if len(hidden) == 0 {
 			matched[id] = true
 			continue
@@ -85,37 +82,26 @@ func Match(ctx context.Context, q store.Querier, caller access.Caller, keyword s
 	return matched, nil
 }
 
-// hiddenFieldIDs returns the form field IDs of restricted sections the caller
-// may not view. It is empty for the common case of no restricted sections.
-func hiddenFieldIDs(ctx context.Context, q store.Querier, caller access.Caller, ticket model.Ticket, def model.WorkflowDef) (map[string]bool, error) {
-	restricted := false
-	for _, section := range def.SectionList {
-		if section.SectionType == model.SectionTypeForm && section.ViewRestriction {
-			restricted = true
-			break
-		}
-	}
-	if !restricted || caller.TicketRead {
-		return nil, nil
-	}
-	viewable, err := access.SectionAccess(ctx, q, caller, ticket, def)
-	if err != nil {
-		return nil, fmt.Errorf("ticketsearch: section access: %w", err)
-	}
+// restrictedFieldIDs returns every form field ID belonging to a restricted
+// section. INF-SEC-01: keyword search excludes these fields for every caller,
+// including section viewers and ticket_read administrators.
+func restrictedFieldIDs(def model.WorkflowDef) map[string]bool {
 	hidden := map[string]bool{}
 	for _, section := range def.SectionList {
-		if viewable[section.ID] {
+		if section.SectionType != model.SectionTypeForm || !section.ViewRestriction {
 			continue
 		}
 		for _, field := range section.FormFields {
 			hidden[field.ID] = true
 		}
 	}
-	return hidden, nil
+	if len(hidden) == 0 {
+		return nil
+	}
+	return hidden
 }
 
-// matchesVisible re-evaluates the keyword against only the text the caller may
-// see, for tickets that carry hidden form fields.
+// matchesVisible re-evaluates the keyword without restricted form fields.
 func matchesVisible(ctx context.Context, q store.Querier, ticket model.Ticket, hidden map[string]bool, terms []string) (bool, error) {
 	haystacks := []string{}
 	if ticket.TicketNumber != nil {

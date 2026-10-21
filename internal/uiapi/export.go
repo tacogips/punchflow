@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"punchflow/internal/access"
 	"punchflow/internal/auth"
 	"punchflow/internal/export"
 	"punchflow/internal/httpx"
@@ -63,9 +62,8 @@ func (a *API) exportTickets(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		ids = append(ids, item.ID)
 	}
-	caller := access.Caller{UserID: p.User.ID, TicketRead: p.Permissions[model.PermissionTicketRead]}
 	var body bytes.Buffer
-	if err := export.WriteTickets(r.Context(), a.d.DB.Q(), &body, layout, ids, caller); err != nil {
+	if err := export.WriteTickets(r.Context(), a.d.DB.Q(), &body, layout, ids, p); err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
 	}
