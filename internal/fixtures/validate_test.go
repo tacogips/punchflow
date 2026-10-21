@@ -36,6 +36,24 @@ func TestValidateCustomRouteAndSectionExpressions(t *testing.T) {
 	}
 }
 
+func TestValidateWorkflowRouteApplicantResourceConditions(t *testing.T) {
+	set, err := Parse(pf06FSSub(t, "testdata/minimal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wf := &set.Workflows[0]
+	wf.RouteConditions = []model.RouteCondition{
+		{ID: "00000000-0000-4000-8000-000000000051", ConditionType: model.RouteConditionTypeField, CombinationType: model.RouteCombinationAny, RouteCode: strPtr("ROUTE"), ConditionFields: []model.ConditionField{
+			{ID: "00000000-0000-4000-8000-000000000052", FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "TEAM"},
+			{ID: "00000000-0000-4000-8000-000000000053", FieldKey: model.StepConditionFieldKeyAuthorGrade, Symbol: "equal", Value: "G1"},
+		}},
+		{ID: "00000000-0000-4000-8000-000000000054", ConditionType: model.RouteConditionTypeFieldOtherwise, RouteCode: strPtr("ROUTE")},
+	}
+	if err := Validate(set); err != nil {
+		t.Fatalf("applicant team/grade route conditions should validate: %v", err)
+	}
+}
+
 func TestValidateRouteOtherVariableCondition(t *testing.T) {
 	set, err := Parse(pf06FSSub(t, "testdata/minimal"))
 	if err != nil {

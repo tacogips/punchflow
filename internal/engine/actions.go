@@ -204,7 +204,7 @@ func (e *Engine) pf14Approve(ctx context.Context, tx *store.Tx, a Actor, id stri
 	if err != nil {
 		return nil, err
 	}
-	if err = pf14ValidateApprovalInputs(def, inputs, slips); err != nil {
+	if err = pf14ValidateApprovalInputs(ctx, tx, &t, def, inputs, slips); err != nil {
 		return nil, err
 	}
 	if err = pf14CheckNextCustomApprovers(ctx, tx, t); err != nil {
@@ -483,6 +483,11 @@ func (e *Engine) pf14SendBack(ctx context.Context, tx *store.Tx, a Actor, id str
 			as.Completed = false
 			as.CompletedAt = nil
 			as.ActualApproverID = nil
+			// A send-back makes each later step pending again. Its next entry is
+			// a new approval request, so task date filters must use that entry.
+			if step.StepOrder >= to {
+				as.AssignedAt = nil
+			}
 			as.UpdatedAt = now
 			if err = store.EngUpdateAssignee(ctx, tx, as); err != nil {
 				return nil, err

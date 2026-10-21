@@ -13,6 +13,7 @@ import (
 	"time"
 
 	punchflow "punchflow"
+	"punchflow/internal/access"
 	"punchflow/internal/admin"
 	"punchflow/internal/api/ticketui"
 	v1 "punchflow/internal/api/v1"
@@ -21,7 +22,9 @@ import (
 	"punchflow/internal/files"
 	"punchflow/internal/fixtures"
 	"punchflow/internal/httpx"
+	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
+	"punchflow/internal/model"
 	"punchflow/internal/notify"
 	"punchflow/internal/store"
 	"punchflow/internal/uiapi"
@@ -122,6 +125,83 @@ func New(ctx context.Context, cfg Config, clock kftime.Clock) (*Server, error) {
 	}
 
 	engineService := engine.New(clock)
+	fileStore.SetDownloadAuthorizer(func(ctx context.Context, userID, fileID string) error {
+		user, userErr := store.GetUser(ctx, db.Q(), userID)
+		if userErr != nil || user.Status != model.UserStatusActive || user.DeactivatedAt != nil {
+			return kferr.New(http.StatusForbidden, "invalid_signature", "Invalid or expired download URL")
+		}
+		grants, grantsErr := store.UserGrants(ctx, db.Q(), userID)
+		if grantsErr != nil {
+			return grantsErr
+		}
+		permissions := make(map[string]bool, len(grants))
+		for permission := range grants {
+			permissions[permission] = true
+		}
+		principal := &auth.Principal{User: user, Permissions: permissions, Grants: grants}
+		file, loadErr := store.FileByID(ctx, db.Q(), fileID)
+		if loadErr != nil {
+			return kferr.ResourceNotFound()
+		}
+		locations, loadErr := store.FileAttachmentLocations(ctx, db.Q(), file.SignedID)
+		if loadErr != nil {
+			return loadErr
+		}
+		actor := engine.ActorFromPrincipal(principal)
+		for _, location := range locations {
+			if engineService.CanView(ctx, db.Q(), actor, location.TicketID) != nil {
+				continue
+			}
+			if location.FormFieldID == "" && location.SlipItemID == "" {
+				return nil
+			}
+			ticket, ticketErr := store.EngLoadTicket(ctx, db.Q(), location.TicketID)
+			if ticketErr != nil {
+				return ticketErr
+			}
+			definition, defErr := store.WorkflowDefByID(ctx, db.Q(), ticket.WorkflowID)
+			if defErr != nil {
+				return defErr
+			}
+			sectionID := ""
+			if location.FormFieldID != "" {
+				for _, section := range definition.SectionList {
+					for _, field := range section.FormFields {
+						if field.ID == location.FormFieldID {
+							sectionID = section.ID
+						}
+					}
+				}
+			} else {
+				items, itemsErr := store.TicketSlipItems(ctx, db.Q(), location.TicketID)
+				if itemsErr != nil {
+					return itemsErr
+				}
+				for _, item := range items {
+					if item.ID == location.SlipItemID {
+						sectionID = item.SlipSectionID
+					}
+				}
+			}
+			for _, section := range definition.SectionList {
+				if section.ID != sectionID {
+					continue
+				}
+				caller, callerErr := access.CallerForTicket(ctx, db.Q(), principal, ticket)
+				if callerErr != nil {
+					return callerErr
+				}
+				allowed, sectionErr := access.SectionViewable(ctx, db.Q(), caller, ticket, section)
+				if sectionErr != nil {
+					return sectionErr
+				}
+				if allowed {
+					return nil
+				}
+			}
+		}
+		return kferr.InvisibleTicket()
+	})
 	webhooks := webhook.New(db, webhook.NewPayloads(), clock, nil, webhook.Config{RetryBase: cfg.WebhookRetryBase})
 	apiMux := http.NewServeMux()
 	// Engine events are fanned out to the local notification inbox inside the
@@ -173,7 +253,7 @@ func New(ctx context.Context, cfg Config, clock kftime.Clock) (*Server, error) {
 	root.Handle("/admin/api/", adminHandler)
 	root.Handle("/ui/api/", uiHandler)
 	root.Handle("/auth/", authHandler)
-	root.Handle("/files/download/", fileStore.DownloadHandler(db))
+	root.Handle("/files/download/", httpx.Chain(fileStore.DownloadHandler(db), httpx.RequestID, httpx.Recover))
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)

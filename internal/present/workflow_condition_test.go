@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"punchflow/internal/model"
+	"punchflow/internal/store"
 )
 
 // A condition variable written as "$code" or "${code}" must resolve the same
@@ -26,5 +27,28 @@ func TestWorkflowConditionFieldNormalizesVariable(t *testing.T) {
 	out := pf08WorkflowConditionField(ctx, db.Q(), model.ConditionField{ID: "c2", Variable: "$missing", Symbol: "=", Value: "x"}, fields)
 	if out["formField"] != nil {
 		t.Errorf("unknown variable resolved formField %#v", out["formField"])
+	}
+}
+
+func TestWorkflowConditionFieldPresentsConfiguredMasterThreshold(t *testing.T) {
+	ctx, db := pf08DB(t)
+	masterID, err := store.ResolveID(ctx, db.Q(), "general_masters", "GM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemID, err := store.MasterItemIDByCode(ctx, db.Q(), masterID, "I1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := pf08WorkflowConditionField(ctx, db.Q(), model.ConditionField{
+		ID: "c-master", FieldKey: model.StepConditionFieldKeyGeneralMasterVariable,
+		Variable: "cost-center", Symbol: "equal", GeneralMasterCode: "GM", GeneralMasterItemCode: "I1",
+	}, nil)
+	if out["value"] != nil {
+		t.Fatalf("master threshold value=%v, want null when reference metadata is configured", out["value"])
+	}
+	item, ok := out["generalMasterItem"].(GeneralMasterItemJSON)
+	if !ok || item["id"] != itemID || item["code"] != "I1" {
+		t.Fatalf("generalMasterItem=%#v, want resolved item %s", out["generalMasterItem"], itemID)
 	}
 }

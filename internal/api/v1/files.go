@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"punchflow/internal/access"
 	"punchflow/internal/auth"
+	"punchflow/internal/engine"
 	"punchflow/internal/httpx"
 	"punchflow/internal/kferr"
 	"punchflow/internal/kftime"
@@ -89,19 +91,19 @@ func (a *API) getFile(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
-	ticketIDs, err := store.FileAttachmentTicketIDs(r.Context(), a.d.DB.Q(), signedID)
+	locations, err := store.FileAttachmentLocations(r.Context(), a.d.DB.Q(), signedID)
 	if err != nil {
 		kferr.Write(w, kferr.Internal())
 		return
 	}
-	if len(ticketIDs) == 0 {
+	if len(locations) == 0 {
 		kferr.Write(w, kferr.ResourceNotFound())
 		return
 	}
 	actor := actorFor(p)
 	visible := false
-	for _, ticketID := range ticketIDs {
-		if err := a.d.Engine.CanView(r.Context(), a.d.DB.Q(), actor, ticketID); err == nil {
+	for _, location := range locations {
+		if err := a.pf23CanViewFileLocation(r, p, actor, location); err == nil {
 			visible = true
 			break
 		} else if apiErr, isAPIError := kferr.As(err); !isAPIError || apiErr.Code != "invisible_ticket" {
@@ -113,7 +115,7 @@ func (a *API) getFile(w http.ResponseWriter, r *http.Request) {
 		kferr.Write(w, kferr.InvisibleTicket())
 		return
 	}
-	fileURL := a.d.Files.SignedURL(file)
+	fileURL := a.d.Files.SignedURLForUser(file, p.User.ID)
 	if strings.HasPrefix(fileURL, "/") {
 		scheme := "http"
 		if r.TLS != nil {
@@ -125,6 +127,64 @@ func (a *API) getFile(w http.ResponseWriter, r *http.Request) {
 		"url": fileURL, "filename": file.Filename, "checksum": file.Checksum,
 		"byteSize": file.ByteSize, "contentType": file.ContentType, "createdAt": kftime.Format(file.CreatedAt),
 	})
+}
+
+func (a *API) pf23CanViewFileLocation(r *http.Request, principal *auth.Principal, actor engine.Actor, location store.FileAttachmentLocation) error {
+	q := a.d.DB.Q()
+	if err := a.d.Engine.CanView(r.Context(), q, actor, location.TicketID); err != nil {
+		return err
+	}
+	if location.FormFieldID == "" && location.SlipItemID == "" {
+		return nil // Comment attachments follow ticket visibility.
+	}
+	ticket, err := store.EngLoadTicket(r.Context(), q, location.TicketID)
+	if err != nil {
+		return err
+	}
+	def, err := store.WorkflowDefByID(r.Context(), q, ticket.WorkflowID)
+	if err != nil {
+		return err
+	}
+	sectionID := ""
+	if location.FormFieldID != "" {
+		for _, section := range def.SectionList {
+			for _, field := range section.FormFields {
+				if field.ID == location.FormFieldID {
+					sectionID = section.ID
+					break
+				}
+			}
+		}
+	} else {
+		items, loadErr := store.TicketSlipItems(r.Context(), q, location.TicketID)
+		if loadErr != nil {
+			return loadErr
+		}
+		for _, item := range items {
+			if item.ID == location.SlipItemID {
+				sectionID = item.SlipSectionID
+				break
+			}
+		}
+	}
+	for _, section := range def.SectionList {
+		if section.ID != sectionID {
+			continue
+		}
+		caller, callerErr := access.CallerForTicket(r.Context(), q, principal, ticket)
+		if callerErr != nil {
+			return callerErr
+		}
+		allowed, accessErr := access.SectionViewable(r.Context(), q, caller, ticket, section)
+		if accessErr != nil {
+			return accessErr
+		}
+		if allowed {
+			return nil
+		}
+		return kferr.InvisibleTicket()
+	}
+	return kferr.InvisibleTicket()
 }
 
 func pf23Audit(r *http.Request, q store.Querier, p *auth.Principal, action, id, ticketID string, fields []string, now time.Time) error {

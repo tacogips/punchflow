@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"punchflow/internal/conditions"
 	"punchflow/internal/kferr"
 	"punchflow/internal/model"
 	"punchflow/internal/store"
@@ -68,7 +69,7 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	}
 	// Route branching runs as the applicant. Preserve values from sections
 	// they can view and clear only values from sections they cannot access.
-	routeCode, err := pf14SelectRouteCode(def, applicantValues)
+	routeCode, err := pf14SelectRouteCodeForApplicant(ctx, tx, def, ticket, applicantValues)
 	if err != nil {
 		return err
 	}
@@ -196,6 +197,64 @@ func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model
 	}
 	ticket.CurrentStep = 0
 	return e.pf14Advance(ctx, tx, ticket, store.Time(nowTime))
+}
+
+// pf14SelectRouteCodeForApplicant evaluates route fields against both the
+// applicant's form values and resource context (team, grade, and references).
+func pf14SelectRouteCodeForApplicant(ctx context.Context, tx store.Querier, def model.WorkflowDef, ticket *model.Ticket, values map[string]any) (string, error) {
+	routeCode := def.RouteCode
+	matchedBranch := false
+	for _, condition := range def.RouteConditions {
+		if condition.ConditionType == model.RouteConditionTypeFieldOtherwise {
+			if !matchedBranch && condition.RouteCode != nil {
+				routeCode = *condition.RouteCode
+			}
+			break
+		}
+		match := condition.ConditionType == model.RouteConditionTypeAlways
+		if condition.ConditionType == model.RouteConditionTypeField {
+			fieldMatches := make([]bool, len(condition.ConditionFields))
+			for i, field := range condition.ConditionFields {
+				fieldMatch, err := pf14bStepConditionMatch(ctx, tx, ticket, []model.ConditionField{field}, model.StepCombinationAll, values)
+				if err != nil {
+					return "", err
+				}
+				fieldMatches[i] = fieldMatch
+			}
+			switch condition.CombinationType {
+			case model.RouteCombinationAny:
+				for _, matched := range fieldMatches {
+					match = match || matched
+				}
+			case model.RouteCombinationCustom:
+				fields := make([]model.ConditionField, len(fieldMatches))
+				customValues := make(map[string]any, len(fieldMatches))
+				for i, matched := range fieldMatches {
+					key := fmt.Sprintf("route-condition-%d", i)
+					customValues[key] = matched
+					fields[i] = model.ConditionField{Variable: key, Symbol: "equal", Value: true}
+				}
+				match = conditions.MatchExpression(fields, condition.CombinationType, condition.CombinationExpression, customValues)
+			default:
+				match = len(fieldMatches) > 0
+				for _, matched := range fieldMatches {
+					match = match && matched
+				}
+			}
+		}
+		if !match {
+			continue
+		}
+		matchedBranch = true
+		if condition.ErrorMessage != nil && *condition.ErrorMessage != "" {
+			return "", kferr.ValidationFailed(map[string][]string{"base": {*condition.ErrorMessage}})
+		}
+		if condition.RouteCode != nil {
+			routeCode = *condition.RouteCode
+			break
+		}
+	}
+	return routeCode, nil
 }
 
 func pf14RouteApplicantValues(def model.WorkflowDef, values map[string]any, blocked map[string]bool) map[string]any {

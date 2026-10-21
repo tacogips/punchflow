@@ -2,6 +2,8 @@ package v1_test
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"punchflow/internal/model"
+	"punchflow/internal/store"
 	"punchflow/internal/testutil"
 )
 
@@ -53,6 +57,96 @@ func TestUploadAndGetFileAttachment(t *testing.T) {
 	}
 	if !strings.Contains(download.Header.Get("Content-Disposition"), "filename*=UTF-8''receipt.pdf") {
 		t.Fatalf("Content-Disposition=%q", download.Header.Get("Content-Disposition"))
+	}
+}
+
+func TestRestrictedSectionFileRequiresSectionAccessForMetadataAndDownload(t *testing.T) {
+	env := testutil.New(t)
+	workflow, err := store.GetWorkflowByCode(t.Context(), env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflow.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fileFieldID string
+	var fileSectionID string
+	for i := range definition.SectionList {
+		for _, field := range definition.SectionList[i].FormFields {
+			if field.FieldType == "file" {
+				fileFieldID = field.ID
+				fileSectionID = definition.SectionList[i].ID
+				definition.SectionList[i].ViewRestriction = true
+				definition.SectionList[i].AllowViewAuthor = true
+				definition.SectionList[i].AllowViewApprover = false
+				definition.SectionList[i].SectionViewers = []model.SectionViewer{{ID: "restricted-file-viewer", UserCode: "ceo"}}
+			}
+		}
+	}
+	if fileFieldID == "" {
+		t.Fatal("fixture has no file field")
+	}
+	ticketID := pf23CreateExpenseTicket(t, env, "sales-rep", "sales", "")
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=? WHERE id=?`, string(encoded), workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	uploaded := pf23UploadFile(t, env, []byte("restricted receipt"), true)
+	if uploaded.Status != http.StatusOK {
+		t.Fatalf("upload status=%d body=%s", uploaded.Status, uploaded.Body)
+	}
+	var uploadBody struct {
+		SignedID string `json:"signedId"`
+	}
+	uploaded.JSON(t, &uploadBody)
+	file, err := store.FileBySignedID(t.Context(), env.DB.Q(), uploadBody.SignedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `INSERT INTO file_attachments(file_id,ticket_id,form_field_id,created_at) VALUES(?,?,?,0)`, file.ID, ticketID, fileFieldID); err != nil {
+		t.Fatal(err)
+	}
+	metadata := env.Do(t, testutil.Employee, http.MethodGet, "/v1/files/"+uploadBody.SignedID, nil)
+	if metadata.Status != http.StatusOK {
+		t.Fatalf("authorized metadata status=%d body=%s", metadata.Status, metadata.Body)
+	}
+	var response struct {
+		URL string `json:"url"`
+	}
+	metadata.JSON(t, &response)
+	if response.URL == "" {
+		t.Fatal("authorized response has no download URL")
+	}
+	downloadSignedURL := func() *testutil.Response {
+		req, requestErr := http.NewRequestWithContext(context.Background(), http.MethodGet, response.URL, nil)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		return env.DoRaw(t, req)
+	}
+	if got := downloadSignedURL(); got.Status != http.StatusOK || !bytes.Equal(got.Body, []byte("restricted receipt")) {
+		t.Fatalf("authorized download status/body=%d/%q", got.Status, got.Body)
+	}
+	for i := range definition.SectionList {
+		if definition.SectionList[i].ID == fileSectionID {
+			definition.SectionList[i].AllowViewAuthor = false
+		}
+	}
+	encoded, err = json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=? WHERE id=?`, string(encoded), workflow.ID); err != nil {
+		t.Fatal(err)
+	}
+	denied := env.Do(t, testutil.Employee, http.MethodGet, "/v1/files/"+uploadBody.SignedID, nil)
+	testutil.AssertError(t, denied, http.StatusForbidden, "invisible_ticket")
+	if got := downloadSignedURL(); got.Status != http.StatusForbidden {
+		t.Fatalf("download after section access revoked status=%d body=%s, want forbidden", got.Status, got.Body)
 	}
 }
 

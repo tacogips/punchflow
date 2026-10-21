@@ -335,11 +335,15 @@ func pf14Empty(v any) bool {
 // pf14ValidateApprovalInputs requires the approver-required form fields and the
 // approver-required cells of every detail (slip) row to be filled before an
 // approval. Hidden and calculated detail cells cannot be entered and are exempt.
-func pf14ValidateApprovalInputs(def model.WorkflowDef, rows []model.TicketInput, slips []model.TicketSlipItem) error {
+func pf14ValidateApprovalInputs(ctx context.Context, q store.Querier, ticket *model.Ticket, def model.WorkflowDef, rows []model.TicketInput, slips []model.TicketSlipItem) error {
 	inputs := pf14InputsFromRows(def, rows)
 	values := pf14InputValues(def, inputs)
 	for _, section := range def.SectionList {
-		if section.SectionType != model.SectionTypeForm || !pf14SectionVisible(section, values) {
+		visible, err := pf14SectionVisibleWithReferences(ctx, q, ticket, section, values)
+		if err != nil {
+			return err
+		}
+		if section.SectionType != model.SectionTypeForm || !visible {
 			continue
 		}
 		for _, field := range section.FormFields {

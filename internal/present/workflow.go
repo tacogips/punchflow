@@ -181,7 +181,11 @@ func pf08ConditionValue(v any) any {
 }
 
 func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.ConditionField, formFields map[string]model.FormField) map[string]any {
-	out := map[string]any{"id": f.ID, "symbol": f.Symbol, "value": pf08ConditionValue(f.Value), "formField": nil, "grade": nil, "team": nil, "generalMasterItem": nil}
+	value := pf08ConditionValue(f.Value)
+	if f.FieldKey == model.StepConditionFieldKeyAuthorGrade || f.FieldKey == model.StepConditionFieldKeyAuthorTeam || f.FieldKey == model.StepConditionFieldKeyGeneralMasterVariable || f.Symbol == "is_empty" || f.Symbol == "is_not_empty" {
+		value = nil
+	}
+	out := map[string]any{"id": f.ID, "symbol": f.Symbol, "value": value, "formField": nil, "grade": nil, "team": nil, "generalMasterItem": nil}
 	field, ok := formFields[f.Variable]
 	if !ok {
 		field, ok = formFields[model.VariableName(f.Variable)]
@@ -192,13 +196,13 @@ func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.Co
 	code, _ := f.Value.(string)
 	if code != "" {
 		switch f.FieldKey {
-		case "grade":
+		case model.StepConditionFieldKeyAuthorGrade, "grade":
 			if id, e := store.ResolveID(ctx, q, "grades", code); e == nil {
 				if g, e := store.GetGrade(ctx, q, id); e == nil {
 					out["grade"] = Grade(g)
 				}
 			}
-		case "team":
+		case model.StepConditionFieldKeyAuthorTeam, "team":
 			if chart, e := store.ActiveOrgChartID(ctx, q); e == nil {
 				if id, e := store.TeamIDByCode(ctx, q, chart, code); e == nil {
 					if x, e := Team(ctx, q, id); e == nil {
@@ -206,10 +210,13 @@ func pf08WorkflowConditionField(ctx context.Context, q store.Querier, f model.Co
 					}
 				}
 			}
-		case "general_master_item":
-			if id, e := store.ResolveID(ctx, q, "general_master_items", code); e == nil {
-				if x, e := GeneralMasterItem(ctx, q, id); e == nil {
-					out["generalMasterItem"] = x
+		}
+	}
+	if f.FieldKey == model.StepConditionFieldKeyGeneralMasterVariable && f.GeneralMasterCode != "" && f.GeneralMasterItemCode != "" {
+		if masterID, e := store.ResolveID(ctx, q, "general_masters", f.GeneralMasterCode); e == nil {
+			if itemID, e := store.MasterItemIDByCode(ctx, q, masterID, f.GeneralMasterItemCode); e == nil {
+				if item, e := GeneralMasterItem(ctx, q, itemID); e == nil {
+					out["generalMasterItem"] = item
 				}
 			}
 		}

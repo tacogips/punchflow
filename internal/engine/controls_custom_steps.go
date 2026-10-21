@@ -190,7 +190,8 @@ func (e *Engine) AddCustomStep(ctx context.Context, tx *store.Tx, a Actor, id st
 		return nil, err
 	}
 	for _, userID := range userIDs {
-		assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: id, UserID: userID, CreatedAt: now, UpdatedAt: now}
+		assignedAt := now
+		assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: step.ID, TicketID: id, UserID: userID, AssignedAt: &assignedAt, CreatedAt: now, UpdatedAt: now}
 		if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
 			return nil, err
 		}

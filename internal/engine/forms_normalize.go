@@ -228,7 +228,11 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 			continue
 		}
 		if field.FieldType != "calculation" {
-			if n.radioMustBeSelected(field, value, values) {
+			mustSelect, selectErr := n.radioMustBeSelected(field, value, values)
+			if selectErr != nil {
+				return nil, selectErr
+			}
+			if mustSelect {
 				n.fail(field.Code, "must be selected")
 				continue
 			}
@@ -263,7 +267,11 @@ func (n *normalizer) normalizeInputs(inputs []FieldInput) ([]model.TicketInput, 
 	}
 	if n.opts.Full {
 		for _, section := range n.def.SectionList {
-			if section.SectionType != model.SectionTypeForm || !pf14SectionVisible(section, values) || n.opts.Blocked[section.ID] {
+			visible, visibilityErr := n.sectionVisible(section, values)
+			if visibilityErr != nil {
+				return nil, visibilityErr
+			}
+			if section.SectionType != model.SectionTypeForm || !visible || n.opts.Blocked[section.ID] {
 				continue
 			}
 			for _, field := range section.FormFields {
@@ -315,21 +323,40 @@ func (n *normalizer) actorInputValues(inputs []FieldInput) map[string]any {
 // radioMustBeSelected implements the type-specific "unselected" check that
 // kickflow runs on submission and on approver form updates (drafts may keep an
 // empty radio button).
-func (n *normalizer) radioMustBeSelected(field model.FormField, value any, values map[string]any) bool {
+func (n *normalizer) radioMustBeSelected(field model.FormField, value any, values map[string]any) (bool, error) {
 	if field.FieldType != "radio_button" || !pf14Empty(value) {
-		return false
+		return false, nil
 	}
 	if (n.opts.Approver && !field.Approver && !n.def.Overwritable) || (!n.opts.Approver && !field.Author) {
-		return false
+		return false, nil
 	}
 	if !n.opts.Full && (!n.opts.Approver || n.opts.Supplied != nil && !n.opts.Supplied[field.ID]) {
-		return false
+		return false, nil
 	}
 	if field.Hidden != nil && *field.Hidden {
-		return false
+		return false, nil
 	}
 	section, ok := n.idx.formSections[n.idx.fieldSection[field.ID]]
-	return !ok || pf14SectionVisible(section, values)
+	if !ok {
+		return true, nil
+	}
+	return n.sectionVisible(section, values)
+}
+
+func (n *normalizer) sectionVisible(section model.WorkflowSection, values map[string]any) (bool, error) {
+	var ticket *model.Ticket
+	needsApplicant := false
+	for _, field := range section.ConditionFields {
+		needsApplicant = needsApplicant || field.FieldKey == model.StepConditionFieldKeyAuthorTeam || field.FieldKey == model.StepConditionFieldKeyAuthorGrade
+	}
+	if n.ticketID != "" && needsApplicant {
+		loaded, err := store.EngLoadTicket(n.ctx, n.q, n.ticketID)
+		if err != nil {
+			return false, err
+		}
+		ticket = &loaded
+	}
+	return pf14SectionVisibleWithReferences(n.ctx, n.q, ticket, section, values)
 }
 
 // carryOverBlocked keeps stored rows of fields in sections the actor cannot

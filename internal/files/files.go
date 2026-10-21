@@ -43,11 +43,12 @@ func allowedUploadFilename(filename string) bool {
 }
 
 type Store struct {
-	dir      string
-	key      []byte
-	baseURL  string
-	clock    kftime.Clock
-	maxBytes int64
+	dir               string
+	key               []byte
+	baseURL           string
+	clock             kftime.Clock
+	maxBytes          int64
+	authorizeDownload func(context.Context, string, string) error
 }
 
 func New(dataDir string, key []byte, baseURL string, clock kftime.Clock, maxBytes int64) *Store {
@@ -109,12 +110,32 @@ func hmacSHA256(key []byte, value string) []byte {
 }
 
 func (s *Store) SignedURL(f model.File) string {
+	return s.pf23SignedURL(f, "")
+}
+
+// SignedURLForUser issues a short-lived URL that only the authenticated user
+// who passed the API's attachment authorization check can use.
+func (s *Store) SignedURLForUser(f model.File, userID string) string {
+	return s.pf23SignedURL(f, userID)
+}
+
+func (s *Store) pf23SignedURL(f model.File, userID string) string {
 	expires := s.clock.Now().Add(5 * time.Minute).Unix()
 	value := fmt.Sprintf("%s.%d", f.ID, expires)
+	if userID != "" {
+		value += "." + userID
+	}
 	mac := hmacSHA256(s.key, value)
 	token := base64.RawURLEncoding.EncodeToString([]byte(value + "." + hex.EncodeToString(mac)))
 	return s.baseURL + "/files/download/" + token
 }
+
+// SetDownloadAuthorizer installs the ticket and field-level recheck used by
+// user-bound download URLs. Legacy signed URLs retain their bearer behavior.
+func (s *Store) SetDownloadAuthorizer(authorize func(context.Context, string, string) error) {
+	s.authorizeDownload = authorize
+}
+
 func (s *Store) DownloadHandler(db *store.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.pf23ServeDownload(w, r, db) })
 }

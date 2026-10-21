@@ -71,3 +71,37 @@ func FileAttachmentTicketIDs(ctx context.Context, q Querier, signedID string) ([
 	}
 	return ids, nil
 }
+
+// FileAttachmentLocations identifies each ticket field, detail row, or comment
+// that references a file. The caller uses the field location to apply section
+// restrictions before disclosing or serving the file.
+type FileAttachmentLocation struct {
+	TicketID    string
+	FormFieldID string
+	SlipItemID  string
+	CommentID   string
+}
+
+func FileAttachmentLocations(ctx context.Context, q Querier, signedID string) ([]FileAttachmentLocation, error) {
+	rows, err := q.QueryContext(ctx, `SELECT a.ticket_id,COALESCE(a.form_field_id,''),COALESCE(a.slip_item_id,''),COALESCE(a.comment_id,'')
+		FROM file_attachments a JOIN files f ON f.id=a.file_id WHERE f.signed_id=?
+		UNION
+		SELECT i.ticket_id,i.form_field_id,'','' FROM ticket_inputs i, json_each(i.ref_ids) refs JOIN files f ON f.signed_id=refs.value WHERE f.signed_id=?
+		ORDER BY 1,2,3,4`, signedID, signedID)
+	if err != nil {
+		return nil, fmt.Errorf("store: query file attachment locations: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	locations := []FileAttachmentLocation{}
+	for rows.Next() {
+		var location FileAttachmentLocation
+		if err := rows.Scan(&location.TicketID, &location.FormFieldID, &location.SlipItemID, &location.CommentID); err != nil {
+			return nil, fmt.Errorf("store: scan file attachment location: %w", err)
+		}
+		locations = append(locations, location)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: read file attachment locations: %w", err)
+	}
+	return locations, nil
+}

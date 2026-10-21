@@ -456,7 +456,7 @@ func Validate(s *Set) error {
 				fp := fmt.Sprintf("%s.conditionFields[%d]", cp, k)
 				if cf.FieldKey == "other_variable" {
 					add(FileWorkflows, fp+".fieldKey", "other_variable is unsupported")
-				} else if !pf06Contains(model.StepConditionFieldKeys, cf.FieldKey) || cf.FieldKey == model.StepConditionFieldKeyAuthorGrade || cf.FieldKey == model.StepConditionFieldKeyAuthorTeam {
+				} else if !pf06Contains(model.StepConditionFieldKeys, cf.FieldKey) {
 					add(FileWorkflows, fp+".fieldKey", "invalid field key")
 				}
 				if !pf06OneOf(cf.Symbol, "equal", "not_equal", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal", "include", "exclude", "is_empty", "is_not_empty", "descendants_or_equal") {
@@ -464,6 +464,34 @@ func Validate(s *Set) error {
 				}
 				if cf.Variable != "" && !fields[cf.Variable] {
 					add(FileWorkflows, fp+".variable", "unknown form field code")
+				}
+				switch cf.FieldKey {
+				case model.StepConditionFieldKeyAuthorTeam:
+					if code, ok := cf.Value.(string); !ok || !teamCodes[code] {
+						add(FileWorkflows, fp+".value", "unknown applicant team code")
+					}
+				case model.StepConditionFieldKeyAuthorGrade:
+					if code, ok := cf.Value.(string); !ok || !gradeCodes[code] {
+						add(FileWorkflows, fp+".value", "unknown applicant grade code")
+					}
+				case model.StepConditionFieldKeyGeneralMasterVariable:
+					if cf.GeneralMasterCode != "" && !masterCodes[cf.GeneralMasterCode] {
+						add(FileWorkflows, fp+".generalMasterCode", "unknown general master code")
+					}
+					if cf.GeneralMasterItemCode != "" {
+						found := false
+						for _, master := range s.GeneralMasters {
+							if master.Code != cf.GeneralMasterCode {
+								continue
+							}
+							for _, item := range master.Items {
+								found = found || item.Code == cf.GeneralMasterItemCode
+							}
+						}
+						if !found {
+							add(FileWorkflows, fp+".generalMasterItemCode", "unknown item code for general master")
+						}
+					}
 				}
 			}
 		}

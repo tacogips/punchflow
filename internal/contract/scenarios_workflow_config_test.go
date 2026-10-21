@@ -251,3 +251,61 @@ func TestContractWorkflowDetailRowAdditionSetting(t *testing.T) {
 	}
 	t.Fatal("webhook omitted configured allowApproverToAddItems=true")
 }
+
+func TestContractWorkflowRouteConditionResourceThresholds(t *testing.T) {
+	env := testutil.New(t)
+	workflowID, err := store.WorkflowIDByCode(t.Context(), env.DB.Q(), "expense-claim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := store.WorkflowDefByID(t.Context(), env.DB.Q(), workflowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var otherwise model.RouteCondition
+	for _, condition := range def.RouteConditions {
+		if condition.ConditionType == model.RouteConditionTypeFieldOtherwise {
+			otherwise = condition
+			break
+		}
+	}
+	branch := model.RouteCondition{
+		ID: "00000000-0000-4000-8000-0000000000d1", ConditionType: model.RouteConditionTypeField,
+		CombinationType: model.RouteCombinationAll, RouteCode: &def.RouteCode,
+		ConditionFields: []model.ConditionField{
+			{ID: "00000000-0000-4000-8000-0000000000d2", Variable: "amount", FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "sales"},
+			{ID: "00000000-0000-4000-8000-0000000000d3", Variable: "amount", FieldKey: model.StepConditionFieldKeyAuthorGrade, Symbol: "equal", Value: "staff"},
+			{ID: "00000000-0000-4000-8000-0000000000d4", FieldKey: model.StepConditionFieldKeyGeneralMasterVariable, Variable: "cost-center", Symbol: "equal", GeneralMasterCode: "cost-centers", GeneralMasterItemCode: "cc-eng"},
+		},
+	}
+	def.RouteConditions = append([]model.RouteCondition{branch}, otherwise)
+	raw, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.DB.Q().ExecContext(t.Context(), `UPDATE workflows SET definition_json=? WHERE id=?`, string(raw), workflowID); err != nil {
+		t.Fatal(err)
+	}
+	var operation apiv1.Operation
+	for _, candidate := range apiv1.Operations() {
+		if candidate.OperationID == "getWorkflow" {
+			operation = candidate
+			break
+		}
+	}
+	response := env.Do(t, testutil.Employee, http.MethodGet, "/v1/workflows/expense-claim", nil)
+	if response.Status != http.StatusOK {
+		t.Fatalf("get workflow: status=%d body=%s", response.Status, response.Body)
+	}
+	validateJSON(t, pf16ResponseSchema(t, schemaCompiler(t, loadSpec(t)), operation), response.Body)
+	var body struct {
+		RouteConditions []struct {
+			Fields []map[string]any `json:"conditionFields"`
+		} `json:"routeConditions"`
+	}
+	response.JSON(t, &body)
+	fields := body.RouteConditions[0].Fields
+	if len(fields) != 3 || fields[0]["team"] == nil || fields[1]["grade"] == nil || fields[2]["generalMasterItem"] == nil || fields[2]["value"] != nil {
+		t.Fatalf("route condition resource presentation=%v", fields)
+	}
+}

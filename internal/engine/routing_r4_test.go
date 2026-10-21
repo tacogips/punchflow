@@ -216,6 +216,9 @@ func TestSendBackReentersTeamStepAndRefreshesAssignments(t *testing.T) {
 	refreshed := false
 	var refreshedAssignee model.TicketAssignee
 	for _, assignee := range after {
+		if assignee.UserID == before[0].UserID && (assignee.AssignedAt == nil || !assignee.AssignedAt.Equal(entryTime)) {
+			t.Fatalf("reentered assignment timestamp=%v, want %v", assignee.AssignedAt, entryTime)
+		}
 		if assignee.UserID == e.user("assistant") {
 			refreshed, refreshedAssignee = true, assignee
 		}
@@ -223,12 +226,69 @@ func TestSendBackReentersTeamStepAndRefreshesAssignments(t *testing.T) {
 	if teamStep.Status != model.StepStatusInProgress || !teamStep.UpdatedAt.Equal(entryTime) || len(after) == 0 || !refreshed || refreshedAssignee.AssignedAt == nil || !refreshedAssignee.AssignedAt.Equal(entryTime) {
 		t.Fatalf("reentered step=%+v assignees=%+v", teamStep, after)
 	}
+	start := entryTime
+	matched, total, err := store.TicketQueryList(e.ctx, e.db.Q(), store.TicketQueryFilter{UserID: refreshedAssignee.UserID, Tasks: true, AssignedToMeAtStart: &start}, 0, 10)
+	if err != nil || total != 1 || len(matched) != 1 || matched[0] != id {
+		t.Fatalf("task query at reentry time = %v total=%d err=%v, want ticket %s", matched, total, err, id)
+	}
+	beforeEntry := entryTime.Add(-time.Second)
+	matched, total, err = store.TicketQueryList(e.ctx, e.db.Q(), store.TicketQueryFilter{UserID: refreshedAssignee.UserID, Tasks: true, AssignedToMeAtEnd: &beforeEntry}, 0, 10)
+	if err != nil || total != 0 || len(matched) != 0 {
+		t.Fatalf("task query before reentry time = %v total=%d err=%v, want no ticket", matched, total, err)
+	}
 	var viewerCount int
 	if err = e.db.Q().QueryRowContext(e.ctx, `SELECT count(*) FROM ticket_viewers WHERE ticket_id=? AND user_id=?`, id, e.user("assistant")).Scan(&viewerCount); err != nil {
 		t.Fatal(err)
 	}
 	if viewerCount == 0 {
 		t.Fatal("send-back did not add the newly eligible manager to ticket_viewers")
+	}
+}
+
+func TestWorkflowRouteConditionsResolveApplicantResourcesAndMasterThreshold(t *testing.T) {
+	e := pf14Setup(t)
+	teamRoute, masterRoute, fallback := "team-grade", "master-item", "fallback"
+	ticket := model.Ticket{AuthorID: ptr(e.user("sales-rep")), AuthorTeamID: ptr(e.team("sales"))}
+	def := model.WorkflowDef{RouteCode: fallback, RouteConditions: []model.RouteCondition{
+		{ConditionType: model.RouteConditionTypeField, CombinationType: model.RouteCombinationAll, RouteCode: &teamRoute, ConditionFields: []model.ConditionField{
+			{FieldKey: model.StepConditionFieldKeyAuthorTeam, Symbol: "equal", Value: "sales"},
+			{FieldKey: model.StepConditionFieldKeyAuthorGrade, Symbol: "equal", Value: "staff"},
+		}},
+		{ConditionType: model.RouteConditionTypeFieldOtherwise, RouteCode: &fallback},
+	}}
+	route, err := pf14SelectRouteCodeForApplicant(e.ctx, e.db.Q(), def, &ticket, nil)
+	if err != nil || route != teamRoute {
+		t.Fatalf("applicant resource route=%q err=%v, want %q", route, err, teamRoute)
+	}
+	masterID, err := store.ResolveID(e.ctx, e.db.Q(), "general_masters", "cost-centers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemID, err := store.MasterItemIDByCode(e.ctx, e.db.Q(), masterID, "cc-eng")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def.RouteConditions = []model.RouteCondition{
+		{ConditionType: model.RouteConditionTypeField, CombinationType: model.RouteCombinationAll, RouteCode: &masterRoute, ConditionFields: []model.ConditionField{{
+			FieldKey: model.StepConditionFieldKeyGeneralMasterVariable, Variable: "cost-center", Symbol: "equal", GeneralMasterCode: "cost-centers", GeneralMasterItemCode: "cc-eng",
+		}}},
+		{ConditionType: model.RouteConditionTypeFieldOtherwise, RouteCode: &fallback},
+	}
+	route, err = pf14SelectRouteCodeForApplicant(e.ctx, e.db.Q(), def, &ticket, map[string]any{"cost-center": itemID})
+	if err != nil || route != masterRoute {
+		t.Fatalf("master-reference route=%q err=%v, want %q", route, err, masterRoute)
+	}
+	section := model.WorkflowSection{SectionType: model.SectionTypeForm, Conditional: true, CombinationType: model.StepCombinationAll, ConditionFields: []model.ConditionField{{
+		FieldKey: model.StepConditionFieldKeyGeneralMasterVariable, Variable: "cost-center", Symbol: "equal", GeneralMasterCode: "cost-centers", GeneralMasterItemCode: "cc-eng",
+	}}}
+	visible, err := pf14SectionVisibleWithReferences(e.ctx, e.db.Q(), &ticket, section, map[string]any{"cost-center": itemID})
+	if err != nil || !visible {
+		t.Fatalf("master-reference section visibility=%v err=%v, want visible", visible, err)
+	}
+	section.ConditionFields[0].GeneralMasterItemCode = "cc-sales"
+	visible, err = pf14SectionVisibleWithReferences(e.ctx, e.db.Q(), &ticket, section, map[string]any{"cost-center": itemID})
+	if err != nil || visible {
+		t.Fatalf("nonmatching master-reference section visibility=%v err=%v, want hidden", visible, err)
 	}
 }
 

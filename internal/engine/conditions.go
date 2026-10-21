@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 
 	"punchflow/internal/conditions"
 	"punchflow/internal/model"
+	"punchflow/internal/store"
 )
 
 func pf14InputValues(def model.WorkflowDef, inputs []FieldInput) map[string]any {
@@ -86,6 +88,45 @@ func pf14SectionVisible(section model.WorkflowSection, values map[string]any) bo
 		return true
 	}
 	return pf14ConditionMatchExpression(section.ConditionFields, section.CombinationType, section.CombinationExpression, values)
+}
+
+func pf14SectionVisibleWithReferences(ctx context.Context, q store.Querier, ticket *model.Ticket, section model.WorkflowSection, values map[string]any) (bool, error) {
+	if section.SectionType != model.SectionTypeForm || !section.Conditional {
+		return true, nil
+	}
+	fieldMatches := make([]bool, len(section.ConditionFields))
+	for i, field := range section.ConditionFields {
+		matched, err := pf14bStepConditionMatch(ctx, q, ticket, []model.ConditionField{field}, model.StepCombinationAll, values)
+		if err != nil {
+			return false, err
+		}
+		fieldMatches[i] = matched
+	}
+	switch section.CombinationType {
+	case model.StepCombinationAny:
+		for _, matched := range fieldMatches {
+			if matched {
+				return true, nil
+			}
+		}
+		return false, nil
+	case model.RouteCombinationCustom:
+		fields := make([]model.ConditionField, len(fieldMatches))
+		customValues := make(map[string]any, len(fieldMatches))
+		for i, matched := range fieldMatches {
+			key := fmt.Sprintf("section-condition-%d", i)
+			customValues[key] = matched
+			fields[i] = model.ConditionField{Variable: key, Symbol: "equal", Value: true}
+		}
+		return conditions.MatchExpression(fields, section.CombinationType, section.CombinationExpression, customValues), nil
+	default:
+		for _, matched := range fieldMatches {
+			if !matched {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
 }
 
 func pf14FieldValue(input FieldInput) (any, []string, error) {

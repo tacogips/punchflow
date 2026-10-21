@@ -29,13 +29,19 @@ func (s *Store) pf23ServeDownload(w http.ResponseWriter, r *http.Request, db *st
 		return
 	}
 	parts := strings.Split(string(decoded), ".")
-	if len(parts) != 3 || parts[0] == "" {
+	if (len(parts) != 3 && len(parts) != 4) || parts[0] == "" {
 		kferr.Write(w, kferr.New(http.StatusForbidden, "invalid_signature", "Invalid or expired download URL"))
 		return
 	}
+	userID := ""
+	macIndex := 2
+	if len(parts) == 4 {
+		userID = parts[2]
+		macIndex = 3
+	}
 	expires, err := strconv.ParseInt(parts[1], 10, 64)
-	providedMAC, macErr := hex.DecodeString(parts[2])
-	value := parts[0] + "." + parts[1]
+	providedMAC, macErr := hex.DecodeString(parts[macIndex])
+	value := strings.Join(parts[:macIndex], ".")
 	if err != nil || macErr != nil || !hmac.Equal(providedMAC, hmacSHA256(s.key, value)) {
 		kferr.Write(w, kferr.New(http.StatusForbidden, "invalid_signature", "Invalid or expired download URL"))
 		return
@@ -43,6 +49,14 @@ func (s *Store) pf23ServeDownload(w http.ResponseWriter, r *http.Request, db *st
 	if expires <= s.clock.Now().Unix() {
 		kferr.Write(w, kferr.New(http.StatusForbidden, "expired_signature", "Invalid or expired download URL"))
 		return
+	}
+	if userID != "" {
+		if s.authorizeDownload != nil {
+			if err := s.authorizeDownload(r.Context(), userID, parts[0]); err != nil {
+				kferr.Write(w, err)
+				return
+			}
+		}
 	}
 	file, err := store.FileByID(r.Context(), db.Q(), parts[0])
 	if err != nil {

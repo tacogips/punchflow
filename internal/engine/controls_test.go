@@ -257,6 +257,13 @@ func TestAddCustomStepRunsBetweenRouteSteps(t *testing.T) {
 	if custom.StepOrder != 2 || custom.RouteStepID != nil || custom.AuthorID == nil || *custom.AuthorID != e.user("sales-rep") || custom.Instruction == nil {
 		t.Fatalf("custom step=%+v", custom)
 	}
+	customAssignees, err := store.EngStepAssignees(e.ctx, e.db.Q(), custom.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(customAssignees) != 1 || customAssignees[0].AssignedAt == nil || !customAssignees[0].AssignedAt.Equal(custom.CreatedAt) {
+		t.Fatalf("custom-step assignees=%+v; assignment date should equal creation time %v", customAssignees, custom.CreatedAt)
+	}
 	if got := pf15StepByTitle(t, e, id, "finance").StepOrder; got != 3 {
 		t.Fatalf("finance step order=%d, want 3", got)
 	}
