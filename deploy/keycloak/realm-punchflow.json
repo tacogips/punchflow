@@ -1,0 +1,234 @@
+{
+  "realm": "punchflow",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "punchflow-ui",
+      "name": "Punchflow UI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "http://localhost:8080/auth/oidc/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "237e0c71-373a-4003-b856-a3608b6434e2",
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "User",
+      "email": "admin@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "c23a524a-b535-49c7-ad74-2aa9c382a1f8",
+      "username": "ceo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ceo",
+      "lastName": "User",
+      "email": "ceo@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "7905d77d-73ad-42a5-b8f8-00fc28eeed54",
+      "username": "sales-manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Sales",
+      "lastName": "User",
+      "email": "sales-manager@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "67daf114-8e9c-4659-bc5e-1bbd7ed98c28",
+      "username": "sales-deputy",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Sales",
+      "lastName": "User",
+      "email": "sales-deputy@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "fffd6448-ff0c-4b45-87a8-0adcf2d15706",
+      "username": "sales-rep",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Sales",
+      "lastName": "User",
+      "email": "sales-rep@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "2afc8c22-21ef-4d00-9288-d19a18c7b505",
+      "username": "eng-manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Eng",
+      "lastName": "User",
+      "email": "eng-manager@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "ecb73742-605b-4eb6-8d53-712703fac6c1",
+      "username": "engineer",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Engineer",
+      "lastName": "User",
+      "email": "engineer@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "2c80859f-5b6b-4d1a-8e76-71e23ec1b3be",
+      "username": "finance-manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Finance",
+      "lastName": "User",
+      "email": "finance-manager@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "43943674-0c61-450e-b148-847c5ced7f92",
+      "username": "accountant",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Accountant",
+      "lastName": "User",
+      "email": "accountant@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "0edfe221-a58c-454d-bf11-163fa7f45f00",
+      "username": "hr-manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Hr",
+      "lastName": "User",
+      "email": "hr-manager@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "2b984df4-6f02-4cd4-b59c-8f53d753486f",
+      "username": "assistant",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Assistant",
+      "lastName": "User",
+      "email": "assistant@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "5bf4e51e-b05a-4d14-b07c-7677ef3df7ce",
+      "username": "suspended-user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Suspended",
+      "lastName": "User",
+      "email": "suspended-user@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "544551b9-0e38-45cb-b1df-3de366548a90",
+      "username": "invited-user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Invited",
+      "lastName": "User",
+      "email": "invited-user@punchflow.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "punchflow",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

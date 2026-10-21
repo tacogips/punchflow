@@ -9,6 +9,15 @@ This directory contains reference materials for system design and implementation
 | Go Documentation | https://go.dev/doc/ | Official Go documentation |
 | Effective Go | https://go.dev/doc/effective_go | Go best practices and idioms |
 | Standard Go Project Layout | https://github.com/golang-standards/project-layout | Standard project structure conventions |
+| kickflow Developer | https://developer.kickflow.com/ | Official kickflow REST API, Webhook and MCP documentation |
+| kickflow Help Center | https://support.kickflow.com/hc/ja | Official kickflow product manual (Japanese) |
+
+## kickflow (dummy server target)
+
+| File | Description |
+|------|-------------|
+| [kickflow-api.md](./kickflow-api.md) | Consolidated English reference: API conventions, all 96 REST operations, all schemas, webhooks, UI feature inventory, confirmed vs inferred |
+| [kickflow-openapi.yaml](./kickflow-openapi.yaml) | Official OpenAPI 3.1 definition (MIT), copied from https://developer.kickflow.com/rest/schema.yaml on 2026-10-20; punchflow adds `viewers` and `watcherUserId` to the createTicket/updateTicket request bodies from the 2026-08-05 changelog (marked by a comment) |
 
 ## Reference Documents
 

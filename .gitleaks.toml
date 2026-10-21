@@ -1,0 +1,12 @@
+# Extends the default gitleaks rules. punchflow is a local/dev-only dummy
+# server whose seeded fixture tokens (fixtures/default/tokens.json) are
+# documented in README curl examples; they are public test credentials.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "punchflow seeded dev fixture tokens"
+regexTarget = "match"
+regexes = [
+  '''pf_(?:pat|sat)_dev_[a-z]+''',
+]
