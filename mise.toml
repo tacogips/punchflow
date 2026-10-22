@@ -104,6 +104,20 @@ run = "docker compose -f deploy/keycloak/docker-compose.yml up -d"
 description = "Stop local Keycloak"
 run = "docker compose -f deploy/keycloak/docker-compose.yml down"
 
+[tasks."docker:build"]
+description = "Build the container image for the local platform"
+run = "docker build -t ${PUNCHFLOW_IMAGE:-tacogips/punchflow}:latest ."
+
+[tasks."docker:push"]
+description = "Build and push the multi-arch container image to Docker Hub"
+run = '''
+image="${PUNCHFLOW_IMAGE:-tacogips/punchflow}"
+version="$(cat internal/build/VERSION)"
+sha="$(git rev-parse --short HEAD)"
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t "$image:latest" -t "$image:$version" -t "$image:sha-$sha" --push .
+'''
+
 [tasks.fmt]
 description = "Format code"
 run = "go fmt ./..."

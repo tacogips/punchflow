@@ -14,6 +14,16 @@ mise run build
 
 The server listens on `http://localhost:8080` and seeds the default fixtures into an empty database. To use an explicit database, run `./punchflow serve --db /tmp/pf.sqlite`. `mise run dev` is the development shortcut.
 
+### Container image
+
+A multi-arch image (`linux/amd64`, `linux/arm64`) is published as [`tacogips/punchflow`](https://hub.docker.com/r/tacogips/punchflow), tagged `latest`, the version (for example `0.1.0`) and `sha-<commit>`:
+
+```sh
+docker run --rm -p 8080:8080 -v punchflow-data:/data tacogips/punchflow:latest
+```
+
+The image listens on `0.0.0.0:8080`, keeps the SQLite database in the `/data` volume and runs as a non-root user. Pass any `serve` flag as arguments (`docker run ... tacogips/punchflow serve --enable-local-login`) or set the `PUNCHFLOW_*` variables with `-e`. For Keycloak, the OIDC issuer URL must be reachable from both the browser and the container. Build it locally with `mise run docker:build`, and publish with `mise run docker:push`.
+
 ## Seeded personas
 
 The tokens and accounts below are fixture values for local use only. They are public development credentials, not secrets; never reuse them outside a throwaway local environment.

@@ -1,0 +1,13 @@
+.git
+.claude
+.punchflow-data
+**/node_modules
+**/tmp
+web/dist/app
+/punchflow
+/bin
+/dist
+design-docs
+impl-plans
+**/*.private*
+**/.env
