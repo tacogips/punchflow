@@ -2,10 +2,11 @@
 
 ## Active Plans
 
-- [Main Merge and Container Release](active/main-container-release.md)
+- None.
 
 ## Completed Plans
 
+- [Main Merge and Container Release](completed/main-container-release.md)
 - [Round 9 Routing and Lifecycle Fixes](completed/r9-routing-lifecycle.md)
 
 This directory contains implementation plans that translate design documents into actionable implementation specifications.
@@ -49,6 +50,7 @@ The session 467 plans are archived; `active/` holds the final dispatch manifest.
 
 ## Completed Plans
 
+- [Main Merge and Container Release](completed/main-container-release.md)
 | Plan | Completed | Design Reference |
 |------|-----------|------------------|
 | [pf-01-foundation-primitives](./completed/pf-01-foundation-primitives.md) | 2026-10-21 (s467) | `design-docs/specs/architecture.md` |
