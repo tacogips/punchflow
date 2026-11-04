@@ -1,0 +1,78 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000007",
+    "name": "Current",
+    "current": true,
+    "teams": [
+      {
+        "id": "00000000-0000-4000-8000-000000000008",
+        "code": "ROOT",
+        "name": "Root",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "U1",
+            "leader": true,
+            "gradeCodes": [
+              "G2"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000009",
+        "code": "TEAM",
+        "name": "Team",
+        "parentCode": "ROOT",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "U2",
+            "leader": false,
+            "gradeCodes": [
+              "G1"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000027",
+    "name": "Current",
+    "current": true,
+    "teams": [
+      {
+        "id": "00000000-0000-4000-8000-000000000028",
+        "code": "ROOT",
+        "name": "Root",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "U1",
+            "leader": true,
+            "gradeCodes": [
+              "G2"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000029",
+        "code": "TEAM",
+        "name": "Team",
+        "parentCode": "ROOT",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "U2",
+            "leader": false,
+            "gradeCodes": [
+              "G1"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "02a21e86-cd2a-4e7a-9112-5d1338c577e4",
+    "name": "Needs review",
+    "description": "Waiting for a second pair of eyes",
+    "color": "f59e0b"
+  },
+  {
+    "id": "dc829bc0-4c98-480c-b3aa-8684220b3ae4",
+    "name": "Reviewed",
+    "color": "22c55e"
+  },
+  {
+    "id": "cbcbccb6-8a24-4e2c-98a3-e7e11d173129",
+    "name": "Urgent",
+    "description": "Handle before the end of the day",
+    "color": "ef4444"
+  }
+]

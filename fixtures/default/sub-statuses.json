@@ -1,0 +1,19 @@
+[
+  {
+    "id": "4bd5501e-680e-4184-9571-b75bb2697a38",
+    "code": "finance-check",
+    "name": "Finance check",
+    "notes": "Payment is being prepared; the applicant cannot withdraw and approvers cannot deny.",
+    "allowWithdrawal": false,
+    "allowRejection": true,
+    "allowDenial": false
+  },
+  {
+    "id": "de330333-e1a6-410e-b1cc-de0d17947731",
+    "code": "under-review",
+    "name": "Under review",
+    "allowWithdrawal": true,
+    "allowRejection": true,
+    "allowDenial": true
+  }
+]

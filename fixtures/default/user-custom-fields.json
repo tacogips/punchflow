@@ -1,0 +1,40 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000c00001",
+    "code": "cost-center",
+    "name": "Cost center",
+    "fieldType": "text",
+    "visibleToEveryone": true
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000c00002",
+    "code": "employment-type",
+    "name": "Employment type",
+    "fieldType": "pullDown",
+    "options": [
+      "full-time",
+      "part-time",
+      "contractor"
+    ],
+    "visibleToEveryone": true
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000c00003",
+    "code": "hire-date",
+    "name": "Hire date",
+    "fieldType": "date",
+    "visibleToEveryone": false
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000c00004",
+    "code": "skills",
+    "name": "Skills",
+    "fieldType": "checkbox",
+    "options": [
+      "go",
+      "typescript",
+      "sql"
+    ],
+    "visibleToEveryone": false
+  }
+]

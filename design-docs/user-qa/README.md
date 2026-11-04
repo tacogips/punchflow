@@ -17,6 +17,7 @@ Store questions, pending decisions, and items awaiting user approval.
 
 - [qa-example.md](./qa-example.md) - Example: Database Selection (template example)
 - [pending-example.md](./pending-example.md) - Example: CLI Output Format (template example)
+- [pending-punchflow-defaults.md](./pending-punchflow-defaults.md) - punchflow defaults chosen without user input (non-blocking)
 
 ## Adding New Items
 

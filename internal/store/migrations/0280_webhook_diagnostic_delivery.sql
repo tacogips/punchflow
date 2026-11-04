@@ -1,0 +1,1 @@
+ALTER TABLE webhook_events ADD COLUMN diagnostic INTEGER NOT NULL DEFAULT 0;

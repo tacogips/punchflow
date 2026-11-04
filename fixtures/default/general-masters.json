@@ -1,0 +1,113 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000039",
+    "code": "cost-centers",
+    "name": "Cost Centers",
+    "defaultSortBy": "code",
+    "initialDisplayCode": true,
+    "initialDisplayCreatedAt": false,
+    "initialDisplayDescription": true,
+    "fields": [
+      {
+        "id": "00000000-0000-4000-8000-000000000040",
+        "code": "budget-owner",
+        "title": "Budget owner",
+        "fieldType": "text",
+        "required": false,
+        "fieldOrder": 1,
+        "visible": true,
+        "initialDisplay": true
+      }
+    ],
+    "items": [
+      {
+        "id": "00000000-0000-4000-8000-000000000043",
+        "code": "cc-eng",
+        "name": "Engineering",
+        "inputs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000044",
+            "fieldCode": "budget-owner",
+            "value": "eng-manager"
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000045",
+        "code": "cc-legacy",
+        "name": "Legacy",
+        "endsOn": "2020-12-31",
+        "inputs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000046",
+            "fieldCode": "budget-owner",
+            "value": "admin"
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000041",
+        "code": "cc-sales",
+        "name": "Sales",
+        "inputs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000042",
+            "fieldCode": "budget-owner",
+            "value": "sales-manager"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000047",
+    "code": "vendors",
+    "name": "Vendors",
+    "defaultSortBy": "code",
+    "initialDisplayCode": true,
+    "initialDisplayCreatedAt": false,
+    "initialDisplayDescription": false,
+    "fields": [
+      {
+        "id": "00000000-0000-4000-8000-000000000048",
+        "code": "country",
+        "title": "Country",
+        "fieldType": "pull_down",
+        "required": true,
+        "fieldOrder": 1,
+        "visible": true,
+        "initialDisplay": true,
+        "options": [
+          "JP",
+          "US"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "id": "00000000-0000-4000-8000-000000000049",
+        "code": "vendor-acme",
+        "name": "Acme",
+        "inputs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000050",
+            "fieldCode": "country",
+            "value": "JP"
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000051",
+        "code": "vendor-globex",
+        "name": "Globex",
+        "inputs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000052",
+            "fieldCode": "country",
+            "value": "US"
+          }
+        ]
+      }
+    ]
+  }
+]

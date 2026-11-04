@@ -1,0 +1,15 @@
+{
+  "tenant": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "publicId": "punchflow-dev",
+    "name": "punchflow dev tenant",
+    "plan": "enterprise",
+    "mode": "normal",
+    "ipAllowlist": [],
+    "allowedEmailDomains": [],
+    "selfServiceProxy": false,
+    "fiscalYearStartMonth": 4,
+    "createdAt": "2026-10-20T00:00:00Z",
+    "updatedAt": "2026-10-20T00:00:00Z"
+  }
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000005",
+    "code": "chief",
+    "name": "Chief",
+    "level": 20,
+    "isDefault": false
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "code": "director",
+    "name": "Director",
+    "level": 40,
+    "isDefault": false
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "code": "executive",
+    "name": "Executive",
+    "level": 50,
+    "isDefault": false
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000004",
+    "code": "manager",
+    "name": "Manager",
+    "level": 30,
+    "isDefault": false
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000006",
+    "code": "staff",
+    "name": "Staff",
+    "level": 10,
+    "isDefault": true
+  }
+]

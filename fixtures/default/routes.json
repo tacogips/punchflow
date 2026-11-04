@@ -1,0 +1,426 @@
+[
+  {
+    "id": "0c372e08-66fb-42ab-9a9d-6fb55f46ea07",
+    "code": "expense-large",
+    "status": "visible",
+    "name": "Large expense",
+    "description": "",
+    "notes": "",
+    "folderCode": "finance",
+    "steps": [
+      {
+        "id": "58ec7957-5ebe-4a30-8e16-f7bd2bdc6e7b",
+        "code": "large-manager",
+        "stepOrder": 1,
+        "title": "Manager approval",
+        "stepType": "manager",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": "higher_manager",
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "3d64009d-f479-455a-aabf-4dee4b476b5f",
+        "code": "large-finance-any",
+        "stepOrder": 2,
+        "title": "Finance review",
+        "stepType": "team",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [
+          {
+            "teamCode": "finance",
+            "gradeSymbol": null
+          }
+        ],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "a5553cf4-1654-435c-9d64-2b35a8662166",
+        "code": "large-ceo-all",
+        "stepOrder": 2,
+        "title": "Executive approval",
+        "stepType": "user",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 0,
+        "requiredApprovalsPercent": 100,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [
+          "ceo"
+        ],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "ffda8afa-58be-42f4-9980-2318896dcf70",
+        "code": "large-accountant-confirm",
+        "stepOrder": 3,
+        "title": "Finance confirmation",
+        "stepType": "user",
+        "actionType": "confirm",
+        "instruction": null,
+        "requiredApprovalsNumber": 0,
+        "requiredApprovalsPercent": 100,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [
+          "accountant"
+        ],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      }
+    ]
+  },
+  {
+    "id": "9d6e0593-02ae-452c-972b-7337f030b257",
+    "code": "expense-standard",
+    "status": "visible",
+    "name": "Standard expense",
+    "description": "",
+    "notes": "",
+    "folderCode": "finance",
+    "steps": [
+      {
+        "id": "b9eded0f-56d2-41c4-8e63-87ec0f9ca15b",
+        "code": "expense-manager",
+        "stepOrder": 1,
+        "title": "Manager approval",
+        "stepType": "manager",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": "higher_manager",
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": "under-review"
+      },
+      {
+        "id": "b7bd2c08-4f54-44fe-b593-3c83ef7fa1d8",
+        "code": "expense-finance",
+        "stepOrder": 2,
+        "title": "Finance approval",
+        "stepType": "team",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": true,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [
+          {
+            "teamCode": "finance",
+            "gradeSymbol": null
+          }
+        ],
+        "routeStepCondition": null,
+        "subStatus": "finance-check"
+      }
+    ]
+  },
+  {
+    "id": "329dd8fb-94ca-48ba-b53e-dc7c0aafe14c",
+    "code": "leave",
+    "status": "visible",
+    "name": "Leave approval",
+    "description": "",
+    "notes": "",
+    "folderCode": "general",
+    "steps": [
+      {
+        "id": "42dfc0c4-3bbe-4d3c-ac4b-b437262fad90",
+        "code": "leave-manager",
+        "stepOrder": 1,
+        "title": "Manager approval",
+        "stepType": "manager",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": "skip",
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "67f5dcfb-a4e9-4b5a-9479-ecc1abffa4e3",
+        "code": "leave-delegate",
+        "stepOrder": 2,
+        "title": "Delegate approval",
+        "stepType": "assignee_customizable",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": 1,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "4d383ec6-f524-4e1e-9bbd-bc7162520f5d",
+        "code": "leave-hr-none",
+        "stepOrder": 3,
+        "title": "HR processing",
+        "stepType": "team",
+        "actionType": "none",
+        "instruction": null,
+        "requiredApprovalsNumber": 0,
+        "requiredApprovalsPercent": 100,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [
+          {
+            "teamCode": "hr",
+            "gradeSymbol": null
+          }
+        ],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "e3da5c81-0e63-46ca-bd9c-ee61f969bbe0",
+        "code": "leave-author-confirm",
+        "stepOrder": 4,
+        "title": "Applicant confirmation",
+        "stepType": "author",
+        "actionType": "confirm",
+        "instruction": null,
+        "requiredApprovalsNumber": 0,
+        "requiredApprovalsPercent": 100,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      }
+    ]
+  },
+  {
+    "id": "a8f648a9-317a-4b0c-9dae-6fc898e00369",
+    "code": "purchase",
+    "status": "visible",
+    "name": "Purchase approval",
+    "description": "",
+    "notes": "",
+    "folderCode": "general",
+    "steps": [
+      {
+        "id": "29b0b254-6b50-4baf-ba8d-14ab87136b93",
+        "code": "purchase-nominee",
+        "stepOrder": 1,
+        "title": "Nominee approval",
+        "stepType": "author_customizable",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": 1,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "e011a0dd-ac91-4c78-b357-692d137b1cc5",
+        "code": "purchase-reviewer",
+        "stepOrder": 2,
+        "title": "Reviewer approval",
+        "stepType": "dynamic_user",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [
+          {
+            "gradeSymbol": null,
+            "variable": "reviewer"
+          }
+        ],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "8077e9e1-4d56-4e20-a98f-4b0a60808c9d",
+        "code": "purchase-urgent",
+        "stepOrder": 3,
+        "title": "Urgent team review",
+        "stepType": "team",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [
+          {
+            "teamCode": "engineering",
+            "gradeSymbol": "greater_than_or_equal",
+            "gradeCodes": [
+              "manager"
+            ]
+          }
+        ],
+        "routeStepCondition": {
+          "id": "fedc1b94-695f-4440-b365-b798fd70c7ae",
+          "conditionType": "conditional_skip",
+          "combinationType": "all",
+          "routeStepConditionFields": [
+            {
+              "id": "148a1160-7cc0-44a4-b037-e017fa3257ee",
+              "variable": "urgent",
+              "fieldKey": "checkbox_variable",
+              "symbol": "equal",
+              "value": "yes"
+            }
+          ]
+        },
+        "subStatus": null
+      },
+      {
+        "id": "54ede0c0-ce99-4e4e-919e-110df22c5190",
+        "code": "purchase-team",
+        "stepOrder": 4,
+        "title": "Approving team",
+        "stepType": "dynamic_team",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 1,
+        "requiredApprovalsPercent": 0,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [],
+        "targets": [
+          {
+            "gradeSymbol": null,
+            "variable": "approving-team"
+          }
+        ],
+        "routeStepCondition": null,
+        "subStatus": null
+      },
+      {
+        "id": "011d6b96-2a50-4fbd-aee5-8c1a1a9ab9cc",
+        "code": "purchase-large",
+        "stepOrder": 5,
+        "title": "Large amount approval",
+        "stepType": "user",
+        "actionType": "approve",
+        "instruction": null,
+        "requiredApprovalsNumber": 0,
+        "requiredApprovalsPercent": 100,
+        "fallbackType": null,
+        "allowSelfApproval": false,
+        "managerSelectionType": "closest",
+        "allowRaising": false,
+        "minCustomAssignees": null,
+        "approverAssignmentInstruction": null,
+        "userCodes": [
+          "finance-manager"
+        ],
+        "targets": [],
+        "routeStepCondition": {
+          "id": "13d27fda-14e2-4282-9d60-c9806919d6e6",
+          "conditionType": "conditional",
+          "combinationType": "all",
+          "routeStepConditionFields": [
+            {
+              "id": "5e8e4837-830d-4c1d-b51c-6d4556f49709",
+              "variable": "amount",
+              "fieldKey": "number_variable",
+              "symbol": "greater_than_or_equal",
+              "value": 50000
+            }
+          ]
+        },
+        "subStatus": null
+      }
+    ]
+  }
+]

@@ -1,0 +1,7 @@
+[
+  {
+    "name": "taxrate",
+    "value": 1.1,
+    "description": "Default test tax rate"
+  }
+]

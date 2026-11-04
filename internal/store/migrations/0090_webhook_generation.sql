@@ -1,0 +1,1 @@
+ALTER TABLE webhooks ADD COLUMN state_generation INTEGER NOT NULL DEFAULT 0;

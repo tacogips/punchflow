@@ -1,0 +1,15 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000026",
+    "name": "receiver",
+    "url": "http://localhost:9000/hook",
+    "secret": "dev-secret",
+    "enabled": true,
+    "workflowCodes": [
+      "WF"
+    ],
+    "eventTypes": [
+      "ping"
+    ]
+  }
+]

@@ -1,0 +1,977 @@
+package engine
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"punchflow/internal/conditions"
+	"punchflow/internal/kferr"
+	"punchflow/internal/model"
+	"punchflow/internal/store"
+)
+
+// pf14SelectRouteCode picks the route code for the given form values by walking
+// the workflow's route conditions in order.
+func pf14SelectRouteCode(def model.WorkflowDef, values map[string]any) (string, error) {
+	routeCode := def.RouteCode
+	matchedBranch := false
+	for _, condition := range def.RouteConditions {
+		if condition.ConditionType == model.RouteConditionTypeFieldOtherwise {
+			if !matchedBranch && condition.RouteCode != nil {
+				routeCode = *condition.RouteCode
+			}
+			break
+		}
+		match := condition.ConditionType == model.RouteConditionTypeAlways || pf14ConditionMatchExpression(condition.ConditionFields, condition.CombinationType, condition.CombinationExpression, values)
+		if !match {
+			continue
+		}
+		matchedBranch = true
+		if condition.ErrorMessage != nil && *condition.ErrorMessage != "" {
+			return "", kferr.ValidationFailed(map[string][]string{"base": {*condition.ErrorMessage}})
+		}
+		if condition.RouteCode != nil {
+			routeCode = *condition.RouteCode
+			break
+		}
+	}
+	return routeCode, nil
+}
+
+// pf14BuildRoute materializes the route steps for a submitted ticket and then
+// runs the shared advancement routine (pf14Advance), so skipped groups and
+// steps that need no user action are traversed immediately. After it returns
+// the ticket is either waiting on the first actionable group or, when nothing
+// is left to do, already completed; callers must check ticket.Status.
+func (e *Engine) pf14BuildRoute(ctx context.Context, tx *store.Tx, ticket *model.Ticket, def model.WorkflowDef, inputs []FieldInput, approvers []ApproverInput, nowTime int64) error {
+	values := pf14InputValues(def, inputs)
+	var applicantValues map[string]any
+	if ticket.AuthorID != nil {
+		applicant, err := ActorForUser(ctx, tx, *ticket.AuthorID)
+		if err != nil {
+			return err
+		}
+		blocked, err := pf16BlockedSections(ctx, tx, applicant, *ticket, def)
+		if err != nil {
+			return err
+		}
+		applicantValues = pf14RouteApplicantValues(def, values, blocked)
+	} else {
+		blocked := map[string]bool{}
+		for _, section := range def.SectionList {
+			if section.ViewRestriction {
+				blocked[section.ID] = true
+			}
+		}
+		applicantValues = pf14RouteApplicantValues(def, values, blocked)
+	}
+	// Route branching runs as the applicant. Preserve values from sections
+	// they can view and clear only values from sections they cannot access.
+	routeCode, err := pf14SelectRouteCodeForApplicant(ctx, tx, def, ticket, applicantValues)
+	if err != nil {
+		return err
+	}
+	routeID, err := store.RouteIDByCode(ctx, tx, routeCode)
+	if err != nil {
+		return kferr.ValidationFailed(map[string][]string{"route": {"is unavailable"}})
+	}
+	route, err := store.RouteDefByID(ctx, tx, routeID)
+	if err != nil {
+		return err
+	}
+	if route.Status != model.RouteStatusVisible {
+		return kferr.ValidationFailed(map[string][]string{"route": {"is unavailable"}})
+	}
+	for _, nomination := range approvers {
+		var selected *model.RouteStep
+		for i := range route.Steps {
+			if route.Steps[i].Code == nomination.RouteStepCode && route.Steps[i].StepType == model.StepTypeAuthorCustomizable {
+				selected = &route.Steps[i]
+				break
+			}
+		}
+		if selected == nil {
+			return kferr.InvalidParameter("Applicant nominations are only allowed for author-customizable steps")
+		}
+		for _, userID := range nomination.UserIDs {
+			if err = pf14bValidateNominee(ctx, tx, userID, selected.Targets, values); err != nil {
+				return err
+			}
+		}
+	}
+	// INF-SEC-05: route selection uses applicant-visible values, while approval
+	// step conditions and dynamic targets always treat restricted fields as empty.
+	stepValues := pf14RouteStepValues(def, values)
+	ticket.RouteID = &routeID
+	for _, custom := range approvers {
+		if err = store.EngInsertCustomApprovers(ctx, tx, ticket.ID, custom.RouteStepCode, pf14UniqueUserIDs(custom.UserIDs)); err != nil {
+			return err
+		}
+	}
+	display := 0
+	groups := map[int][]model.TicketStep{}
+	for _, step := range route.Steps {
+		display++
+		conditionMatches := true
+		var er error
+		if step.RouteStepCondition != nil && step.RouteStepCondition.ConditionType != model.StepConditionTypeAlways {
+			conditionMatches, er = pf14bStepConditionMatch(ctx, tx, ticket, step.RouteStepCondition.RouteStepConditionFields, step.RouteStepCondition.CombinationType, stepValues)
+			if er != nil {
+				return er
+			}
+		}
+		skip := step.RouteStepCondition != nil && (step.RouteStepCondition.ConditionType == model.StepConditionTypeConditionalSkip && conditionMatches || step.RouteStepCondition.ConditionType == model.StepConditionTypeConditional && !conditionMatches)
+		executionSkip := skip
+		fb := false
+		result := ""
+		userIDs, er := e.pf14ResolveAssignees(ctx, tx, ticket, step, stepValues, approvers)
+		if er != nil {
+			return er
+		}
+		if step.StepType == model.StepTypeAuthorCustomizable && !skip {
+			minCustomAssignees := 1
+			if step.MinCustomAssignees != nil {
+				minCustomAssignees = *step.MinCustomAssignees
+			}
+			if len(pf14UniqueUserIDs(userIDs)) < minCustomAssignees {
+				return kferr.ValidationFailed(map[string][]string{"base": {"custom approver is required"}})
+			}
+			if len(userIDs) == 0 {
+				skip = true
+			}
+		}
+		if len(userIDs) == 0 && !skip && step.StepType != model.StepTypeAuthorCustomizable && step.StepType != model.StepTypeAssigneeCustomizable {
+			if step.FallbackType == nil {
+				return kferr.ValidationFailed(map[string][]string{"base": {"step has no assignees"}})
+			}
+			userIDs, er = pf14bFallbackAssignees(ctx, tx, ticket, step, stepValues)
+			if er != nil {
+				return er
+			}
+			fb = true
+			result = *step.FallbackType
+			if len(userIDs) == 0 {
+				switch *step.FallbackType {
+				case model.FallbackSkip:
+					skip = true
+				case model.FallbackNoFallback:
+					// Keep this step in progress without assignees. An administrator
+					// can assign it later; the empty group must keep waiting.
+				}
+			}
+		}
+		// Kickflow's manager route has one final self-approval fallback after
+		// manager searches and the configured fallback produce no candidate.
+		if len(userIDs) == 0 && !executionSkip && step.StepType == model.StepTypeManager && step.AllowSelfApproval && ticket.AuthorID != nil {
+			userIDs = []string{*ticket.AuthorID}
+			skip = false
+		}
+		status := model.StepStatusPending
+		if skip {
+			status = model.StepStatusSkipped
+		}
+		routeStepID, routeCodeValue := step.ID, step.Code
+		title, action := step.Title, step.ActionType
+		ts := model.TicketStep{ID: store.NewID(), TicketID: ticket.ID, RouteStepID: &routeStepID, RouteStepCode: &routeCodeValue, StepOrder: step.StepOrder, DisplayOrder: display, Title: &title, Instruction: step.Instruction, ActionType: action, RequiredApprovalsNumber: step.RequiredApprovalsNumber, RequiredApprovalsPercent: step.RequiredApprovalsPercent, Status: status, Skip: skip, Fallback: fb, CreatedAt: store.Time(nowTime), UpdatedAt: store.Time(nowTime)}
+		if fb {
+			ts.FallbackResult = &result
+		}
+		if err = store.EngInsertStep(ctx, tx, ts); err != nil {
+			return err
+		}
+		groups[step.StepOrder] = append(groups[step.StepOrder], ts)
+		if skip && step.StepType == model.StepTypeAuthorCustomizable {
+			continue
+		}
+		for _, uid := range userIDs {
+			as := model.TicketAssignee{ID: store.NewID(), TicketStepID: ts.ID, TicketID: ticket.ID, UserID: uid, CreatedAt: store.Time(nowTime), UpdatedAt: store.Time(nowTime)}
+			if err = store.EngInsertAssignee(ctx, tx, as); err != nil {
+				return err
+			}
+		}
+	}
+	if len(groups) == 0 {
+		return kferr.ValidationFailed(map[string][]string{"route": {"has no steps"}})
+	}
+	ticket.CurrentStep = 0
+	return e.pf14Advance(ctx, tx, ticket, store.Time(nowTime))
+}
+
+// pf14SelectRouteCodeForApplicant evaluates route fields against both the
+// applicant's form values and resource context (team, grade, and references).
+func pf14SelectRouteCodeForApplicant(ctx context.Context, tx store.Querier, def model.WorkflowDef, ticket *model.Ticket, values map[string]any) (string, error) {
+	routeCode := def.RouteCode
+	matchedBranch := false
+	for _, condition := range def.RouteConditions {
+		if condition.ConditionType == model.RouteConditionTypeFieldOtherwise {
+			if !matchedBranch && condition.RouteCode != nil {
+				routeCode = *condition.RouteCode
+			}
+			break
+		}
+		match := condition.ConditionType == model.RouteConditionTypeAlways
+		if condition.ConditionType == model.RouteConditionTypeField {
+			fieldMatches := make([]bool, len(condition.ConditionFields))
+			for i, field := range condition.ConditionFields {
+				fieldMatch, err := pf14bStepConditionMatch(ctx, tx, ticket, []model.ConditionField{field}, model.StepCombinationAll, values)
+				if err != nil {
+					return "", err
+				}
+				fieldMatches[i] = fieldMatch
+			}
+			switch condition.CombinationType {
+			case model.RouteCombinationAny:
+				for _, matched := range fieldMatches {
+					match = match || matched
+				}
+			case model.RouteCombinationCustom:
+				fields := make([]model.ConditionField, len(fieldMatches))
+				customValues := make(map[string]any, len(fieldMatches))
+				for i, matched := range fieldMatches {
+					key := fmt.Sprintf("route-condition-%d", i)
+					customValues[key] = matched
+					fields[i] = model.ConditionField{Variable: key, Symbol: "equal", Value: true}
+				}
+				match = conditions.MatchExpression(fields, condition.CombinationType, condition.CombinationExpression, customValues)
+			default:
+				match = len(fieldMatches) > 0
+				for _, matched := range fieldMatches {
+					match = match && matched
+				}
+			}
+		}
+		if !match {
+			continue
+		}
+		matchedBranch = true
+		if condition.ErrorMessage != nil && *condition.ErrorMessage != "" {
+			return "", kferr.ValidationFailed(map[string][]string{"base": {*condition.ErrorMessage}})
+		}
+		if condition.RouteCode != nil {
+			routeCode = *condition.RouteCode
+			break
+		}
+	}
+	return routeCode, nil
+}
+
+func pf14RouteApplicantValues(def model.WorkflowDef, values map[string]any, blocked map[string]bool) map[string]any {
+	filtered := make(map[string]any, len(values))
+	for key, value := range values {
+		filtered[key] = value
+	}
+	for _, section := range def.SectionList {
+		if section.SectionType != model.SectionTypeForm || !blocked[section.ID] {
+			continue
+		}
+		for _, field := range section.FormFields {
+			filtered[field.ID] = nil
+			filtered[field.Code] = nil
+			filtered[model.VariableName(field.Code)] = nil
+		}
+	}
+	return filtered
+}
+
+func pf14RouteStepValues(def model.WorkflowDef, values map[string]any) map[string]any {
+	filtered := make(map[string]any, len(values))
+	for key, value := range values {
+		filtered[key] = value
+	}
+	for _, section := range def.SectionList {
+		if section.SectionType != model.SectionTypeForm || !section.ViewRestriction {
+			continue
+		}
+		for _, field := range section.FormFields {
+			// Keep restricted references present with a known-empty value. Route
+			// conditions must distinguish empty from an unknown variable so
+			// is_empty/is_not_empty behave like Kickflow in either mode.
+			filtered[field.ID] = nil
+			filtered[field.Code] = nil
+			filtered[model.VariableName(field.Code)] = nil
+		}
+	}
+	return filtered
+}
+
+func (e *Engine) pf14ResolveAssignees(ctx context.Context, tx *store.Tx, ticket *model.Ticket, step model.RouteStep, values map[string]any, approvers []ApproverInput) ([]string, error) {
+	ids := []string{}
+	add := func(id string) {
+		if id != "" && !pf14Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	addAutomatic := func(id string) error {
+		active, err := pf14bUserActive(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if active {
+			add(id)
+		}
+		return nil
+	}
+	switch step.StepType {
+	case model.StepTypeAuthor:
+		if ticket.AuthorID != nil {
+			add(*ticket.AuthorID)
+		}
+	case model.StepTypeUser:
+		for _, code := range step.UserCodes {
+			id, err := store.UserIDByCode(ctx, tx, code)
+			if err == nil {
+				add(id)
+			}
+		}
+	case model.StepTypeAuthorCustomizable:
+		// Nominations are persisted by pf14BuildRoute (submission payload) or
+		// by an earlier draft save, so both sources are read from the store.
+		custom, err := store.EngCustomApprovers(ctx, tx, ticket.ID, step.Code)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range custom {
+			if err := pf14bValidateNominee(ctx, tx, id, step.Targets, values); err != nil {
+				return nil, err
+			}
+			add(id)
+		}
+	case model.StepTypeAssigneeCustomizable:
+		custom, err := store.EngCustomApprovers(ctx, tx, ticket.ID, step.Code)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range custom {
+			if err := pf14bValidateNominee(ctx, tx, id, step.Targets, values); err != nil {
+				return nil, err
+			}
+			add(id)
+		}
+	case model.StepTypeTeam, model.StepTypeDynamicTeam:
+		for _, target := range step.Targets {
+			teamIDs, err := pf14TargetTeams(ctx, tx, target, values)
+			if err != nil {
+				return nil, err
+			}
+			for _, teamID := range teamIDs {
+				members, err := store.EngUsersByTeam(ctx, tx, teamID, target.Descendants)
+				if err != nil {
+					return nil, err
+				}
+				gradeTeamIDs := []string{teamID}
+				if target.Descendants && target.GradeSymbol != nil {
+					gradeTeamIDs, err = pf14bTargetTeamIDs(ctx, tx, teamID, true)
+					if err != nil {
+						return nil, err
+					}
+				}
+				for _, id := range members {
+					matches := false
+					for _, gradeTeamID := range gradeTeamIDs {
+						matches, err = pf14bUserMatchesGrade(ctx, tx, id, gradeTeamID, target.GradeSymbol, target.GradeCodes)
+						if err != nil {
+							return nil, err
+						}
+						if matches {
+							break
+						}
+					}
+					if matches {
+						if err = addAutomatic(id); err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
+		}
+	case model.StepTypeDynamicUser:
+		for _, target := range step.Targets {
+			userIDs, err := pf14ResolveUserRefs(ctx, tx, pf14VariableRefs(values, target.Variable))
+			if err != nil {
+				return nil, err
+			}
+			for _, id := range userIDs {
+				if err = addAutomatic(id); err != nil {
+					return nil, err
+				}
+			}
+		}
+	case model.StepTypeManager:
+		if ticket.AuthorTeamID != nil {
+			ancestors, err := store.EngTeamAncestors(ctx, tx, *ticket.AuthorTeamID)
+			if err != nil {
+				return nil, err
+			}
+			for index, team := range ancestors {
+				leaders, err := store.EngLeadersOfTeam(ctx, tx, team.ID)
+				if err != nil {
+					return nil, err
+				}
+				for _, id := range leaders {
+					if ticket.AuthorID != nil && id == *ticket.AuthorID && !step.AllowSelfApproval {
+						continue
+					}
+					matches, er := pf14bUserMatchesTargets(ctx, tx, id, team.ID, step.Targets)
+					if er != nil {
+						return nil, er
+					}
+					if matches {
+						if err = addAutomatic(id); err != nil {
+							return nil, err
+						}
+					}
+				}
+				if len(ids) > 0 && step.ManagerSelectionType != model.ManagerSelectionAll {
+					break
+				}
+				if index == 0 && len(leaders) == 1 && ticket.AuthorID != nil && leaders[0] == *ticket.AuthorID && !step.AllowSelfApproval && step.ManagerSelectionType != model.ManagerSelectionAll {
+					continue
+				}
+			}
+		}
+	default:
+		return nil, fmt.Errorf("engine: unsupported route step type %q", step.StepType)
+	}
+	if ticket.AuthorID != nil && !step.AllowSelfApproval && step.StepType != model.StepTypeAuthor {
+		filtered := ids[:0]
+		for _, id := range ids {
+			if id != *ticket.AuthorID {
+				filtered = append(filtered, id)
+			}
+		}
+		ids = filtered
+	}
+	return ids, nil
+}
+
+func pf14bValidateNominee(ctx context.Context, q store.Querier, userID string, targets []model.RouteTarget, values map[string]any) error {
+	active, err := store.EngUserActive(ctx, q, userID)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return kferr.ValidationFailed(map[string][]string{"approvers": {"contains an inactive user"}})
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	for _, target := range targets {
+		teamIDs, err := pf14TargetTeams(ctx, q, target, values)
+		if err != nil {
+			return err
+		}
+		expanded := []string{}
+		for _, teamID := range teamIDs {
+			candidates, err := pf14bTargetTeamIDs(ctx, q, teamID, target.Descendants)
+			if err != nil {
+				return err
+			}
+			expanded = append(expanded, candidates...)
+		}
+		for _, teamID := range expanded {
+			memberships, err := store.EngActiveMemberships(ctx, q, userID, teamID)
+			if err != nil {
+				return err
+			}
+			if len(memberships) == 0 {
+				continue
+			}
+			matches, err := pf14bUserMatchesGrade(ctx, q, userID, teamID, target.GradeSymbol, target.GradeCodes)
+			if err != nil {
+				return err
+			}
+			if matches {
+				return nil
+			}
+		}
+	}
+	return kferr.ValidationFailed(map[string][]string{"approvers": {"does not match the route target restrictions"}})
+}
+
+// pf14RefreshTeamAssignments recalculates only team-based assignments when a
+// route step becomes current. Manager steps retain their application snapshot.
+func (e *Engine) pf14RefreshTeamAssignments(ctx context.Context, tx *store.Tx, ticket *model.Ticket, ticketStep *model.TicketStep, now time.Time) error {
+	if ticket.RouteID == nil || ticketStep.RouteStepCode == nil {
+		return nil
+	}
+	route, err := store.RouteDefByID(ctx, tx, *ticket.RouteID)
+	if err != nil {
+		return err
+	}
+	var routeStep *model.RouteStep
+	for i := range route.Steps {
+		if route.Steps[i].Code == *ticketStep.RouteStepCode {
+			routeStep = &route.Steps[i]
+			break
+		}
+	}
+	if routeStep == nil || (routeStep.StepType != model.StepTypeTeam && routeStep.StepType != model.StepTypeDynamicTeam) {
+		return nil
+	}
+	def, err := store.WorkflowDefByID(ctx, tx, ticket.WorkflowID)
+	if err != nil {
+		return err
+	}
+	rows, err := store.EngTicketInputs(ctx, tx, ticket.ID)
+	if err != nil {
+		return err
+	}
+	values := pf14RouteStepValues(def, pf14InputValues(def, pf14InputsFromRows(def, rows)))
+	ids, err := e.pf14ResolveAssignees(ctx, tx, ticket, *routeStep, values, nil)
+	if err != nil {
+		return err
+	}
+	if err = store.EngDeleteStepAssignees(ctx, tx, ticketStep.ID); err != nil {
+		return err
+	}
+	if len(ids) == 0 && routeStep.FallbackType != nil {
+		ids, err = pf14bFallbackAssignees(ctx, tx, ticket, *routeStep, values)
+		if err != nil {
+			return err
+		}
+		ticketStep.Fallback = true
+		ticketStep.FallbackResult = routeStep.FallbackType
+		if len(ids) == 0 && *routeStep.FallbackType == model.FallbackSkip {
+			ticketStep.Status, ticketStep.Skip = model.StepStatusSkipped, true
+			ticketStep.UpdatedAt = now
+			return store.EngUpdateStep(ctx, tx, *ticketStep)
+		}
+	}
+	for _, uid := range ids {
+		assignee := model.TicketAssignee{ID: store.NewID(), TicketStepID: ticketStep.ID, TicketID: ticket.ID, UserID: uid, AssignedAt: &now, CreatedAt: now, UpdatedAt: now}
+		if err = store.EngInsertAssignee(ctx, tx, assignee); err != nil {
+			return err
+		}
+	}
+	ticketStep.Fallback = ticketStep.Fallback || len(ids) == 0 && routeStep.FallbackType != nil
+	if ticketStep.Fallback && ticketStep.FallbackResult == nil {
+		ticketStep.FallbackResult = routeStep.FallbackType
+	}
+	ticketStep.UpdatedAt = now
+	return store.EngUpdateStep(ctx, tx, *ticketStep)
+}
+
+func pf14bTargetTeamIDs(ctx context.Context, q store.Querier, rootID string, descendants bool) ([]string, error) {
+	teamIDs := []string{rootID}
+	if !descendants {
+		return teamIDs, nil
+	}
+	seen := map[string]bool{rootID: true}
+	for index := 0; index < len(teamIDs); index++ {
+		children, err := store.GetTeamChildren(ctx, q, teamIDs[index])
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range children {
+			if seen[child.ID] {
+				continue
+			}
+			seen[child.ID] = true
+			teamIDs = append(teamIDs, child.ID)
+		}
+	}
+	return teamIDs, nil
+}
+
+func pf14bStepConditionMatch(ctx context.Context, tx store.Querier, ticket *model.Ticket, fields []model.ConditionField, combination string, values map[string]any) (bool, error) {
+	if len(fields) == 0 {
+		return true, nil
+	}
+	matched := 0
+	for _, field := range fields {
+		actual, ok := pf14VariableValue(values, field.Variable)
+		var err error
+		operator := field.Symbol
+		switch field.FieldKey {
+		case model.StepConditionFieldKeyAuthorTeam:
+			if ticket.AuthorTeamID == nil {
+				ok = false
+				break
+			}
+			actual, ok = *ticket.AuthorTeamID, true
+			if teamID, err := pf14bConditionTeamID(ctx, tx, field.Value); err != nil {
+				return false, err
+			} else if teamID != "" {
+				field.Value = teamID
+			}
+			if field.Symbol == "descendants_or_equal" || field.Symbol == "not_descendants_or_equal" {
+				ancestors, err := store.EngTeamAncestors(ctx, tx, *ticket.AuthorTeamID)
+				if err != nil && err != store.ErrNotFound {
+					return false, err
+				}
+				found := false
+				for _, ancestor := range ancestors {
+					if ancestor.ID == fmt.Sprint(field.Value) {
+						found = true
+						break
+					}
+				}
+				value := found
+				if field.Symbol == "not_descendants_or_equal" {
+					value = !value
+				}
+				if value {
+					matched++
+				}
+				continue
+			}
+		case model.StepConditionFieldKeyAuthorGrade:
+			if ticket.AuthorID == nil || ticket.AuthorTeamID == nil {
+				ok = false
+				break
+			}
+			memberships, err := store.EngActiveMemberships(ctx, tx, *ticket.AuthorID, *ticket.AuthorTeamID)
+			if err != nil {
+				return false, err
+			}
+			gradeID := fmt.Sprint(field.Value)
+			if byCode, err := store.GradeIDByCode(ctx, tx, gradeID); err == nil {
+				gradeID = byCode
+			}
+			want, err := store.GetGrade(ctx, tx, gradeID)
+			if err != nil {
+				ok = false
+				break
+			}
+			for _, membership := range memberships {
+				for _, id := range membership.GradeIDs {
+					grade, er := store.GetGrade(ctx, tx, id)
+					if er != nil {
+						return false, er
+					}
+					if pf14Compare(grade.Level, field.Symbol, want.Level) {
+						matched++
+						ok = false
+						break
+					}
+				}
+				if !ok {
+					break
+				}
+			}
+			continue
+		case model.StepConditionFieldKeyTextVariable, model.StepConditionFieldKeyNumberVariable, model.StepConditionFieldKeyCheckboxVariable, model.StepConditionFieldKeyGeneralMasterVariable, "other_variable":
+			actual, ok = pf14VariableValue(values, field.Variable)
+			if field.FieldKey == model.StepConditionFieldKeyGeneralMasterVariable && field.GeneralMasterCode != "" {
+				if field.GeneralMasterItemCode != "" {
+					field.Value = field.GeneralMasterItemCode
+				}
+				actual, ok, err = pf14bResolveMasterConditionValue(ctx, tx, actual, ok, field)
+				if err != nil {
+					return false, err
+				}
+				if _, multiple := actual.([]string); multiple {
+					switch field.Symbol {
+					case "equal":
+						operator = "include"
+					case "not_equal":
+						operator = "exclude"
+					}
+				}
+			}
+		}
+		if field.FieldKey == model.StepConditionFieldKeyCheckboxVariable && operator == "equal" {
+			operator = "include"
+		}
+		if ok && pf14Compare(actual, operator, field.Value) {
+			matched++
+		}
+	}
+	if combination == model.StepCombinationAny {
+		return matched > 0, nil
+	}
+	return matched == len(fields), nil
+}
+
+func pf14bConditionTeamID(ctx context.Context, q store.Querier, value any) (string, error) {
+	codeOrID := fmt.Sprint(value)
+	if codeOrID == "" || codeOrID == "<nil>" {
+		return "", nil
+	}
+	chartID, err := store.ActiveOrgChartID(ctx, q)
+	if err != nil {
+		return "", err
+	}
+	id, err := store.TeamIDByCode(ctx, q, chartID, codeOrID)
+	if err == store.ErrNotFound {
+		return codeOrID, nil
+	}
+	return id, err
+}
+
+func pf14bResolveMasterConditionValue(ctx context.Context, q store.Querier, actual any, ok bool, field model.ConditionField) (any, bool, error) {
+	if !ok {
+		return actual, false, nil
+	}
+	values := []any{actual}
+	switch selected := actual.(type) {
+	case []any:
+		values = selected
+	case []string:
+		values = make([]any, len(selected))
+		for i := range selected {
+			values[i] = selected[i]
+		}
+	}
+	matched := make([]string, 0, len(values))
+	for _, selected := range values {
+		itemID := fmt.Sprint(selected)
+		item, err := store.GetGeneralMasterItem(ctx, q, itemID)
+		if err != nil {
+			if err == store.ErrNotFound {
+				continue
+			}
+			return nil, false, err
+		}
+		master, err := store.GetGeneralMaster(ctx, q, item.GeneralMasterID)
+		if err != nil {
+			return nil, false, err
+		}
+		if master.Code != field.GeneralMasterCode {
+			continue
+		}
+		if field.GeneralMasterItemCode != "" && item.Code != field.GeneralMasterItemCode {
+			continue
+		}
+		matched = append(matched, item.Code)
+	}
+	if len(matched) == 1 {
+		return matched[0], true, nil
+	}
+	return matched, true, nil
+}
+
+func pf14bUserMatchesTargets(ctx context.Context, tx *store.Tx, userID, teamID string, targets []model.RouteTarget) (bool, error) {
+	for _, target := range targets {
+		matches, err := pf14bUserMatchesGrade(ctx, tx, userID, teamID, target.GradeSymbol, target.GradeCodes)
+		if err != nil || matches {
+			return matches, err
+		}
+	}
+	return len(targets) == 0, nil
+}
+
+func pf14bUserMatchesGrade(ctx context.Context, tx store.Querier, userID, teamID string, symbol *string, gradeCodes []string) (bool, error) {
+	if symbol == nil || *symbol == "" {
+		return true, nil
+	}
+	if len(gradeCodes) == 0 {
+		return false, nil
+	}
+	memberships, err := store.EngActiveMemberships(ctx, tx, userID, teamID)
+	if err != nil {
+		return false, err
+	}
+	gradeIDs := make([]string, 0, len(gradeCodes))
+	for _, code := range gradeCodes {
+		id, er := store.GradeIDByCode(ctx, tx, code)
+		if er != nil {
+			continue
+		}
+		gradeIDs = append(gradeIDs, id)
+	}
+	wanted := []model.Grade{}
+	for _, id := range gradeIDs {
+		grade, er := store.GetGrade(ctx, tx, id)
+		if er != nil {
+			return false, er
+		}
+		wanted = append(wanted, grade)
+	}
+	for _, membership := range memberships {
+		for _, memberGradeID := range membership.GradeIDs {
+			memberGrade, er := store.GetGrade(ctx, tx, memberGradeID)
+			if er != nil {
+				return false, er
+			}
+			for _, targetGrade := range wanted {
+				match := false
+				switch *symbol {
+				case model.GradeSymbolEqual:
+					match = memberGrade.Level == targetGrade.Level
+				case model.GradeSymbolGreaterThan:
+					match = memberGrade.Level > targetGrade.Level
+				case model.GradeSymbolGreaterThanOrEqual:
+					match = memberGrade.Level >= targetGrade.Level
+				case model.GradeSymbolLessThan:
+					match = memberGrade.Level < targetGrade.Level
+				case model.GradeSymbolLessThanOrEqual:
+					match = memberGrade.Level <= targetGrade.Level
+				case model.GradeSymbolAnyOf:
+					match = memberGrade.ID == targetGrade.ID
+				}
+				if match {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+// pf14bUserActive reports whether the user is activated; fallback assignment
+// never picks invited, suspended or deactivated users (for example a leader
+// who was deleted moments ago).
+func pf14bUserActive(ctx context.Context, q store.Querier, userID string) (bool, error) {
+	user, err := store.GetUser(ctx, q, userID)
+	if err != nil {
+		return false, err
+	}
+	return user.Status == model.UserStatusActive, nil
+}
+
+func pf14bFallbackAssignees(ctx context.Context, tx *store.Tx, ticket *model.Ticket, step model.RouteStep, values map[string]any) ([]string, error) {
+	if step.FallbackType == nil {
+		return nil, nil
+	}
+	if *step.FallbackType == model.FallbackDirectManager || *step.FallbackType == model.FallbackHigherManager {
+		if ticket.AuthorTeamID == nil {
+			return nil, nil
+		}
+		ancestors, err := store.EngTeamAncestors(ctx, tx, *ticket.AuthorTeamID)
+		if err != nil {
+			return nil, err
+		}
+		for _, team := range ancestors {
+			leaders, err := store.EngLeadersOfTeam(ctx, tx, team.ID)
+			if err != nil {
+				return nil, err
+			}
+			ids := []string{}
+			for _, id := range leaders {
+				if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+					continue
+				}
+				if active, er := pf14bUserActive(ctx, tx, id); er != nil {
+					return nil, er
+				} else if !active {
+					continue
+				}
+				matches := *step.FallbackType == model.FallbackDirectManager
+				if *step.FallbackType == model.FallbackHigherManager {
+					var er error
+					matches, er = pf14bUserHasHigherGradeThanTargets(ctx, tx, id, team.ID, step.Targets)
+					if er != nil {
+						return nil, er
+					}
+				}
+				if matches {
+					ids = append(ids, id)
+				}
+			}
+			if len(ids) > 0 && (*step.FallbackType == model.FallbackDirectManager || *step.FallbackType == model.FallbackHigherManager) {
+				return ids, nil
+			}
+		}
+		return nil, nil
+	}
+	if *step.FallbackType != model.FallbackHigherTeam {
+		return nil, nil
+	}
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, target := range step.Targets {
+		teamIDs, err := pf14TargetTeams(ctx, tx, target, values)
+		if err != nil {
+			return nil, err
+		}
+		if target.TeamCode == "" && target.Variable == "" && ticket.AuthorTeamID != nil {
+			teamIDs = []string{*ticket.AuthorTeamID}
+		}
+		for _, teamID := range teamIDs {
+			team, err := store.GetTeam(ctx, tx, teamID)
+			if err != nil {
+				return nil, err
+			}
+			for team.ParentID != nil {
+				teamID = *team.ParentID
+				team, err = store.GetTeam(ctx, tx, teamID)
+				if err != nil {
+					return nil, err
+				}
+				members, er := store.EngUsersByTeam(ctx, tx, teamID, false)
+				if er != nil {
+					return nil, er
+				}
+				matchedAtLevel := false
+				for _, id := range members {
+					if !step.AllowSelfApproval && ticket.AuthorID != nil && id == *ticket.AuthorID {
+						continue
+					}
+					if active, er := pf14bUserActive(ctx, tx, id); er != nil {
+						return nil, er
+					} else if !active {
+						continue
+					}
+					matches, er := pf14bUserMatchesGrade(ctx, tx, id, teamID, target.GradeSymbol, target.GradeCodes)
+					if er != nil {
+						return nil, er
+					}
+					if matches && !seen[id] {
+						seen[id] = true
+						ids = append(ids, id)
+						matchedAtLevel = true
+					}
+				}
+				if matchedAtLevel {
+					break
+				}
+			}
+		}
+	}
+	return ids, nil
+}
+
+// pf14bUserHasHigherGradeThanTargets implements the distinct higher-manager
+// fallback: only leaders whose grade is strictly above a requested grade match.
+func pf14bUserHasHigherGradeThanTargets(ctx context.Context, q store.Querier, userID, teamID string, targets []model.RouteTarget) (bool, error) {
+	hasGradeTarget := false
+	for _, target := range targets {
+		if target.GradeSymbol == nil || len(target.GradeCodes) == 0 {
+			continue
+		}
+		hasGradeTarget = true
+		memberships, err := store.EngActiveMemberships(ctx, q, userID, teamID)
+		if err != nil {
+			return false, err
+		}
+		for _, membership := range memberships {
+			if membership.TeamID != teamID {
+				continue
+			}
+			for _, code := range target.GradeCodes {
+				wanted, er := store.GradeIDByCode(ctx, q, code)
+				if er != nil {
+					continue
+				}
+				wantedGrade, er := store.GetGrade(ctx, q, wanted)
+				if er != nil {
+					return false, er
+				}
+				for _, gradeID := range membership.GradeIDs {
+					grade, er := store.GetGrade(ctx, q, gradeID)
+					if er != nil {
+						return false, er
+					}
+					if grade.Level > wantedGrade.Level {
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+	// With no grade threshold configured, the route carries no rank to exceed;
+	// use the nearest active leader as the documented higher-manager fallback.
+	return !hasGradeTarget, nil
+}
+
+func pf14Contains(values []string, want string) bool {
+	for _, value := range values {
+		if strings.EqualFold(value, want) {
+			return true
+		}
+	}
+	return false
+}
