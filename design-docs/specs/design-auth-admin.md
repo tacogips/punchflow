@@ -113,11 +113,64 @@ All endpoints use JSON in camelCase, kickflow error bodies, JST timestamps, and 
 | POST | /admin/api/faults | tenant | `{method?, pathPrefix, status, code, message?, remaining?}`; applies to `/v1` only; `remaining` 0 = until deleted |
 | DELETE | /admin/api/faults/{id} | tenant | Remove a rule |
 | GET | /admin/api/fixtures/export | tenant | Download the current definitions as a fixture bundle (JSON object of file name -> content) |
+| POST | /admin/api/workflows | `workflow` covering the target folder | Add one workflow definition (shape of one fixture `workflows.json` element) to the running store; returns `201` with the created WorkflowDetail. See "Runtime workflow creation" |
 | POST | /admin/api/fixtures/reset | tenant + `--enable-admin-reset` | Wipe all data and load the configured fixture set; returns a summary. Without the flag: `404 endpoint_not_found` |
 
 Tenant settings defaults: plan `enterprise`, mode `normal`, empty IP allowlist (allow all), empty allowed domains (allow all), `selfServiceProxy: false`. Fault rules live in memory and are cleared by reset or restart.
 
 Bootstrap after reset: fixture-seeded tokens (documented in README) or `punchflow token issue` on the CLI.
+
+### Runtime workflow creation (`createWorkflow`, argus #523)
+
+`POST /admin/api/workflows` adds one workflow to a running server, so tests no longer have to restart it with a modified fixture. It does not depend on `--enable-admin-reset`, because it only adds data and never wipes any.
+
+Request body: a single JSON object with the shape of one element of fixture `workflows.json` (`model.WorkflowDef`: `code`, `name`, `status`, `folderCode`, `routeCode`, `categoryCodes`, `sectionList`, `routeConditions`, ...). It is decoded with unknown fields rejected, as `fixtures.Parse` does.
+- `id` is optional. When it is empty the server generates a UUID v4; when it is present it must be a UUID.
+- Nested IDs (sections, fields, custom numberings) must be present UUIDs, as in fixtures.
+- The body does not carry dependent definitions. Folders, routes, categories, users, teams, grades and general masters must already exist in the live store, and are referenced by code exactly as in fixtures.
+
+Processing order (every step after authentication runs inside one `store.DB.WithTx` transaction):
+
+1. Authentication: a missing or invalid token gives `401 invalid_access_token`. A principal without the `workflow` permission in any scope gives `403 missing_permission`.
+2. Decode: malformed JSON gives `400 invalid_json`. An unknown field or a wrong type gives `400 invalid_parameter`.
+3. Duplicate check: a `workflows` row of any status (including `deleted`) with the same `id` or the same `code` gives `409`. The error is `kferr.New(409, "conflict", ...)` and the message names the clashing key. A unique-constraint failure on insert maps to the same 409, which covers concurrent creators.
+4. Validation, reusing the fixture validator unchanged:
+   - Build the current fixture `Set` from the transaction with `fixtures.Export` + `fixtures.Parse`. These are the same canonical bytes that `exportFixtures` returns.
+   - Baseline run: call `fixtures.Validate` on the exported set as it is, and collect its problems (no problems when it returns nil).
+   - Candidate run: append the candidate as the last element of `Set.Workflows` (index `n` = previous length) and call `fixtures.Validate` again.
+   - Candidate problems are the candidate run's problems that the baseline run does not have. The comparison is a multiset difference on the full `(File, Path, Message)` triple. Problems are not attributed by path prefix, because the validator reports candidate problems in several forms:
+     - `workflows.json` `[n]...` for structural and reference rules (validate.go:324-505);
+     - `workflows.json` `$[n]...` for ID format and duplicate checks (`pf06WalkIDs`);
+     - `workflows.json` `workflows[n]...` for custom validations and their 50 form / 10 detail limits (validate_custom.go:20-35, appended at validate.go:507);
+     - other files, such as `tokens.json`, `proxy-*.json`, `webhooks.json`, `labels.json` or `sub-statuses.json` with message `duplicate id (also used at workflows.json:$[n]...)`, when a candidate ID collides with an ID that a later file registers (validate.go:28-50).
+
+     The candidate is appended last, so no existing problem's path or message changes. Every new triple is therefore caused by the candidate. Baseline problems still present come from pre-existing runtime state and are ignored, so earlier runtime edits cannot block the request. Problems that the candidate removes (for example, a previously unknown workflow code that now resolves) are ignored too.
+   - Any candidate problem gives `400 invalid_parameter`. The message lists every candidate problem as `file: path: message`, in the validator's stable order (`sortProblems`). The `errors` object is reserved for 422, so it is not used.
+   - A rejection returns the error from the `WithTx` callback before step 6, so the transaction rolls back and neither the `workflows` row nor the audit log is written. `fixtures.Validate` itself is not changed.
+   - Collision split: an `id` or `code` that matches a `workflows` row is the step 3 `409`. An `id` (top-level or nested) that collides with any other fixture-owned entity is a step 4 `400`.
+5. Folder scope: resolve `folderCode` to the folder ID. A restricted `workflow` grant that does not cover that folder gives `403 missing_permission`.
+6. Persist: insert the row with the fixture loader's column mapping (`id, code, status, folder_id, definition_json, created_at, updated_at`), taking timestamps from the injected clock. Write the audit log `workflow.create` `{workflowId}` in the same transaction, as the other admin mutations do.
+7. Respond `201` with the WorkflowDetail presenter output that `GET /v1/workflows/{workflowId}` returns.
+
+The insert writes only the `workflows` row, exactly as the fixture loader does. Custom numbering counters, category membership (`categoryCodes` inside the definition JSON) and route resolution are all derived from that row at read or ticket-creation time. As a result:
+- The created workflow appears immediately in `GET /v1/workflows` and `GET /v1/workflows/{workflowId}`.
+- A `visible` workflow can be used with `POST /v1/tickets` by a user it is available to.
+- Fixture export includes the created workflow, and fixture reset removes it like any other runtime data.
+
+Out of scope (#523 does not need them): `GET /admin/api/workflows` would duplicate `GET /v1/workflows`, and `DELETE /admin/api/workflows/{id}` would need rules for tickets that reference the workflow. Neither is added, so both paths keep the reserved-namespace 404.
+
+Required tests (`internal/admin/workflows_test.go`):
+- 201 with the default fixture admin token. Afterwards the workflow is listed and fetchable through `/v1/workflows`, and a ticket can be created on it.
+- 401 without a token.
+- 403 with a token that lacks `workflow` (fixture `pf_pat_dev_employee`).
+- 400 for malformed JSON, an unknown field, and an unknown `routeCode` or `folderCode`.
+- 400 for an invalid form custom validation (for example `combinationType: "bogus"`), reported as `workflows[n]...combinationType`, and for an invalid detail (slip) custom validation.
+- 400 when a candidate exceeds the custom validation limit (51 form validations, or 11 detail validations).
+- 400 when the candidate workflow `id` or a nested ID equals the ID of an entity registered in a later fixture file (for example a fixture token ID, reported against `tokens.json`), and when it equals the ID of an earlier entity (for example a user ID).
+- After every 400 and 409 case: `GET /v1/workflows` shows no new workflow (count and code unchanged), and the audit log has no `workflow.create` entry.
+- Unrelated-state tolerance: the test first writes to the store directly to create a baseline validation problem unrelated to the candidate. For example, it inserts a webhook whose `workflow_ids` names a nonexistent workflow ID, so the export yields an empty code and `webhooks.json` reports `unknown workflow code`. The test asserts the baseline `fixtures.Validate` fails, then checks that a valid candidate still gets 201.
+- 409 for a duplicate `code` and for a duplicate `id`.
+- `routes_test.go` lists `createWorkflow`.
 
 ### Required tests
 
@@ -125,7 +178,7 @@ Bootstrap after reset: fixture-seeded tokens (documented in README) or `punchflo
 |---|---|
 | `internal/auth` | PAT/SAT resolution; every INF-05/INF-06 case; permission denial; tenant modes; IP allowlist; CSRF required for cookie mutations and not for bearer; session idle/absolute expiry with fake clock; OIDC cases above; local login disabled/enabled |
 | `internal/httpx` | 411, content type, invalid JSON, size limit, pagination headers and Link relations, sortBy parsing, array query parsing, rate limit headers/429/secret multiplier, CORS preflight, fault injection matching and `remaining` countdown |
-| `internal/admin` | Every admin endpoint: permission checks, token shown once, reset requires the flag, export/reset round-trip |
+| `internal/admin` | Every admin endpoint: permission checks, token shown once, reset requires the flag, export/reset round-trip, createWorkflow 201/400/401/403/409 and `/v1` visibility |
 
 ## References
 

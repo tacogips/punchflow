@@ -23,10 +23,30 @@ Single source of truth for which kickflow operation and webhook event punchflow 
 | JSON decoding | Malformed JSON `400 invalid_json`; wrong types `400 invalid_parameter` (INF-38); unknown fields ignored (INF-38); size limits INF-39 | `internal/httpx` |
 | JSON encoding | INF-33 (HTML-escaped, no trailing newline) | `internal/httpx` |
 | Error body | `{"code","message"}` plus `errors` (object of field -> string[]; `base` for non-field errors) only for 422 validation errors; `doc_url` is never emitted | `internal/kferr`, `internal/httpx` |
-| Timestamps | JST with milliseconds `2006-01-02T15:04:05.000+09:00` using a fixed `+09:00` zone (no tzdata dependency). Date-only fields `YYYY-MM-DD`. Inputs accept the four documented formats | `internal/kftime` |
+| Timestamps | JST with milliseconds `2006-01-02T15:04:05.000+09:00` using a fixed `+09:00` zone (no tzdata dependency). Date-only fields `YYYY-MM-DD`. Inputs: see "Timestamp input parsing" below | `internal/kftime` |
 | IDs | UUID v4 from `crypto/rand`. Path parameters for users, grades, teams, folders, routes, workflows, general masters and items accept the UUID or the `code` | `internal/store` |
 | Pagination | `page`/`perPage` (INF-03), headers `Link` (INF-01), `Page`, `Per-Page`, `Total`; body is a plain JSON array, `[]` when empty | `internal/httpx` |
 | Administrative reconciliation | Deletion and organization-chart activation reconcile stored definitions and permission scopes: fixed approver dependencies invalidate routes and selecting workflows, removable filters and nomination restrictions are pruned, matching chart teams remap role/viewer targets, unmatched teams are removed, and deleted grades/masters/folders do not leave stale nested references (INF-A5-01..INF-A5-08) | `internal/store` |
+
+### Timestamp input parsing (argus #520)
+
+`kftime.ParseInput` is the single parser for date-time inputs. Its only production caller is `httpx.QueryTime`, which handles every `*AtStart`/`*AtEnd` filter in `internal/api/v1/tickets.go`, `internal/api/v1/audit_logs.go` and `internal/uiapi/export.go`. No request body field parses date-times through it. Body date fields (`YYYY-MM-DD` in proxies, general masters and user custom fields) keep their own date-only checks and are out of scope.
+
+The kickflow OpenAPI declares these parameters as `format: date-time` (RFC 3339) or as dates. Accepted forms:
+
+| Form | Rule | Result |
+|---|---|---|
+| Date-time | The value must fully match `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z\|[+-]\d{2}:\d{2})$`: uppercase `T` and `Z`, 0-9 fractional digits, and `Z` or a numeric `+hh:mm`/`-hh:mm` offset. It is then parsed with `time.RFC3339Nano`, which also checks the calendar and clock ranges | The instant, with all fractional digits kept |
+| Date-only | `YYYY-MM-DD` that parses as a calendar date | 00:00:00.000 JST on that date (unchanged) |
+
+Everything else is rejected, and `QueryTime` returns the existing `400 invalid_parameter` `Invalid <key>`. Rejected inputs include a lowercase `t`/`z`, a space instead of `T`, a missing offset, a comma as the fraction separator (Go's parser would otherwise accept it), 10 or more fractional digits, `+0900` without a colon, out-of-range fields such as month 13 or hour 24, and trailing text. The regular-expression gate exists because `time.Parse` on its own is more lenient than RFC 3339.
+
+Precision: stored instants are Unix milliseconds. Filters convert the parsed instant with the existing `store.Millis`, which truncates sub-millisecond digits. So `2026-10-28T04:08:57.101584+00:00` filters as `...57.101Z`, matching the stored precision. Output is unchanged: `kftime.Format` still writes JST with exactly 3 fractional digits.
+
+Required tests:
+- `internal/kftime` table tests: accepts 0, 1, 3, 6 and 9 fractional digits with `Z`, `+00:00`, `+09:00` and `-05:30`; accepts date-only; rejects every form listed above.
+- `internal/httpx`: `QueryTime` returns `400 invalid_parameter` for an invalid value.
+- `internal/api/v1`: `GET /v1/tickets?updatedAtStart=2026-10-28T04:08:57.101584+00:00` returns 200.
 
 Ticket list query behavior follows the public query meanings: `authorTeamFullName` matches the slash-joined team hierarchy; `stepTitle` and `assigneeStatus=current` are limited to the ticket's current actionable step group. Task lists default to outstanding assignments, while an explicit `status[]` selection retains historical assignments for those statuses. These query paths are regression-tested with populated tickets (API-01..API-03).
 
