@@ -1,7 +1,7 @@
 # argus #520/#523: README Documentation Implementation Plan
 
 **Plan ID**: PLAN-DOCS-README
-**Status**: Ready
+**Status**: Completed
 **Wave**: 1 (no dependencies; documents the accepted design contract, so it runs in parallel with PLAN-520-RFC3339 and PLAN-523-CREATE-WORKFLOW)
 **Design Reference**: design-docs/specs/design-auth-admin.md#runtime-workflow-creation-createworkflow-argus-523 and design-docs/specs/design-api-coverage.md#timestamp-input-parsing-argus-520
 **Created**: 2026-11-04
@@ -61,9 +61,9 @@ Freshly read README.md before editing and record `shasum -a 256 README.md`, befo
 
 ## Acceptance criteria
 
-- [ ] The README has the RFC 3339 filter note and the `## Adding a workflow at runtime` section with the curl example.
-- [ ] `grep -n "/admin/api/workflows" README.md` shows the new section.
-- [ ] `grep -n "RFC 3339" README.md` shows the filter note.
+- [x] The README has the RFC 3339 filter note and the `## Adding a workflow at runtime` section with the curl example.
+- [x] `grep -n "/admin/api/workflows" README.md` shows the new section.
+- [x] `grep -n "RFC 3339" README.md` shows the filter note.
 
 ## Verification (foreground; record exit status and log path)
 
@@ -75,3 +75,7 @@ Freshly read README.md before editing and record `shasum -a 256 README.md`, befo
 ### Session: 2026-11-04 (plan created)
 **Tasks Completed**: Plan authored.
 **Notes**: Implementation not started.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Added the timestamp filter note and runtime workflow creation documentation to README.md.
+**Notes**: Documentation checks recorded under `tmp/argus-520-523-s726/PLAN-DOCS-README/`; formal review and serial reconciliation remain downstream.

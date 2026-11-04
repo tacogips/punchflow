@@ -1,9 +1,12 @@
 package httpx
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"punchflow/internal/kferr"
 )
 
 func TestQueryHelpers(t *testing.T) {
@@ -38,5 +41,25 @@ func TestQueryHelpers(t *testing.T) {
 	}
 	if _, err := QueryString(httptest.NewRequest("GET", "/?q=abc", nil), "q", 2); !kferrErrorCode(err, "invalid_parameter") {
 		t.Fatalf("long string = %v", err)
+	}
+}
+
+func TestQueryTimeRFC3339(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/?updatedAtStart=2026-10-28T04:08:57.101584%2B00:00", nil)
+	got, err := QueryTime(r, "updatedAtStart")
+	if err != nil || got == nil || got.Nanosecond() != 101584000 {
+		t.Fatalf("QueryTime() = %v, %v; want microsecond timestamp", got, err)
+	}
+
+	r = httptest.NewRequest(http.MethodGet, "/?updatedAtStart=2026-10-28T04:08:57,101Z", nil)
+	got, err = QueryTime(r, "updatedAtStart")
+	apiErr, ok := kferr.As(err)
+	if got != nil || !ok || apiErr.Status != http.StatusBadRequest || apiErr.Code != "invalid_parameter" || apiErr.Message != "Invalid updatedAtStart" {
+		t.Fatalf("QueryTime() = %v, %v; want 400 invalid_parameter Invalid updatedAtStart", got, err)
+	}
+
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	if got, err := QueryTime(r, "updatedAtStart"); got != nil || err != nil {
+		t.Fatalf("missing QueryTime() = %v, %v; want nil, nil", got, err)
 	}
 }

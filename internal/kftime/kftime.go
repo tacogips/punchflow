@@ -3,6 +3,7 @@ package kftime
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -33,27 +34,23 @@ func Format(t time.Time) string {
 // FormatDate formats a date in JST.
 func FormatDate(t time.Time) string { return t.In(JST).Format(dateLayout) }
 
-// ParseInput parses one of the timestamp formats accepted by kickflow.
+var rfc3339Pattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$`)
+
+// ParseInput parses an RFC 3339 date-time or a date at midnight JST.
 func ParseInput(s string) (time.Time, error) {
-	var layout string
-	switch len(s) {
-	case 29:
-		layout = timestampLayout
-	case 25:
-		layout = "2006-01-02T15:04:05-07:00"
-	case 24:
-		layout = "2006-01-02T15:04:05.000Z"
-	case 10:
-		layout = dateLayout
-	default:
+	if len(s) == 10 {
+		parsed, err := time.Parse(dateLayout, s)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("unsupported time format %q: %w", s, err)
+		}
+		return time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, JST), nil
+	}
+	if !rfc3339Pattern.MatchString(s) {
 		return time.Time{}, fmt.Errorf("unsupported time format %q", s)
 	}
-	parsed, err := time.Parse(layout, s)
+	parsed, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("unsupported time format %q: %w", s, err)
-	}
-	if layout == dateLayout {
-		return time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, JST), nil
 	}
 	return parsed, nil
 }

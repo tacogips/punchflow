@@ -9,8 +9,8 @@ import (
 
 func TestOperationsContractAndUnknownRoute(t *testing.T) {
 	ops := Operations()
-	if len(ops) != 23 {
-		t.Fatalf("Operations() has %d rows, want 23", len(ops))
+	if len(ops) != 24 {
+		t.Fatalf("Operations() has %d rows, want 24", len(ops))
 	}
 	seen := make(map[string]bool, len(ops))
 	for _, op := range ops {
@@ -22,6 +22,19 @@ func TestOperationsContractAndUnknownRoute(t *testing.T) {
 		if op.Name == "" || op.Handle == nil {
 			t.Fatalf("incomplete operation row: %+v", op)
 		}
+	}
+
+	if !seen["POST /admin/api/workflows"] {
+		t.Fatal("missing createWorkflow route")
+	}
+	found := false
+	for _, op := range ops {
+		if op.Name == "createWorkflow" && op.Method == http.MethodPost && op.Pattern == "/admin/api/workflows" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("missing createWorkflow operation")
 	}
 
 	mux := http.NewServeMux()

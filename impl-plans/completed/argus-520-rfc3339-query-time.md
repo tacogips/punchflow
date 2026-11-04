@@ -1,7 +1,7 @@
 # argus #520: RFC 3339 Query Time Input Implementation Plan
 
 **Plan ID**: PLAN-520-RFC3339
-**Status**: Ready
+**Status**: Completed
 **Wave**: 1 (no dependencies; runs in parallel with PLAN-523-CREATE-WORKFLOW and PLAN-DOCS-README)
 **Design Reference**: design-docs/specs/design-api-coverage.md#timestamp-input-parsing-argus-520
 **Created**: 2026-11-04
@@ -98,11 +98,11 @@ Other wave-1 workers share the working tree (PLAN-523 edits `internal/admin/*`; 
 
 ## Acceptance criteria
 
-- [ ] ParseInput uses the regexp gate plus `time.RFC3339Nano`, and date-only still means JST midnight.
-- [ ] All kftime test cases listed above exist and pass.
-- [ ] The QueryTime 400 test exists and passes.
-- [ ] The `/v1/tickets` microsecond filter test returns 200.
-- [ ] `gofmt -l` reports nothing for the owned files.
+- [x] ParseInput uses the regexp gate plus `time.RFC3339Nano`, and date-only still means JST midnight.
+- [x] All kftime test cases listed above exist and pass.
+- [x] The QueryTime 400 test exists and passes.
+- [x] The `/v1/tickets` microsecond filter test returns 200.
+- [x] `gofmt -l` reports nothing for the owned files.
 
 ## Verification (each run in the foreground; record exit status and log path)
 
@@ -118,3 +118,8 @@ Workspace-wide `go build ./... && go vet ./... && go test ./...` belongs to reco
 ### Session: 2026-11-04 (plan created)
 **Tasks Completed**: Plan authored from the accepted design.
 **Notes**: Implementation not started.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: RFC 3339 parsing and assigned unit and ticket-filter regression tests.
+**Verification**: Scoped gofmt, unit tests, ticket/audit tests, and go vet passed; complete logs are under `tmp/argus-520-523-s726/PLAN-520-RFC3339/`.
+**Notes**: Formal review, workspace-wide reconciliation, and finalization remain downstream.

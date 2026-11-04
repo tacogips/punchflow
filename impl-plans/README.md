@@ -2,12 +2,13 @@
 
 ## Active Plans
 
-- [argus #520: RFC 3339 Query Time Input](active/argus-520-rfc3339-query-time.md) (PLAN-520-RFC3339, wave 1)
-- [argus #523: Admin createWorkflow](active/argus-523-admin-create-workflow.md) (PLAN-523-CREATE-WORKFLOW, wave 1)
-- [argus #520/#523: README Documentation](active/argus-520-523-readme-docs.md) (PLAN-DOCS-README, wave 1)
+- [argus #520/#523 s726 dispatch manifest](active/argus-520-523-s726-dispatch.json) (kept in `active/`; the run's own manifest is not archived by its run)
 
 ## Completed Plans
 
+- [argus #520: RFC 3339 Query Time Input](completed/argus-520-rfc3339-query-time.md) (PLAN-520-RFC3339, 2026-11-04, s726)
+- [argus #523: Admin createWorkflow](completed/argus-523-admin-create-workflow.md) (PLAN-523-CREATE-WORKFLOW, 2026-11-04, s726)
+- [argus #520/#523: README Documentation](completed/argus-520-523-readme-docs.md) (PLAN-DOCS-README, 2026-11-04, s726)
 - [Main Merge and Container Release](completed/main-container-release.md)
 - [Round 9 Routing and Lifecycle Fixes](completed/r9-routing-lifecycle.md)
 

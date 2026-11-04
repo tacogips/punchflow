@@ -72,6 +72,8 @@ curl -X POST "http://localhost:8080/v1/tickets/$TICKET_ID/approve" \
 
 List endpoints accept `page` and `perPage` and return `Link`, `Page`, `Per-Page` and `Total` headers. Timestamps use JST with millisecond precision. Errors use `{ "code": "...", "message": "..." }`; validation errors can also include `errors`.
 
+Date-time query filters (`*AtStart`/`*AtEnd`) accept RFC 3339 with 0-9 fractional digits and `Z` or a `+hh:mm`/`-hh:mm` offset, as well as `YYYY-MM-DD` at midnight JST. Filters compare at millisecond precision; response timestamps use exactly three fractional digits in JST (`+09:00`). See [timestamp input parsing](design-docs/specs/design-api-coverage.md#timestamp-input-parsing-argus-520).
+
 ## Webhooks
 
 Register an endpoint in the UI under **Admin > Webhooks**, or use `POST /admin/api/webhooks` with a webhook name, URL, optional secret and `"enabled": true` (a webhook created without `enabled` stays disabled and receives nothing):
@@ -88,6 +90,19 @@ This punchflow dev admin API is separate from the kickflow-compatible `/v1` API 
 The 13 event types are `ping`, `ticket_created`, `ticket_updated`, `ticket_opened`, `ticket_approved`, `ticket_confirmed`, `ticket_rejected`, `ticket_denied`, `ticket_completed`, `ticket_withdrawn`, `ticket_archived`, `comment_created` and `comment_updated`. Delivery status is `pending`, `succeeded` or `failed`.
 
 Deliveries include `Content-Type: application/json`, `User-Agent: kickflow-Hookshot/v1`, `X-Kickflow-Delivery` and, when a secret is configured, `X-Kickflow-Signature: sha256=<hex>`. Verify the lowercase hexadecimal HMAC-SHA256 using your secret and the exact raw request body bytes. The initial delivery is followed by up to 10 retries with exponential backoff (10 seconds by default, capped at one hour). Use **Resend** in the delivery log or `POST /admin/api/webhook-events/{eventId}/resend` to retry manually; test delivery uses `POST /admin/api/webhooks/{id}/ping`. The dev admin endpoint `POST /admin/api/webhook-events` fires an event for a ticket or comment. See [webhook design](design-docs/specs/design-webhooks.md) for payload and delivery details.
+
+## Adding a workflow at runtime
+
+Use `POST /admin/api/workflows` to add one object in the fixture `workflows.json` element shape. The `id` is optional; referenced folders, routes and categories must already exist. The bearer token needs the `workflow` permission covering the target folder (the seeded `pf_pat_dev_admin` has it); `--enable-admin-reset` is not required.
+
+```sh
+curl -X POST http://localhost:8080/admin/api/workflows \
+  -H 'Authorization: Bearer pf_pat_dev_admin' \
+  -H 'Content-Type: application/json' \
+  -d @my-workflow.json
+```
+
+A successful request returns `201` with the workflow detail. Invalid input returns `400` (fixture validation problems are listed in the message), authentication or permission failures return `401` or `403`, and a duplicate workflow `id` or `code` returns `409`. The workflow is immediately visible through `/v1/workflows` and, when visible and available to the user, can be used to create tickets. Fixture reset removes it. See [runtime workflow creation](design-docs/specs/design-auth-admin.md#runtime-workflow-creation-createworkflow-argus-523).
 
 ## UI helper API
 

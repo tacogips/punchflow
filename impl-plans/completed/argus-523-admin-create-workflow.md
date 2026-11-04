@@ -1,7 +1,7 @@
 # argus #523: Admin createWorkflow Implementation Plan
 
 **Plan ID**: PLAN-523-CREATE-WORKFLOW
-**Status**: Ready
+**Status**: Completed
 **Wave**: 1 (no dependencies; runs in parallel with PLAN-520-RFC3339 and PLAN-DOCS-README)
 **Design Reference**: design-docs/specs/design-auth-admin.md#runtime-workflow-creation-createworkflow-argus-523
 **Created**: 2026-11-04
@@ -135,10 +135,10 @@ Before each edit, freshly read the target and record `shasum -a 256`. Record it 
 
 ## Acceptance criteria
 
-- [ ] The `createWorkflow` row is registered, and `routes_test.go` expects 24 operations including it.
-- [ ] Processing steps 1-7 are implemented in `internal/admin/workflows.go`, with the baseline-diff validation.
-- [ ] Every test case listed above exists and passes.
-- [ ] `gofmt -l` is clean and `go vet` passes for `internal/admin`.
+- [x] The `createWorkflow` row is registered, and `routes_test.go` expects 24 operations including it.
+- [x] Processing steps 1-7 are implemented in `internal/admin/workflows.go`, with the baseline-diff validation.
+- [x] Every test case listed above exists and passes.
+- [x] `gofmt -l` is clean and `go vet` passes for `internal/admin`.
 
 ## Verification (foreground; record exit status and log path)
 
@@ -154,3 +154,7 @@ The full `go build ./... && go vet ./... && go test ./...` gate belongs to recon
 ### Session: 2026-11-04 (plan created)
 **Tasks Completed**: Plan authored from the accepted design (DR-001 resolution included).
 **Notes**: Implementation not started.
+
+### Session: 2026-11-04 (implementation)
+**Tasks Completed**: Registered createWorkflow; implemented transactional validation, scope checks, persistence and audit; added API and route tests.
+**Notes**: Scoped gofmt, admin tests, fixture/API workflow tests, and admin vet passed; logs are in `tmp/argus-520-523-s726/PLAN-523-CREATE-WORKFLOW/`. Formal reviews and final integration remain downstream.

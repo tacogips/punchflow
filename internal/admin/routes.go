@@ -30,6 +30,7 @@ var operations = [...]Operation{
 	{Name: "deleteFault", Method: http.MethodDelete, Pattern: "/admin/api/faults/{id}", Handle: (*API).deleteFault},
 	{Name: "exportFixtures", Method: http.MethodGet, Pattern: "/admin/api/fixtures/export", Handle: (*API).exportFixtures},
 	{Name: "resetFixtures", Method: http.MethodPost, Pattern: "/admin/api/fixtures/reset", Handle: (*API).resetFixtures},
+	{Name: "createWorkflow", Method: http.MethodPost, Pattern: "/admin/api/workflows", Handle: (*API).createWorkflow},
 }
 
 // Operations returns a copy of the stable admin operation table.
