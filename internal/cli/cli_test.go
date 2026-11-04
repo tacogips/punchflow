@@ -14,7 +14,7 @@ func TestRunVersion(t *testing.T) {
 	if got := Run(context.Background(), []string{"version"}, &stdout, &stderr); got != 0 {
 		t.Fatalf("Run(version) = %d, want 0", got)
 	}
-	if got, want := stdout.String(), "punchflow 0.1.0\n"; got != want {
+	if got, want := stdout.String(), "punchflow 0.1.1\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
