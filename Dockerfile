@@ -4,11 +4,11 @@
 FROM --platform=$BUILDPLATFORM oven/bun:1.4.3 AS web
 WORKDIR /src/web
 COPY web/package.json web/bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --network-concurrency=8
 COPY web/ ./
 RUN bun run build
 
-FROM --platform=$BUILDPLATFORM golang:1.25.4-alpine AS server
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS server
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src

@@ -221,8 +221,6 @@ func pf12ReferenceIDs(value any) []string {
 			}
 		}
 		return ids
-	case fmt.Stringer:
-		return []string{v.String()}
 	case json.RawMessage:
 		var decoded any
 		if json.Unmarshal(v, &decoded) == nil {
@@ -233,6 +231,8 @@ func pf12ReferenceIDs(value any) []string {
 		if json.Unmarshal(v, &decoded) == nil {
 			return pf12ReferenceIDs(decoded)
 		}
+	case fmt.Stringer:
+		return []string{v.String()}
 	}
 	return nil
 }

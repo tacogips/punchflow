@@ -125,3 +125,24 @@ func mustActiveChartID(t *testing.T, e *pf14TestEnv) string {
 	}
 	return id
 }
+
+func TestReferenceCompareDecodesRawJSON(t *testing.T) {
+	tests := []struct {
+		name   string
+		actual json.RawMessage
+		want   bool
+	}{
+		{name: "single reference", actual: json.RawMessage(`"team-sales"`), want: true},
+		{name: "multiple references", actual: json.RawMessage(`["team-finance","team-sales"]`), want: true},
+		{name: "different reference", actual: json.RawMessage(`"team-finance"`)},
+		{name: "empty reference", actual: json.RawMessage(`""`)},
+		{name: "invalid JSON", actual: json.RawMessage(`invalid`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := pf12ReferenceCompare(tt.actual, "equal", "team-sales"); got != tt.want {
+				t.Errorf("reference equality = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -545,12 +545,16 @@ func TestWebhookDispatcherRotatesRegistrationsWithBacklogs(t *testing.T) {
 	case <-aBacklogDelivered:
 		cancel()
 		close(releaseB)
-		<-done
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("RunOnce after cancellation = %v", err)
+		}
 		t.Fatal("registration a received another backlog event before the healthy registration")
 	case <-time.After(2 * time.Second):
 		cancel()
 		close(releaseB)
-		<-done
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("RunOnce after cancellation = %v", err)
+		}
 		t.Fatal("healthy registration was starved by older backlogs")
 	}
 	cancel()
@@ -618,7 +622,9 @@ func TestWebhookAdmitsDueRetryWhileAnotherRegistrationIsBusy(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		cancel()
 		close(releaseSlow)
-		<-done
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("RunOnce after cancellation = %v", err)
+		}
 		t.Fatal("due retry was not admitted while another registration remained busy")
 	}
 	cancel()
@@ -683,7 +689,9 @@ func TestWebhookAdmitsResendWhileAnotherRegistrationIsBusy(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		cancel()
 		close(releaseSlow)
-		<-done
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("RunOnce after cancellation = %v", err)
+		}
 		t.Fatal("accepted resend was not admitted while another registration remained busy")
 	}
 	cancel()

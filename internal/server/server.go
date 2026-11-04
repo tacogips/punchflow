@@ -302,8 +302,14 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	select {
 	case err := <-httpDone:
 		cancel()
-		<-webhookDone
-		return serveErr(err)
+		webhookResult := <-webhookDone
+		if err := serveErr(err); err != nil {
+			return err
+		}
+		if webhookResult != nil {
+			return fmt.Errorf("server: webhook dispatcher: %w", webhookResult)
+		}
+		return nil
 	case err := <-webhookDone:
 		if runCtx.Err() != nil {
 			shutdownErr := shutdown()
