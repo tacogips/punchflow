@@ -1,0 +1,166 @@
+{
+  "taskId": "argus-520-523-s726",
+  "manifestPath": "impl-plans/active/argus-520-523-s726-dispatch.json",
+  "workflowMode": "issue-resolution",
+  "implementationBranch": "main",
+  "baseBranch": "main",
+  "remote": "origin",
+  "originalHead": "e3875dfb2532f2bb3f73176c6ea2596344144c3c",
+  "evidenceRoot": "tmp/argus-520-523-s726",
+  "evidenceLayout": "tmp/argus-520-523-s726/<planId>/attempt-<n>/ (untracked, data only: logs, JSON, digests)",
+  "designDocPaths": [
+    "design-docs/specs/design-api-coverage.md",
+    "design-docs/specs/design-auth-admin.md"
+  ],
+  "planIndexPath": "impl-plans/README.md",
+  "reviewContext": {
+    "issueReference": "ai-native-pii/argus#520, ai-native-pii/argus#523",
+    "userProblem": "(#520) GET /v1/tickets?updatedAtStart=2026-10-28T04:08:57.101584+00:00 returns 400 because kftime.ParseInput switches on fixed string lengths and rejects valid RFC 3339 date-times with other fractional digit counts. (#523) POST /admin/api/workflows returns 404, so Argus tests cannot add a workflow definition to a running punchflow without restarting with a modified fixture.",
+    "requiredOutcomes": [
+      "kftime.ParseInput accepts RFC 3339 date-time with 0-9 fractional digits and Z or +hh:mm/-hh:mm offset, plus date-only YYYY-MM-DD (JST midnight); everything else is rejected and QueryTime returns 400 invalid_parameter 'Invalid <key>'",
+      "GET /v1/tickets?updatedAtStart=2026-10-28T04:08:57.101584+00:00 returns 200 (test)",
+      "POST /admin/api/workflows (createWorkflow) adds one fixture-shaped workflow to the running store: 201 WorkflowDetail; 401/403 auth; 400 invalid (fixture validator problems via baseline multiset diff); 409 duplicate id or code; visible via /v1/workflows and usable for POST /v1/tickets",
+      "README.md documents the RFC 3339 filter behavior and the new admin endpoint",
+      "go build ./..., go vet ./... and go test ./... pass at reconcile"
+    ],
+    "nonGoals": [
+      "No GET /admin/api/workflows and no DELETE /admin/api/workflows/{id} (design D8)",
+      "No change to kftime.Format/FormatDate/ToMillis/FromMillis output (still millisecond JST)",
+      "No change to internal/fixtures validator, internal/store, internal/present, internal/api/v1 production code, internal/httpx/query.go",
+      "No change to body date parsing (proxies, general masters, user custom fields) or internal/formula",
+      "No --enable-admin-reset gate for createWorkflow"
+    ],
+    "constraints": [
+      "Do not modify unrelated files; each worker touches only its plan's writePaths",
+      "Follow CLAUDE.md and go-coding-standards; split any touched Go file of 1000+ lines",
+      "No git write operations by workers; per-edit sha256 drift protocol",
+      "Commit messages contain no AI tool attribution or Co-Authored-By lines",
+      "Work on main of tacogips/punchflow; push to origin allowed",
+      "Workspace-wide go build/vet/test gate runs only in serial reconcile"
+    ],
+    "designDecisionsAndRationale": [
+      {"decision": "ParseInput uses an anchored RFC 3339 regexp gate then time.RFC3339Nano; date-only stays JST midnight", "rationale": "time.Parse alone is more lenient than RFC 3339 (comma fraction, etc.); design-api-coverage.md#timestamp-input-parsing-argus-520"},
+      {"decision": "Keep full precision in ParseInput; store.Millis truncates downstream", "rationale": "Filters compare at stored millisecond precision; output formatting unchanged"},
+      {"decision": "createWorkflow validation = multiset difference of fixtures.Validate problems (File, Path, Message) between baseline export and export with candidate appended last", "rationale": "DR-001: candidate problems surface in several path forms and other files; pre-existing runtime problems must not block the request"},
+      {"decision": "Duplicate id/code check against workflows rows of any status runs before validation and returns 409 conflict", "rationale": "Distinguishes conflict from fixture validator 'duplicate id' 400s; unique-constraint insert failure maps to same 409"},
+      {"decision": "All steps after auth inside one WithTx; audit workflow.create in same tx; folder-scope 403 via Principal.AllowsAny", "rationale": "Rejections leave no row and no audit; matches other admin mutations"},
+      {"decision": "No GET/DELETE admin workflow endpoints (D8)", "rationale": "GET duplicates /v1/workflows; DELETE needs ticket-reference rules; not required by #523"}
+    ],
+    "intentionalTradeoffs": [
+      "Three independent wave-1 plans with disjoint write paths; README documents the design contract in parallel with code",
+      "PLAN-520 and PLAN-523 both run go test in internal/api/v1 during the wave; transient compile failure from the sibling's in-progress file is handled by rerun, never by editing it",
+      "Detail (slip) 11-validation limit test is optional under the design's 'or' wording; the 51-form limit test and slip combinationType test are required"
+    ],
+    "supportedEdgeCases": [
+      "0, 1, 2, 3, 4, 6, 9 fractional digits with Z, +00:00, +09:00, -05:30",
+      "Rejected: lowercase t/z, space separator, missing offset, comma fraction, 10+ digits, bare 'T56.Z', +0900, month 13, hour 24, trailing text, empty, garbage",
+      "createWorkflow without id generates UUID v4",
+      "Candidate id colliding with a later-file entity (tokens.json) or earlier entity (users.json) -> 400 duplicate id",
+      "Unrelated baseline validation problem (webhook with dangling workflow_ids) does not block a valid candidate"
+    ],
+    "outOfScopeEdgeCases": [
+      "Body date-time fields (none parse via ParseInput)",
+      "Deleting or listing runtime-created workflows via admin API",
+      "Supplying dependent definitions (folders, routes, categories) in the createWorkflow body"
+    ],
+    "sourcePaths": [
+      "design-docs/specs/design-api-coverage.md",
+      "design-docs/specs/design-auth-admin.md",
+      "impl-plans/active/argus-520-rfc3339-query-time.md",
+      "impl-plans/active/argus-523-admin-create-workflow.md",
+      "impl-plans/active/argus-520-523-readme-docs.md",
+      "impl-plans/README.md",
+      "internal/kftime/kftime.go",
+      "internal/httpx/query.go",
+      "internal/admin/routes.go",
+      "internal/fixtures/validate.go",
+      "internal/fixtures/load.go"
+    ]
+  },
+  "plans": [
+    {
+      "planId": "PLAN-520-RFC3339",
+      "planPath": "impl-plans/active/argus-520-rfc3339-query-time.md",
+      "wave": 1,
+      "dependsOn": [],
+      "writePaths": [
+        "internal/kftime/kftime.go",
+        "internal/kftime/kftime_test.go",
+        "internal/httpx/query_test.go",
+        "internal/api/v1/tickets_rfc3339_filter_test.go",
+        "impl-plans/active/argus-520-rfc3339-query-time.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "ParseInput uses the anchored regexp gate plus time.RFC3339Nano; date-only still JST midnight",
+        "All listed kftime accept/reject cases exist and pass, including nanosecond precision assertions",
+        "QueryTime 400 invalid_parameter test exists and passes",
+        "TestListTicketsAcceptsRFC3339MicrosecondFilter returns 200 for the microsecond filter",
+        "gofmt -l clean for owned files; kftime.Format output unchanged"
+      ],
+      "verification": [
+        "gofmt -l internal/kftime internal/httpx/query_test.go internal/api/v1/tickets_rfc3339_filter_test.go",
+        "go test -count=1 ./internal/kftime/... ./internal/httpx/...",
+        "go test -count=1 ./internal/api/v1/ -run 'TestListTicketsAcceptsRFC3339MicrosecondFilter|Ticket|AuditLog'",
+        "go vet ./internal/kftime/... ./internal/httpx/... ./internal/api/v1/"
+      ]
+    },
+    {
+      "planId": "PLAN-523-CREATE-WORKFLOW",
+      "planPath": "impl-plans/active/argus-523-admin-create-workflow.md",
+      "wave": 1,
+      "dependsOn": [],
+      "writePaths": [
+        "internal/admin/routes.go",
+        "internal/admin/routes_test.go",
+        "internal/admin/workflows.go",
+        "internal/admin/workflows_test.go",
+        "impl-plans/active/argus-523-admin-create-workflow.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "createWorkflow POST /admin/api/workflows registered; routes_test.go expects 24 operations including it",
+        "Design steps 1-7 implemented in internal/admin/workflows.go with baseline multiset-diff validation, 409 before validation, folder-scope 403, audit inside WithTx",
+        "All listed tests pass: 201 + /v1 visibility + ticket creation, 401, 403, 400 cases, 409 cases, no row/audit after rejections, unrelated-state tolerance",
+        "gofmt -l clean and go vet passes for internal/admin; internal/fixtures unchanged"
+      ],
+      "verification": [
+        "gofmt -l internal/admin",
+        "go test -count=1 ./internal/admin/...",
+        "go test -count=1 ./internal/fixtures/... ./internal/api/v1/ -run 'Workflow|Fixture'",
+        "go vet ./internal/admin/..."
+      ]
+    },
+    {
+      "planId": "PLAN-DOCS-README",
+      "planPath": "impl-plans/active/argus-520-523-readme-docs.md",
+      "wave": 1,
+      "dependsOn": [],
+      "writePaths": [
+        "README.md",
+        "impl-plans/active/argus-520-523-readme-docs.md"
+      ],
+      "sharedPaths": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "README has the RFC 3339 filter note in 'Point a kickflow client at punchflow'",
+        "README has '## Adding a workflow at runtime' after '## Webhooks' with the curl example and design link",
+        "No claim of GET or DELETE admin workflow endpoints"
+      ],
+      "verification": [
+        "grep -n \"/admin/api/workflows\\|RFC 3339\" README.md",
+        "git diff --check -- README.md"
+      ]
+    }
+  ],
+  "reconcile": {
+    "serial": true,
+    "verification": [
+      "go build ./...",
+      "go vet ./...",
+      "go test ./..."
+    ]
+  }
+}

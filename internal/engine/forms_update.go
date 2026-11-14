@@ -1,0 +1,173 @@
+package engine
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"punchflow/internal/model"
+	"punchflow/internal/store"
+)
+
+func pf16StringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// pf14cApplyFormEdit applies the inputs/slipItems of an update to a stored
+// ticket. partial selects the /form PATCH contract (per-field and
+// per-detail-section differential update); otherwise inputs replace the whole
+// form and slipItems replace every detail row. Values the actor cannot edit are
+// preserved. The calculated title, if any, is set on t.
+func (e *Engine) pf14cApplyFormEdit(ctx context.Context, tx *store.Tx, a Actor, t *model.Ticket, def model.WorkflowDef, in UpdateInput, partial, approver bool, now time.Time) error {
+	blocked, err := pf16BlockedSections(ctx, tx, a, *t, def)
+	if err != nil {
+		return err
+	}
+	existingInputs, err := store.EngTicketInputs(ctx, tx, t.ID)
+	if err != nil {
+		return err
+	}
+	existingSlips, err := store.TicketSlipItems(ctx, tx, t.ID)
+	if err != nil {
+		return err
+	}
+	stored := pf14cInputsFromRows(def, existingInputs)
+	inputValues := stored
+	supplied := map[string]bool{}
+	if in.Inputs != nil {
+		if supplied, err = pf14cSuppliedFields(def, *in.Inputs); err != nil {
+			return err
+		}
+		if err = pf16RejectBlockedInputs(def, blocked, *in.Inputs); err != nil {
+			return err
+		}
+		switch {
+		case approver:
+			if err = pf14cValidateApproverPatch(def, *in.Inputs); err != nil {
+				return err
+			}
+			inputValues = pf14cMergeInputs(def, stored, *in.Inputs)
+		case partial:
+			inputValues = pf14cMergeInputs(def, stored, *in.Inputs)
+		default:
+			if err = pf14ValidateCreateCompleteness(def, *in.Inputs, blocked); err != nil {
+				return err
+			}
+			inputValues = *in.Inputs
+		}
+	}
+	opts := formOpts{
+		// An in-progress approver's non-form parameters are ignored by the
+		// update contract, so a supplied status must not change form validation.
+		Full: !approver && in.Status != nil && *in.Status == model.TicketStatusInProgress, Partial: partial, Approver: approver,
+		LockReferenceSnapshots: t.Status == model.TicketStatusInProgress || t.Status == model.TicketStatusCompleted,
+		Blocked:                blocked, Supplied: supplied, ExistingInputs: existingInputs, ExistingSlips: existingSlips,
+		AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot,
+	}
+	slipValues := []SlipItemInput{}
+	if in.SlipItems != nil {
+		slipValues = *in.SlipItems
+		opts.SlipMode = slipReplaceAll
+		if partial {
+			// PATCH /form is section-differential; ordinary PATCH /ticket
+			// replaces the complete detail collection.
+			opts.SlipMode = slipReplaceSections
+		}
+	}
+	return e.pf14cStoreForm(ctx, tx, t, def, inputValues, slipValues, opts, existingInputs, existingSlips, now)
+}
+
+// pf14cRevalidateForSubmit revalidates the stored form and detail rows as a
+// complete submission and returns the calculated values as route inputs.
+func (e *Engine) pf14cRevalidateForSubmit(ctx context.Context, tx *store.Tx, a Actor, t *model.Ticket, def model.WorkflowDef, now time.Time) ([]FieldInput, error) {
+	blocked, err := pf16BlockedSections(ctx, tx, a, *t, def)
+	if err != nil {
+		return nil, err
+	}
+	existingInputs, err := store.EngTicketInputs(ctx, tx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	existingSlips, err := store.TicketSlipItems(ctx, tx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	opts := formOpts{Full: true, Revalidating: true, Blocked: blocked, ExistingInputs: existingInputs, ExistingSlips: existingSlips, AuthorID: pf16StringOrEmpty(t.AuthorID), ProxyClientID: t.ProxyClientUserID, AuthorTeamJSON: t.AuthorTeamSnapshot}
+	stored := pf14cInputsFromRows(def, existingInputs)
+	slips := pf14cSlipInputsFromRows(def, existingSlips)
+	if len(slips) > 0 {
+		opts.SlipMode = slipReplaceAll
+	}
+	res, err := pf14NormalizeForm(ctx, tx, t.ID, def, stored, slips, opts, store.Millis(now))
+	if err != nil {
+		return nil, err
+	}
+	if err = e.pf14cWriteForm(ctx, tx, t, def, res, existingInputs, existingSlips, now); err != nil {
+		return nil, err
+	}
+	return pf14cInputsFromRows(def, res.Inputs), nil
+}
+
+func pf14cSlipInputsFromRows(def model.WorkflowDef, rows []model.TicketSlipItem) []SlipItemInput {
+	sections := map[string]model.WorkflowSection{}
+	for _, section := range def.SectionList {
+		if section.SectionType == model.SectionTypeSlip {
+			sections[section.ID] = section
+		}
+	}
+	out := make([]SlipItemInput, 0, len(rows))
+	for _, row := range rows {
+		section, ok := sections[row.SlipSectionID]
+		if !ok {
+			continue
+		}
+		item := SlipItemInput{SlipSectionID: section.ID, Inputs: []SlipFieldInput{}}
+		for _, field := range section.SlipFields {
+			value, exists := slipCell(row, field)
+			if !exists {
+				continue
+			}
+			raw, err := json.Marshal(value)
+			if err != nil {
+				continue
+			}
+			input := SlipFieldInput{SlipFieldID: field.ID, Value: raw}
+			if field.FieldType == "file" {
+				input.Files = pf14StringsOf(value)
+				input.Value = nil
+			}
+			item.Inputs = append(item.Inputs, input)
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func (e *Engine) pf14cStoreForm(ctx context.Context, tx *store.Tx, t *model.Ticket, def model.WorkflowDef, inputs []FieldInput, slips []SlipItemInput, opts formOpts, oldInputs []model.TicketInput, oldSlips []model.TicketSlipItem, now time.Time) error {
+	res, err := pf14NormalizeForm(ctx, tx, t.ID, def, inputs, slips, opts, store.Millis(now))
+	if err != nil {
+		return err
+	}
+	return e.pf14cWriteForm(ctx, tx, t, def, res, oldInputs, oldSlips, now)
+}
+
+func (e *Engine) pf14cWriteForm(ctx context.Context, tx *store.Tx, t *model.Ticket, def model.WorkflowDef, res formResult, oldInputs []model.TicketInput, oldSlips []model.TicketSlipItem, now time.Time) error {
+	if err := store.EngReplaceInputs(ctx, tx, t.ID, res.Inputs); err != nil {
+		return err
+	}
+	if res.SlipsChanged {
+		if err := store.EngReplaceSlipItems(ctx, tx, t.ID, res.Slips); err != nil {
+			return err
+		}
+	}
+	if err := pf14SyncInputSideEffects(ctx, tx, def, t.ID, oldInputs, oldSlips, res, store.Millis(now)); err != nil {
+		return err
+	}
+	if res.Title != nil {
+		t.Title = res.Title
+	}
+	return nil
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "code": "G1",
+    "name": "Member",
+    "level": 1,
+    "isDefault": true
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "code": "G2",
+    "name": "Manager",
+    "level": 2,
+    "isDefault": false
+  }
+]
