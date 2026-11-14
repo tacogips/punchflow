@@ -1,0 +1,144 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000015",
+    "code": "accountant",
+    "email": "accountant@punchflow.test",
+    "firstName": "Accountant",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000007",
+    "code": "admin",
+    "email": "admin@punchflow.test",
+    "firstName": "Admin",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal",
+    "customFields": {
+      "cost-center": "CC-100",
+      "hire-date": "2020-04-01",
+      "skills": [
+        "go",
+        "sql"
+      ]
+    }
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000017",
+    "code": "assistant",
+    "email": "assistant@punchflow.test",
+    "firstName": "Assistant",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "assistant"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000008",
+    "code": "ceo",
+    "email": "ceo@punchflow.test",
+    "firstName": "Ceo",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000012",
+    "code": "eng-manager",
+    "email": "eng-manager@punchflow.test",
+    "firstName": "Eng",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000013",
+    "code": "engineer",
+    "email": "engineer@punchflow.test",
+    "firstName": "Engineer",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000014",
+    "code": "finance-manager",
+    "email": "finance-manager@punchflow.test",
+    "firstName": "Finance",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000016",
+    "code": "hr-manager",
+    "email": "hr-manager@punchflow.test",
+    "firstName": "Hr",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000019",
+    "code": "invited-user",
+    "email": "invited-user@punchflow.test",
+    "firstName": "Invited",
+    "lastName": "User",
+    "status": "invited",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000010",
+    "code": "sales-deputy",
+    "email": "sales-deputy@punchflow.test",
+    "firstName": "Sales",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000009",
+    "code": "sales-manager",
+    "email": "sales-manager@punchflow.test",
+    "firstName": "Sales",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal"
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000011",
+    "code": "sales-rep",
+    "email": "sales-rep@punchflow.test",
+    "firstName": "Sales",
+    "lastName": "User",
+    "status": "activated",
+    "locale": "ja",
+    "userType": "normal",
+    "customFields": {
+      "cost-center": "CC-200",
+      "employment-type": "part-time"
+    }
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000018",
+    "code": "suspended-user",
+    "email": "suspended-user@punchflow.test",
+    "firstName": "Suspended",
+    "lastName": "User",
+    "status": "suspended",
+    "locale": "ja",
+    "userType": "normal"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "variables": {
+    "DESCRIPTION": "A Go command line tool",
+    "GITHUB_REPOSITORY": "user/repo",
+    "GO_VERSION": "1.25.4",
+    "HOMEBREW_FORMULA_CLASS": "App",
+    "HOMEBREW_TAP": "user/tap",
+    "HOMEPAGE": "https://github.com/user/repo",
+    "LICENSE": "MIT",
+    "MODULE_PATH": "punchflow",
+    "PROJECT_NAME": "punchflow",
+    "VERSION": "0.1.0"
+  }
+}

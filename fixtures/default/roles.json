@@ -1,0 +1,114 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000029",
+    "name": "Super Admin",
+    "editable": false,
+    "permissionList": [
+      {
+        "permission": "tenant"
+      },
+      {
+        "permission": "billing"
+      },
+      {
+        "permission": "integration"
+      },
+      {
+        "permission": "security"
+      },
+      {
+        "permission": "audit"
+      },
+      {
+        "permission": "stats"
+      },
+      {
+        "permission": "workflow"
+      },
+      {
+        "permission": "route"
+      },
+      {
+        "permission": "pipeline"
+      },
+      {
+        "permission": "workflow_misc"
+      },
+      {
+        "permission": "user"
+      },
+      {
+        "permission": "team"
+      },
+      {
+        "permission": "role"
+      },
+      {
+        "permission": "master"
+      },
+      {
+        "permission": "master_read"
+      },
+      {
+        "permission": "ticket_read"
+      },
+      {
+        "permission": "ticket_write"
+      },
+      {
+        "permission": "label"
+      },
+      {
+        "permission": "automation"
+      }
+    ],
+    "memberCodes": [
+      "admin"
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000030",
+    "name": "Ticket Admin",
+    "editable": true,
+    "permissionList": [
+      {
+        "permission": "ticket_read"
+      },
+      {
+        "permission": "ticket_write"
+      }
+    ],
+    "memberCodes": [
+      "hr-manager"
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000031",
+    "name": "Master Editor",
+    "editable": true,
+    "permissionList": [
+      {
+        "permission": "master"
+      },
+      {
+        "permission": "master_read"
+      }
+    ],
+    "memberCodes": [
+      "accountant"
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000032",
+    "name": "Integration Admin",
+    "editable": true,
+    "permissionList": [
+      {
+        "permission": "integration"
+      }
+    ],
+    "memberCodes": [
+      "eng-manager"
+    ]
+  }
+]

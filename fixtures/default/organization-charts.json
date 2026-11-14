@@ -1,0 +1,212 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000027",
+    "name": "2026 Org",
+    "current": true,
+    "teams": [
+      {
+        "id": "00000000-0000-4000-8000-000000000020",
+        "code": "company",
+        "name": "Company",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "admin",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          },
+          {
+            "userCode": "ceo",
+            "leader": true,
+            "gradeCodes": [
+              "executive"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000023",
+        "code": "engineering",
+        "name": "Engineering",
+        "parentCode": "company",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "eng-manager",
+            "leader": true,
+            "gradeCodes": [
+              "manager"
+            ]
+          },
+          {
+            "userCode": "engineer",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000025",
+        "code": "finance",
+        "name": "Finance",
+        "parentCode": "company",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "accountant",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          },
+          {
+            "userCode": "finance-manager",
+            "leader": true,
+            "gradeCodes": [
+              "director"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000026",
+        "code": "hr",
+        "name": "Human Resources",
+        "parentCode": "company",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "assistant",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          },
+          {
+            "userCode": "hr-manager",
+            "leader": true,
+            "gradeCodes": [
+              "manager"
+            ]
+          },
+          {
+            "userCode": "invited-user",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          },
+          {
+            "userCode": "suspended-user",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000024",
+        "code": "platform",
+        "name": "Platform",
+        "parentCode": "engineering",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "eng-manager",
+            "leader": true,
+            "gradeCodes": [
+              "manager"
+            ]
+          },
+          {
+            "userCode": "engineer",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000021",
+        "code": "sales",
+        "name": "Sales",
+        "parentCode": "company",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "sales-deputy",
+            "leader": false,
+            "gradeCodes": [
+              "chief"
+            ]
+          },
+          {
+            "userCode": "sales-manager",
+            "leader": true,
+            "gradeCodes": [
+              "manager"
+            ]
+          },
+          {
+            "userCode": "sales-rep",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000022",
+        "code": "sales-east",
+        "name": "Sales East",
+        "parentCode": "sales",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "sales-deputy",
+            "leader": true,
+            "gradeCodes": [
+              "chief"
+            ]
+          },
+          {
+            "userCode": "sales-rep",
+            "leader": false,
+            "gradeCodes": [
+              "staff"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8000-000000000028",
+    "name": "2027 Plan",
+    "current": false,
+    "teams": [
+      {
+        "id": "0f77f847-c5af-4ab8-bce6-4c090f87df67",
+        "code": "company",
+        "name": "Company",
+        "approveOnly": false,
+        "memberships": [
+          {
+            "userCode": "ceo",
+            "leader": true,
+            "gradeCodes": [
+              "executive"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

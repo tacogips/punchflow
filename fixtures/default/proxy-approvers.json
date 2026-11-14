@@ -1,0 +1,12 @@
+[
+  {
+    "id": "459e754a-3ec6-472a-a393-b915deaad10b",
+    "userCode": "sales-manager",
+    "proxyUserCode": "sales-deputy",
+    "workflowCodes": [
+      "expense-claim",
+      "leave-request",
+      "purchase-request"
+    ]
+  }
+]

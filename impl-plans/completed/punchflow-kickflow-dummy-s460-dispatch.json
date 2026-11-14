@@ -1,0 +1,1178 @@
+{
+  "taskId": "punchflow-kickflow-dummy-s460",
+  "workflowMode": "issue-resolution",
+  "implementationBranch": "feat/kickflow-dummy-server",
+  "baseBranch": "feat/kickflow-dummy-server",
+  "remote": "origin",
+  "gitPush": false,
+  "originalHead": "68d63c80b7a9a5bdc9e8f339ce85d2a7226e2c4b",
+  "evidenceRoot": "tmp/punchflow-kickflow-dummy-s460",
+  "manifestPath": "impl-plans/active/punchflow-kickflow-dummy-s460-dispatch.json",
+  "designDocPaths": [
+    "design-docs/specs/architecture.md",
+    "design-docs/specs/command.md",
+    "design-docs/specs/notes.md",
+    "design-docs/specs/design-api-coverage.md",
+    "design-docs/specs/design-approval-engine.md",
+    "design-docs/specs/design-auth-admin.md",
+    "design-docs/specs/design-webhooks.md",
+    "design-docs/user-qa/README.md",
+    "design-docs/user-qa/pending-punchflow-defaults.md"
+  ],
+  "planIndexPath": "impl-plans/README.md",
+  "acceptedDependencies": [],
+  "reviewContext": {
+    "issueReference": "workflowInput issue 'punchflow: local/dev-only dummy kickflow server (Go + SQLite + Solid.js/bun + Keycloak SSO)' (no issueUrl/issueNumber/issueRepository); workflowExecutionId opus-luna-design-and-implement-review-loop-session-460; accepted design comm-008035; accepted plans comm-008038, accepted by Step 5 re-review comm-008039",
+    "userProblem": "Other systems need to verify their kickflow integration (REST API client and webhook receiver) locally and in dev, but kickflow cannot be contracted by individuals. punchflow is a dummy kickflow server whose behavior is inferred from public kickflow material (design-docs/references/kickflow-api.md and kickflow-openapi.yaml: 96 operations, 57 paths, 13 webhook events).",
+    "requiredOutcomes": [
+      "Coverage matrix in design-docs/specs mapping every kickflow API operation and webhook event to its punchflow implementation, with inferred items marked (design-api-coverage.md)",
+      "Contract test loads design-docs/references/kickflow-openapi.yaml, asserts all 96 operations are routed, and validates a representative 200 response of every operation against its response schema (PF-26)",
+      "Every /v1 endpoint is implemented and covered by httptest Go tests checking status codes, response field names, pagination headers and error format (PF-18..PF-23)",
+      "All 13 webhook events are emitted by their lifecycle actions, signed with X-Kickflow-Signature sha256=HMAC hex, persisted with delivery attempts, and tested with an httptest receiver (PF-09, PF-15, PF-22, PF-23, PF-24, PF-26)",
+      "Approval engine tests cover submit -> multi-step approve -> completed, deny, send back and resubmit, withdraw, parallel all/any steps, and proxy approval (PF-14)",
+      "JSON fixtures under fixtures/default seed a realistic org, users, masters, forms and 3 workflows; punchflow can load, reset and export them, and export round-trips byte-identically (PF-06, PF-07, PF-16)",
+      "Keycloak docker-compose plus realm import, a documented manual OIDC login check, and OIDC callback/token validation unit-tested against a fake issuer (PF-07, PF-17, PF-25)",
+      "web/ builds with bun install && bun run build, bun test passes, and the built assets are embedded and served by the Go binary (PF-03, PF-11..PF-13, PF-16, PF-27)",
+      "go build ./..., go vet ./... and go test ./... pass; mise tasks for build, dev, test and lint exist and work (PF-01, PF-27)",
+      "README explains how to point an existing kickflow client at punchflow: base URL, token, webhook secret (PF-25)",
+      "Service-token X-Caller-Id impersonation, rate-limit-compatible headers/errors (disabled by default), and the documented error codes are implemented and tested (PF-01, PF-04, PF-05, PF-24)"
+    ],
+    "nonGoals": [
+      "kickflow AI features",
+      "Production hardening, multi-tenancy, billing, high availability",
+      "A visual workflow designer; workflow and route definitions are read-only fixtures with no edit API (DIV-05)",
+      "Formula evaluation (INF-21), sub-status, labels, pull-up and revoke (DIV-04), enforcement of restricted role scoping (DIV-08), invitation e-mails (DIV-02)",
+      "CSV import/export, audit log export, virus scanning, purge of unreferenced uploads (INF-26)",
+      "OIDC JIT provisioning, RP-initiated logout, refresh tokens, a Keycloak container in automated tests",
+      "Full CRUD UI for org/grades/roles/masters/categories/folders/proxies (read-only views per user-qa item 10)",
+      "Pushing to any remote (gitPush=false)"
+    ],
+    "constraints": [
+      "Go module punchflow, go 1.25, cmd/ and internal/ layout per .claude/skills/go-coding-standards; every Go file under 1000 lines",
+      "SQLite only through pure-Go modernc.org/sqlite (no cgo), schema migrations in internal/store/migrations",
+      "Frontend: Solid.js + TypeScript under web/, bun only (bun.lock committed); no npm/yarn/pnpm commands or lockfiles",
+      "Dev-only shortcuts (local login, admin reset) only behind explicit flags/env vars; no real secrets in the repo; dev fixture tokens are intentionally low-entropy",
+      "impl-plans/README.md Shared Execution Protocol: edit only the declared writePaths/sharedPaths, fresh reads with sha256 hashes, intent snapshot, drift detection, frozen contracts (go.mod, go.sum, internal/model/*, internal/fixtures/types.go, web/package.json, web/bun.lock) outside their owners and PF-27, no git state changes, no go mod tidy before PF-27, no repo-wide gofmt, per-plan identifier prefixes in shared packages",
+      "Workers update only their own plan file Progress Log and never edit this dispatch manifest; PF-27's sharedPath impl-plans/active covers plan archiving only",
+      "Verification logs go to /tmp/<plan-id>-<step>.log per plan text, with exit status recorded; per-plan/per-attempt evidence goes under evidenceRoot tmp/punchflow-kickflow-dummy-s460/<planId>/attempt-<n>/ (git-ignored)",
+      "Wave-2+ workers never write ./punchflow or web/dist/app; web builds go to a temp --outDir",
+      "Run commands in the foreground; no detached or orphaned processes"
+    ],
+    "designDecisionsAndRationale": [
+      "Single binary: web/dist/app and fixtures/default embedded through embed.go with the all: prefix and .gitkeep anchors, so a fresh clone builds before the web build",
+      "Single SQLite connection (MaxOpenConns 1); every repository, presenter, engine and webhook function takes store.Querier and never *store.DB, to avoid deadlocks inside WithTx",
+      "Stub-first contracts: PF-10 pins the /v1 route table (96 ops in 16 handler files), the engine surface and the files store; PF-05 pins oidc.go; PF-09 pins payload.go; PF-16 pins the admin stubs. Later plans replace bodies only, which allows wide parallel fan-out",
+      "Webhooks use a transactional outbox: engine events are enqueued in the same tx, and the dispatcher delivers after commit with a 10 s timeout, 1 + 10 attempts, exponential backoff (10 s base, 1 h cap; INF-08) and auto-disable after 7 days of failures (INF-10). Signature is sha256=HMAC hex of raw json.Marshal bytes with HTML escaping (INF-33)",
+      "Webhook payloads reuse the API presenters (TicketDetail, Comment, TicketWithStep), so webhook bodies have the same shapes as API responses",
+      "The punchflow-only dev admin API lives at /admin/api (23 ops), separate from the kickflow-compatible /v1 surface",
+      "Browser SSO is a server-side BFF using authorization code + PKCE S256 via coreos/go-oidc v3 and x/oauth2; local e-mail login exists only behind --enable-local-login",
+      "Vite + vite-plugin-solid run through bun, because Bun's bundler has no Solid JSX transform; bun test covers pure TS modules only",
+      "Contract test uses santhosh-tekuri/jsonschema v6 + gopkg.in/yaml.v3 against the official OpenAPI 3.1 copy",
+      "Inferred behavior is recorded as INF-xx and deliberate divergence as DIV-xx in design-docs/specs/notes.md"
+    ],
+    "intentionalTradeoffs": [
+      "Shared stub files cross waves: PF-10 stubs are edited by PF-14/PF-18..PF-23, the PF-05 oidc.go by PF-17, the PF-09 payload.go by PF-15, the PF-16 admin stubs by PF-24, and the PF-03 pages by PF-11..PF-13. Each is declared in sharedPaths with an intendedEdit note",
+      "Transient same-wave compile breakage is accepted while shared packages are mid-edit; workers re-verify at the end, and PF-27 runs a serial final reconciliation",
+      "Frozen data contracts after wave 1: missing fields become reconciliation requests resolved serially in PF-27",
+      "Rate limiting is off by default (--rate-limit 0)",
+      "Keycloak login is a documented manual check; Docker may be unavailable",
+      "Admin UI for org and master data is read-only (user-qa pending-punchflow-defaults item 10)"
+    ],
+    "supportedEdgeCases": [
+      "Literal routes take priority over wildcards (/v1/users/lookupByEmail, /v1/tickets/tasks); a wrong method on a known path returns 404 endpoint_not_found, not 405",
+      "411 for HTTP/1.x POST/PUT without a length; invalid_content_type, invalid_json, payload_too_large and type-mismatch invalid_parameter",
+      "Pagination: perPage bounds, Link first/prev/next/last only when applicable, Total header; key[] array queries with optional bare values",
+      "SAT without/invalid/unknown X-Caller-Id; PAT ignores X-Caller-Id; invited, expired-invitation, suspended and deactivated users; tenant suspended/maintenance/admin_working modes; IP allowlist",
+      "Engine: serial and parallel groups with all/any (percent ceil), proxy approval with expired registrations rejected, send back to applicant or an earlier step, resubmit rebuilds steps but keeps the ticket number, route branch errorMessage, conditional skip/include steps, author_customizable and assignee_customizable approvers, none and confirm steps, comment-required rules, visibility (invisible_ticket)",
+      "Webhooks: 3xx/201/404/timeout count as failures, retries keep the same X-Kickflow-Delivery, manual resend uses the current secret, a persisted outbox survives restart, HTML-sensitive characters are escaped as kickflow does",
+      "Files: signed download URL expiry and tamper detection, client filenames never used on disk, standard plan -> upgrade_required",
+      "OIDC: state replay/expiry, nonce/audience/expiry mismatch, unknown e-mail, open-redirect-safe returnTo",
+      "Fixtures: strict unknown-key rejection, cross-reference validation, byte-stable export round-trip, atomic regeneration of fixtures/default only after a semantic-equality proof"
+    ],
+    "outOfScopeEdgeCases": [
+      "combinationType custom and fieldKey other_variable are rejected at fixture validation (INF-18)",
+      "Asynchronous org-chart jobs (synchronous only, INF-23); activation schedules (activationPlan null)",
+      "Multiple workflow versions (single version, DIV-05)",
+      "Integration objects (Slack, Chatwork, Teams, Google, kintone, CloudSign) are always null/[] (DIV-03, DIV-06)",
+      "Real kickflow rate-limit numbers beyond the inferred fixed 60 s window (INF-07)"
+    ],
+    "residualRisks": [
+      "S5-L1 (low): design-docs/specs/design-api-coverage.md:185 says 15 handler files while the Handler column names 16; PF-10 plans and checks 16. PF-27 may record the fix in its notes.md update",
+      "Completeness of the wave-1/2 contracts (model, schema, engine/files/route contracts); repairs go through PF-27 reconciliation",
+      "Network-dependent installs in PF-02 (go get) and PF-03 (bun install)",
+      "Transient same-wave compile breakage while shared stub files are mid-edit",
+      "Docker may be unavailable for the Keycloak compose check (recorded as skipped, not failed)"
+    ],
+    "dispatchOrderNote": "dependsOn copies each plan's accepted 'Depends On' header (PF-26: PF-17..PF-24; PF-27: PF-01..PF-26). Topological levels of this DAG equal the README waves: 1 = PF-01..03, 2 = PF-04..13, 3 = PF-14..17, 4 = PF-18..25, 5 = PF-26, 6 = PF-27 (serial). The Step 5 reviewer checked write-set disjointness per wave",
+    "sourcePaths": [
+      "design-docs/references/kickflow-api.md",
+      "design-docs/references/kickflow-openapi.yaml",
+      "design-docs/specs/architecture.md",
+      "design-docs/specs/command.md",
+      "design-docs/specs/notes.md",
+      "design-docs/specs/design-api-coverage.md",
+      "design-docs/specs/design-approval-engine.md",
+      "design-docs/specs/design-auth-admin.md",
+      "design-docs/specs/design-webhooks.md",
+      "design-docs/user-qa/pending-punchflow-defaults.md",
+      "impl-plans/README.md",
+      "mise.toml",
+      ".gitignore"
+    ]
+  },
+  "plans": [
+    {
+      "planId": "PF-01",
+      "planPath": "impl-plans/active/pf-01-foundation-primitives.md",
+      "dependsOn": [],
+      "writePaths": [
+        "impl-plans/active/pf-01-foundation-primitives.md",
+        "internal/kftime/kftime.go",
+        "internal/kftime/fake.go",
+        "internal/kftime/kftime_test.go",
+        "internal/kferr/kferr.go",
+        "internal/kferr/kferr_test.go",
+        "internal/build/version.go",
+        "internal/build/version_test.go",
+        "internal/cli/cli.go",
+        "internal/cli/cli_test.go",
+        "cmd/punchflow/main.go",
+        "cmd/punchflow/.gitkeep",
+        "embed.go",
+        "embed_test.go",
+        "web/dist/.gitkeep",
+        "fixtures/default/.gitkeep",
+        "mise.toml",
+        ".gitignore"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "All files in the table exist; `cmd/punchflow/.gitkeep` removed",
+        "Contract symbols exist with the exact names/signatures above",
+        "All listed tests exist and pass; gofmt clean",
+        "`mise tasks ls` shows the new tasks; existing tasks still present"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf01-build.log",
+        "go vet ./internal/kftime/... ./internal/kferr/... ./internal/build/... ./internal/cli/... ./cmd/... . 2>&1 | tee /tmp/pf01-vet.log",
+        "go test ./internal/kftime/... ./internal/kferr/... ./internal/build/... ./internal/cli/... . 2>&1 | tee /tmp/pf01-test.log",
+        "gofmt -l internal/kftime internal/kferr internal/build internal/cli cmd embed.go embed_test.go   # must print nothing",
+        "mise tasks ls 2>&1 | tee /tmp/pf01-mise.log   # must list web:install web:build web:test web:typecheck build dev test lint keycloak:up keycloak:down"
+      ]
+    },
+    {
+      "planId": "PF-02",
+      "planPath": "impl-plans/active/pf-02-data-contract.md",
+      "dependsOn": [],
+      "writePaths": [
+        "impl-plans/active/pf-02-data-contract.md",
+        "go.mod",
+        "go.sum",
+        "go-toolchain.json",
+        "internal/model/tenant.go",
+        "internal/model/user.go",
+        "internal/model/org.go",
+        "internal/model/role.go",
+        "internal/model/classification.go",
+        "internal/model/master.go",
+        "internal/model/definition.go",
+        "internal/model/ticket.go",
+        "internal/model/comment.go",
+        "internal/model/file.go",
+        "internal/model/audit.go",
+        "internal/model/token.go",
+        "internal/model/webhook.go",
+        "internal/model/enums.go",
+        "internal/store/db.go",
+        "internal/store/tx.go",
+        "internal/store/migrate.go",
+        "internal/store/ids.go",
+        "internal/store/secrets.go",
+        "internal/store/audit.go",
+        "internal/store/truncate.go",
+        "internal/store/store_test.go",
+        "internal/store/migrations/0001_init.sql",
+        "internal/fixtures/types.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "5 modules in go.mod with go.sum entries; `go mod verify` passes; `go-toolchain.json` records go version, each `go get` with exit code 0 and resolved version, and the verify result",
+        "Schema contains every table above; migration idempotent",
+        "Model and fixture types compile with documented JSON tags; every file < 1000 lines",
+        "Tests pass; gofmt clean"
+      ],
+      "verification": [
+        "go mod verify 2>&1 | tee /tmp/pf02-modverify.log         # \"all modules verified\"",
+        "go list -m all 2>&1 | tee /tmp/pf02-modules.log          # must list the 5 modules",
+        "go build ./... 2>&1 | tee /tmp/pf02-build.log",
+        "go vet ./internal/store/... ./internal/model/... ./internal/fixtures/... 2>&1 | tee /tmp/pf02-vet.log",
+        "go test ./internal/store/... ./internal/model/... ./internal/fixtures/... 2>&1 | tee /tmp/pf02-test.log",
+        "gofmt -l internal/store internal/model internal/fixtures   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-03",
+      "planPath": "impl-plans/active/pf-03-web-scaffold.md",
+      "dependsOn": [],
+      "writePaths": [
+        "impl-plans/active/pf-03-web-scaffold.md",
+        "web/package.json",
+        "web/bun.lock",
+        "web/toolchain.json",
+        "web/tsconfig.json",
+        "web/vite.config.ts",
+        "web/index.html",
+        "web/src/main.tsx",
+        "web/src/App.tsx",
+        "web/src/session.ts",
+        "web/src/styles.css",
+        "web/src/api/client.ts",
+        "web/src/api/types.ts",
+        "web/src/api/client.test.ts",
+        "web/src/lib/form-model.ts",
+        "web/src/lib/form-model.test.ts",
+        "web/src/lib/format.ts",
+        "web/src/lib/format.test.ts",
+        "web/src/lib/link.ts",
+        "web/src/lib/link.test.ts",
+        "web/src/pages/Login.tsx",
+        "web/src/pages/Dashboard.tsx",
+        "web/src/pages/tickets/TicketSearch.tsx",
+        "web/src/pages/tickets/TicketDetail.tsx",
+        "web/src/pages/tickets/TicketEdit.tsx",
+        "web/src/pages/definitions/Workflows.tsx",
+        "web/src/pages/definitions/WorkflowView.tsx",
+        "web/src/pages/definitions/Routes.tsx",
+        "web/src/pages/definitions/RouteView.tsx",
+        "web/src/pages/admin/Users.tsx",
+        "web/src/pages/admin/Org.tsx",
+        "web/src/pages/admin/Grades.tsx",
+        "web/src/pages/admin/Roles.tsx",
+        "web/src/pages/admin/Masters.tsx",
+        "web/src/pages/admin/Classification.tsx",
+        "web/src/pages/admin/Proxies.tsx",
+        "web/src/pages/admin/AuditLogs.tsx",
+        "web/src/pages/settings/Tokens.tsx",
+        "web/src/pages/admin/ServiceAccounts.tsx",
+        "web/src/pages/admin/Webhooks.tsx",
+        "web/src/pages/admin/WebhookEvents.tsx",
+        "web/src/pages/admin/DevTools.tsx",
+        "web/node_modules"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [
+        "web/node_modules"
+      ],
+      "acceptanceCriteria": [
+        "All files listed exist; every page stub compiles; `bun.lock` present and frozen install passes",
+        "typecheck, tests and temp-dir build pass",
+        "No non-bun lockfiles",
+        "`web/toolchain.json` records bun version, install commands with exit codes, the bun.lock sha256 and resolved package versions"
+      ],
+      "verification": [
+        "cd web && bun install 2>&1 | tee /tmp/pf03-install.log                   # creates bun.lock",
+        "cd web && bun install --frozen-lockfile 2>&1 | tee /tmp/pf03-frozen.log  # exit 0 (lockfile consistent)",
+        "cd web && bun run typecheck 2>&1 | tee /tmp/pf03-typecheck.log",
+        "cd web && bun test 2>&1 | tee /tmp/pf03-test.log                         # all *.test.ts pass",
+        "cd web && bun run build --outDir \"${TMPDIR:-/tmp}/pf03-dist\" --emptyOutDir 2>&1 | tee /tmp/pf03-build.log   # index.html produced in the temp dir",
+        "ls web/package-lock.json web/yarn.lock web/pnpm-lock.yaml 2>&1                    # must report \"No such file\""
+      ]
+    },
+    {
+      "planId": "PF-04",
+      "planPath": "impl-plans/active/pf-04-httpx.md",
+      "dependsOn": ["PF-01"],
+      "writePaths": [
+        "impl-plans/active/pf-04-httpx.md",
+        "internal/httpx/json.go",
+        "internal/httpx/pagination.go",
+        "internal/httpx/query.go",
+        "internal/httpx/middleware.go",
+        "internal/httpx/ratelimit.go",
+        "internal/httpx/faults.go",
+        "internal/httpx/json_test.go",
+        "internal/httpx/pagination_test.go",
+        "internal/httpx/query_test.go",
+        "internal/httpx/middleware_test.go",
+        "internal/httpx/ratelimit_test.go",
+        "internal/httpx/faults_test.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Every contract symbol exists; every listed test passes with `-race`; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf04-build.log",
+        "go vet ./internal/httpx/... 2>&1 | tee /tmp/pf04-vet.log",
+        "go test -race ./internal/httpx/... 2>&1 | tee /tmp/pf04-test.log",
+        "gofmt -l internal/httpx   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-05",
+      "planPath": "impl-plans/active/pf-05-auth-core.md",
+      "dependsOn": ["PF-01", "PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-05-auth-core.md",
+        "internal/auth/principal.go",
+        "internal/auth/token.go",
+        "internal/auth/middleware.go",
+        "internal/auth/session.go",
+        "internal/auth/handlers.go",
+        "internal/auth/oidc.go",
+        "internal/auth/token_test.go",
+        "internal/auth/middleware_test.go",
+        "internal/auth/session_test.go",
+        "internal/auth/handlers_test.go",
+        "internal/store/auth.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract symbols and store functions exist with the exact names; `oidc.go` stub compiles and returns nil OIDC for an empty issuer",
+        "All tests pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf05-build.log",
+        "go vet ./internal/auth/... ./internal/store/... 2>&1 | tee /tmp/pf05-vet.log",
+        "go test -race ./internal/auth/... 2>&1 | tee /tmp/pf05-test.log",
+        "gofmt -l internal/auth internal/store/auth.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-06",
+      "planPath": "impl-plans/active/pf-06-fixtures-loader.md",
+      "dependsOn": ["PF-01", "PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-06-fixtures-loader.md",
+        "internal/fixtures/parse.go",
+        "internal/fixtures/validate.go",
+        "internal/fixtures/load.go",
+        "internal/fixtures/export.go",
+        "internal/fixtures/fixtures_test.go",
+        "internal/fixtures/validate_test.go",
+        "internal/fixtures/testdata"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract symbols exist; all rules implemented with tests; round-trip and stability tests pass; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf06-build.log",
+        "go vet ./internal/fixtures/... 2>&1 | tee /tmp/pf06-vet.log",
+        "go test ./internal/fixtures/... 2>&1 | tee /tmp/pf06-test.log",
+        "gofmt -l internal/fixtures   # prints nothing (types.go untouched)"
+      ]
+    },
+    {
+      "planId": "PF-07",
+      "planPath": "impl-plans/active/pf-07-fixtures-default-keycloak.md",
+      "dependsOn": ["PF-01", "PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-07-fixtures-default-keycloak.md",
+        "fixtures/default/tenant.json",
+        "fixtures/default/grades.json",
+        "fixtures/default/users.json",
+        "fixtures/default/organization-charts.json",
+        "fixtures/default/roles.json",
+        "fixtures/default/categories.json",
+        "fixtures/default/folders.json",
+        "fixtures/default/general-masters.json",
+        "fixtures/default/routes.json",
+        "fixtures/default/workflows.json",
+        "fixtures/default/proxy-applicants.json",
+        "fixtures/default/proxy-approvers.json",
+        "fixtures/default/tokens.json",
+        "fixtures/default/webhooks.json",
+        "deploy/keycloak/docker-compose.yml",
+        "deploy/keycloak/realm-punchflow.json",
+        "fixtures_default_test.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "All 14 fixture files and both Keycloak files exist with the pinned content",
+        "Root package tests pass; JSON valid; compose config valid or explicitly skipped (no docker)"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf07-build.log",
+        "go vet . 2>&1 | tee /tmp/pf07-vet.log",
+        "go test . 2>&1 | tee /tmp/pf07-test.log",
+        "gofmt -l fixtures_default_test.go   # prints nothing",
+        "python3 -I -m json.tool deploy/keycloak/realm-punchflow.json > /dev/null && echo realm-json-ok   # or: bun -e \"JSON.parse(await Bun.file('deploy/keycloak/realm-punchflow.json').text())\"",
+        "docker compose -f deploy/keycloak/docker-compose.yml config -q 2>&1 | tee /tmp/pf07-compose.log  # if docker is unavailable, record \"skipped: no docker\" (not a failure)"
+      ]
+    },
+    {
+      "planId": "PF-08",
+      "planPath": "impl-plans/active/pf-08-present-core.md",
+      "dependsOn": ["PF-01", "PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-08-present-core.md",
+        "internal/present/present.go",
+        "internal/present/user.go",
+        "internal/present/org.go",
+        "internal/present/role.go",
+        "internal/present/classification.go",
+        "internal/present/master.go",
+        "internal/present/workflow.go",
+        "internal/present/workflow_form.go",
+        "internal/present/route.go",
+        "internal/present/proxy.go",
+        "internal/present/audit.go",
+        "internal/present/present_test.go",
+        "internal/present/workflow_test.go",
+        "internal/store/read_users.go",
+        "internal/store/read_org.go",
+        "internal/store/read_roles.go",
+        "internal/store/read_classification.go",
+        "internal/store/read_masters.go",
+        "internal/store/read_definitions.go",
+        "internal/store/read_proxies.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "All contract functions and store read helpers exist; tests assert key sets for every presenter; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf08-build.log",
+        "go vet ./internal/present/... ./internal/store/... 2>&1 | tee /tmp/pf08-vet.log",
+        "go test ./internal/present/... 2>&1 | tee /tmp/pf08-test.log",
+        "gofmt -l internal/present internal/store   # prints nothing for this plan's files"
+      ]
+    },
+    {
+      "planId": "PF-09",
+      "planPath": "impl-plans/active/pf-09-webhook-delivery.md",
+      "dependsOn": ["PF-01", "PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-09-webhook-delivery.md",
+        "internal/webhook/service.go",
+        "internal/webhook/dispatcher.go",
+        "internal/webhook/sign.go",
+        "internal/webhook/backoff.go",
+        "internal/webhook/payload.go",
+        "internal/webhook/sign_test.go",
+        "internal/webhook/service_test.go",
+        "internal/webhook/dispatcher_test.go",
+        "internal/store/webhooks.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract symbols exist (including the `NewPayloads`/`Build` stub); all tests pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf09-build.log",
+        "go vet ./internal/webhook/... ./internal/store/... 2>&1 | tee /tmp/pf09-vet.log",
+        "go test -race ./internal/webhook/... 2>&1 | tee /tmp/pf09-test.log",
+        "gofmt -l internal/webhook internal/store/webhooks.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-10",
+      "planPath": "impl-plans/active/pf-10-api-contracts.md",
+      "dependsOn": ["PF-01", "PF-02"],
+      "writePaths": [
+        "impl-plans/active/pf-10-api-contracts.md",
+        "internal/api/v1/api.go",
+        "internal/api/v1/routes.go",
+        "internal/api/v1/routes_test.go",
+        "internal/api/v1/users.go",
+        "internal/api/v1/grades.go",
+        "internal/api/v1/proxies.go",
+        "internal/api/v1/orgcharts.go",
+        "internal/api/v1/teams.go",
+        "internal/api/v1/categories.go",
+        "internal/api/v1/folders.go",
+        "internal/api/v1/definitions.go",
+        "internal/api/v1/tickets.go",
+        "internal/api/v1/ticket_actions.go",
+        "internal/api/v1/ticket_viewers.go",
+        "internal/api/v1/files.go",
+        "internal/api/v1/general_masters.go",
+        "internal/api/v1/roles.go",
+        "internal/api/v1/comments.go",
+        "internal/api/v1/audit_logs.go",
+        "internal/engine/engine.go",
+        "internal/files/files.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "96 operations registered in the 16 handler files named in the coverage matrix Handler column; engine and files contracts compile with the exact signatures; tests pass; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf10-build.log",
+        "go vet ./internal/api/... ./internal/engine/... ./internal/files/... 2>&1 | tee /tmp/pf10-vet.log",
+        "go test ./internal/api/... 2>&1 | tee /tmp/pf10-test.log",
+        "gofmt -l internal/api internal/engine internal/files   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-11",
+      "planPath": "impl-plans/active/pf-11-web-tickets.md",
+      "dependsOn": ["PF-03"],
+      "writePaths": [
+        "impl-plans/active/pf-11-web-tickets.md",
+        "web/src/components/tickets/FormFields.tsx",
+        "web/src/components/tickets/SlipTable.tsx",
+        "web/src/components/tickets/StepList.tsx",
+        "web/src/components/tickets/ActionBar.tsx",
+        "web/src/components/tickets/Comments.tsx",
+        "web/src/components/tickets/Viewers.tsx",
+        "web/src/lib/ticket-view.ts",
+        "web/src/lib/ticket-view.test.ts"
+      ],
+      "sharedPaths": [
+        "web/src/pages/Dashboard.tsx",
+        "web/src/pages/tickets/TicketSearch.tsx",
+        "web/src/pages/tickets/TicketDetail.tsx",
+        "web/src/pages/tickets/TicketEdit.tsx"
+      ],
+      "sharedPathNotes": [
+        {"path": "web/src/pages/Dashboard.tsx", "intendedEdit": "PF-03 stub; replace with the dashboard screen, keep the default export"},
+        {"path": "web/src/pages/tickets/TicketSearch.tsx", "intendedEdit": "PF-03 stub; replace with the search screen, keep the default export"},
+        {"path": "web/src/pages/tickets/TicketDetail.tsx", "intendedEdit": "PF-03 stub; replace with the detail screen, keep the default export"},
+        {"path": "web/src/pages/tickets/TicketEdit.tsx", "intendedEdit": "PF-03 stub; replace with the create/edit screen, keep the default export"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "All four pages implemented; components and `ticket-view.ts` exist; tests, typecheck and temp build pass; dependency files unchanged"
+      ],
+      "verification": [
+        "test -d web/node_modules && echo node_modules-present   # installed by PF-03; do NOT run bun install here (PF-12/PF-13 run in parallel in the same directory)",
+        "cd web && bun run typecheck 2>&1 | tee /tmp/pf11-typecheck.log",
+        "cd web && bun test 2>&1 | tee /tmp/pf11-test.log",
+        "cd web && bun run build --outDir \"${TMPDIR:-/tmp}/pf11-dist\" --emptyOutDir 2>&1 | tee /tmp/pf11-build.log",
+        "git status --porcelain web/package.json web/bun.lock   # must print nothing"
+      ]
+    },
+    {
+      "planId": "PF-12",
+      "planPath": "impl-plans/active/pf-12-web-readviews.md",
+      "dependsOn": ["PF-03"],
+      "writePaths": [
+        "impl-plans/active/pf-12-web-readviews.md",
+        "web/src/components/readviews/JsonView.tsx",
+        "web/src/components/readviews/PagedTable.tsx",
+        "web/src/components/readviews/Tree.tsx",
+        "web/src/lib/tree.ts",
+        "web/src/lib/tree.test.ts"
+      ],
+      "sharedPaths": [
+        "web/src/pages/definitions/Workflows.tsx",
+        "web/src/pages/definitions/WorkflowView.tsx",
+        "web/src/pages/definitions/Routes.tsx",
+        "web/src/pages/definitions/RouteView.tsx",
+        "web/src/pages/admin/Users.tsx",
+        "web/src/pages/admin/Org.tsx",
+        "web/src/pages/admin/Grades.tsx",
+        "web/src/pages/admin/Roles.tsx",
+        "web/src/pages/admin/Masters.tsx",
+        "web/src/pages/admin/Classification.tsx",
+        "web/src/pages/admin/Proxies.tsx",
+        "web/src/pages/admin/AuditLogs.tsx"
+      ],
+      "sharedPathNotes": [
+        {"path": "web/src/pages/definitions/Workflows.tsx", "intendedEdit": "PF-03 stub; replace with the workflow list"},
+        {"path": "web/src/pages/definitions/WorkflowView.tsx", "intendedEdit": "PF-03 stub; replace with the workflow summary and JSON view"},
+        {"path": "web/src/pages/definitions/Routes.tsx", "intendedEdit": "PF-03 stub; replace with the route list"},
+        {"path": "web/src/pages/definitions/RouteView.tsx", "intendedEdit": "PF-03 stub; replace with the route steps and JSON view"},
+        {"path": "web/src/pages/admin/Users.tsx", "intendedEdit": "PF-03 stub; replace with the paged user list and status actions"},
+        {"path": "web/src/pages/admin/Org.tsx", "intendedEdit": "PF-03 stub; replace with the chart/team tree and members"},
+        {"path": "web/src/pages/admin/Grades.tsx", "intendedEdit": "PF-03 stub; replace with the grade list"},
+        {"path": "web/src/pages/admin/Roles.tsx", "intendedEdit": "PF-03 stub; replace with the role list and detail"},
+        {"path": "web/src/pages/admin/Masters.tsx", "intendedEdit": "PF-03 stub; replace with masters and items"},
+        {"path": "web/src/pages/admin/Classification.tsx", "intendedEdit": "PF-03 stub; replace with categories and the folder tree"},
+        {"path": "web/src/pages/admin/Proxies.tsx", "intendedEdit": "PF-03 stub; replace with proxy tables"},
+        {"path": "web/src/pages/admin/AuditLogs.tsx", "intendedEdit": "PF-03 stub; replace with the paged audit log view"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "12 pages implemented; `tree.ts` with tests; typecheck, tests and temp build pass; dependency files unchanged"
+      ],
+      "verification": [
+        "test -d web/node_modules && echo node_modules-present   # installed by PF-03; do NOT run bun install here (PF-11/PF-13 run in parallel in the same directory)",
+        "cd web && bun run typecheck 2>&1 | tee /tmp/pf12-typecheck.log",
+        "cd web && bun test 2>&1 | tee /tmp/pf12-test.log",
+        "cd web && bun run build --outDir \"${TMPDIR:-/tmp}/pf12-dist\" --emptyOutDir 2>&1 | tee /tmp/pf12-build.log",
+        "git status --porcelain web/package.json web/bun.lock   # must print nothing"
+      ]
+    },
+    {
+      "planId": "PF-13",
+      "planPath": "impl-plans/active/pf-13-web-integration.md",
+      "dependsOn": ["PF-03"],
+      "writePaths": [
+        "impl-plans/active/pf-13-web-integration.md",
+        "web/src/components/integration/OneTimeSecret.tsx",
+        "web/src/components/integration/EventTypePicker.tsx",
+        "web/src/components/integration/AttemptList.tsx",
+        "web/src/lib/webhook-view.ts",
+        "web/src/lib/webhook-view.test.ts"
+      ],
+      "sharedPaths": [
+        "web/src/pages/Login.tsx",
+        "web/src/pages/settings/Tokens.tsx",
+        "web/src/pages/admin/ServiceAccounts.tsx",
+        "web/src/pages/admin/Webhooks.tsx",
+        "web/src/pages/admin/WebhookEvents.tsx",
+        "web/src/pages/admin/DevTools.tsx"
+      ],
+      "sharedPathNotes": [
+        {"path": "web/src/pages/Login.tsx", "intendedEdit": "PF-03 stub; replace with the login screen"},
+        {"path": "web/src/pages/settings/Tokens.tsx", "intendedEdit": "PF-03 stub; replace with PAT management"},
+        {"path": "web/src/pages/admin/ServiceAccounts.tsx", "intendedEdit": "PF-03 stub; replace with service-account management"},
+        {"path": "web/src/pages/admin/Webhooks.tsx", "intendedEdit": "PF-03 stub; replace with webhook CRUD and ping"},
+        {"path": "web/src/pages/admin/WebhookEvents.tsx", "intendedEdit": "PF-03 stub; replace with the delivery log, resend and fire-event form"},
+        {"path": "web/src/pages/admin/DevTools.tsx", "intendedEdit": "PF-03 stub; replace with tenant settings, faults, export and reset"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "6 pages implemented; components and `webhook-view.ts` with tests; typecheck, tests and temp build pass; dependency files unchanged"
+      ],
+      "verification": [
+        "test -d web/node_modules && echo node_modules-present   # installed by PF-03; do NOT run bun install here (PF-11/PF-12 run in parallel in the same directory)",
+        "cd web && bun run typecheck 2>&1 | tee /tmp/pf13-typecheck.log",
+        "cd web && bun test 2>&1 | tee /tmp/pf13-test.log",
+        "cd web && bun run build --outDir \"${TMPDIR:-/tmp}/pf13-dist\" --emptyOutDir 2>&1 | tee /tmp/pf13-build.log",
+        "git status --porcelain web/package.json web/bun.lock   # must print nothing"
+      ]
+    },
+    {
+      "planId": "PF-14",
+      "planPath": "impl-plans/active/pf-14-engine.md",
+      "dependsOn": ["PF-02", "PF-06", "PF-07", "PF-10"],
+      "writePaths": [
+        "impl-plans/active/pf-14-engine.md",
+        "internal/engine/create.go",
+        "internal/engine/update.go",
+        "internal/engine/forms.go",
+        "internal/engine/conditions.go",
+        "internal/engine/routing.go",
+        "internal/engine/progression.go",
+        "internal/engine/actions.go",
+        "internal/engine/visibility.go",
+        "internal/engine/comments.go",
+        "internal/engine/numbering.go",
+        "internal/engine/setup_test.go",
+        "internal/engine/lifecycle_test.go",
+        "internal/engine/forms_test.go",
+        "internal/engine/routing_test.go",
+        "internal/engine/events_test.go",
+        "internal/engine/comments_test.go",
+        "internal/store/tickets.go",
+        "internal/store/engine_lookup.go"
+      ],
+      "sharedPaths": [
+        "internal/engine/engine.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/engine/engine.go", "intendedEdit": "created by PF-10 as the contract stub; replace the method bodies only, keeping every exported type and signature"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "All engine methods implemented with unchanged signatures; every listed test exists and passes with `-race`; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf14-build.log",
+        "go vet ./internal/engine/... ./internal/store/... 2>&1 | tee /tmp/pf14-vet.log",
+        "go test -race ./internal/engine/... 2>&1 | tee /tmp/pf14-test.log",
+        "gofmt -l internal/engine internal/store/tickets.go internal/store/engine_lookup.go   # prints nothing",
+        "wc -l internal/engine/*.go internal/store/tickets.go internal/store/engine_lookup.go   # every file < 1000"
+      ]
+    },
+    {
+      "planId": "PF-15",
+      "planPath": "impl-plans/active/pf-15-present-ticket-payloads.md",
+      "dependsOn": ["PF-06", "PF-07", "PF-08", "PF-09"],
+      "writePaths": [
+        "impl-plans/active/pf-15-present-ticket-payloads.md",
+        "internal/present/ticket.go",
+        "internal/present/ticket_detail.go",
+        "internal/present/comment.go",
+        "internal/present/viewer.go",
+        "internal/present/tenant.go",
+        "internal/present/ticket_test.go",
+        "internal/present/comment_test.go",
+        "internal/store/read_tickets.go",
+        "internal/webhook/payload_test.go"
+      ],
+      "sharedPaths": [
+        "internal/webhook/payload.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/webhook/payload.go", "intendedEdit": "created by PF-09 as a stub; implement Build for all 13 event types, keeping `NewPayloads()` and the `Build` signature"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract functions exist; `NewPayloads().Build` handles all 13 event types; tests pass; PF-09 tests still pass; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf15-build.log",
+        "go vet ./internal/present/... ./internal/webhook/... 2>&1 | tee /tmp/pf15-vet.log",
+        "go test ./internal/present/... ./internal/webhook/... 2>&1 | tee /tmp/pf15-test.log",
+        "gofmt -l internal/present internal/webhook/payload.go internal/store/read_tickets.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-16",
+      "planPath": "impl-plans/active/pf-16-server-cli-testutil.md",
+      "dependsOn": ["PF-04", "PF-05", "PF-06", "PF-07", "PF-09", "PF-10"],
+      "writePaths": [
+        "impl-plans/active/pf-16-server-cli-testutil.md",
+        "internal/server/server.go",
+        "internal/server/server_test.go",
+        "internal/webui/webui.go",
+        "internal/webui/webui_test.go",
+        "internal/admin/admin.go",
+        "internal/admin/routes.go",
+        "internal/admin/routes_test.go",
+        "internal/admin/tokens.go",
+        "internal/admin/service_accounts.go",
+        "internal/admin/webhooks.go",
+        "internal/admin/tenant.go",
+        "internal/admin/faults.go",
+        "internal/admin/fixtures.go",
+        "internal/cli/config.go",
+        "internal/cli/serve.go",
+        "internal/cli/fixtures.go",
+        "internal/cli/token.go",
+        "internal/testutil/env.go",
+        "internal/testutil/personas.go",
+        "internal/testutil/receiver.go",
+        "internal/testutil/assert.go",
+        "internal/testutil/testutil_test.go",
+        "internal/fixtures/default_roundtrip_test.go"
+      ],
+      "sharedPaths": [
+        "internal/cli/cli.go",
+        "internal/cli/cli_test.go",
+        "fixtures/default"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/cli/cli.go", "intendedEdit": "created by PF-01 as a skeleton; replace dispatch with the real subcommands, keep the `Run` signature"},
+        {"path": "internal/cli/cli_test.go", "intendedEdit": "created by PF-01; extend with the CLI cases listed in the plan, keep the existing version/usage cases"},
+        {"path": "fixtures/default", "intendedEdit": "created by PF-01 (.gitkeep) and PF-07 (JSON files); regenerate atomically only if the byte round-trip fails, after proving semantic equality"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contracts exist; server assembled exactly as above; CLI subcommands, flags and env vars match `command.md`; all tests pass with `-race`; default fixtures validate and round-trip byte-identically"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf16-build.log",
+        "go vet ./... 2>&1 | tee /tmp/pf16-vet.log",
+        "go test -race ./internal/server/... ./internal/webui/... ./internal/admin/... ./internal/cli/... ./internal/testutil/... ./internal/fixtures/... 2>&1 | tee /tmp/pf16-test.log",
+        "gofmt -l internal/server internal/webui internal/admin internal/cli internal/testutil internal/fixtures/default_roundtrip_test.go   # prints nothing",
+        "go run ./cmd/punchflow version 2>&1 | tee /tmp/pf16-version.log   # \"punchflow 0.1.0\""
+      ]
+    },
+    {
+      "planId": "PF-17",
+      "planPath": "impl-plans/active/pf-17-auth-oidc.md",
+      "dependsOn": ["PF-05"],
+      "writePaths": [
+        "impl-plans/active/pf-17-auth-oidc.md",
+        "internal/auth/oidc_test.go",
+        "internal/auth/oidc_fake_test.go"
+      ],
+      "sharedPaths": [
+        "internal/auth/oidc.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/auth/oidc.go", "intendedEdit": "created by PF-05 as a stub; replace the bodies, keeping `OIDCConfig`, `NewOIDC`, `Login` and `Callback` signatures"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Signatures unchanged; all listed tests pass with `-race`; no new go.mod entries"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf17-build.log",
+        "go vet ./internal/auth/... 2>&1 | tee /tmp/pf17-vet.log",
+        "go test -race ./internal/auth/... 2>&1 | tee /tmp/pf17-test.log   # PF-05 tests must still pass",
+        "gofmt -l internal/auth   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-18",
+      "planPath": "impl-plans/active/pf-18-api-users-grades.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-18-api-users-grades.md",
+        "internal/api/v1/users_status.go",
+        "internal/api/v1/users_test.go",
+        "internal/api/v1/grades_test.go",
+        "internal/store/users.go",
+        "internal/store/grades.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/users.go",
+        "internal/api/v1/grades.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/users.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 1-12 (may move status actions into `users_status.go`)"},
+        {"path": "internal/api/v1/grades.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 13-18"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "18 operations implemented (no stub message remains in `users.go`/`grades.go`); tests above pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf18-build.log",
+        "go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf18-vet.log",
+        "go test -race -run 'Test(User|Users|Grade|Grades|CurrentUser)' ./internal/api/v1/... 2>&1 | tee /tmp/pf18-test.log",
+        "gofmt -l internal/api/v1/users*.go internal/api/v1/grades*.go internal/store/users.go internal/store/grades.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-19",
+      "planPath": "impl-plans/active/pf-19-api-proxies-org.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-19-api-proxies-org.md",
+        "internal/api/v1/proxies_test.go",
+        "internal/api/v1/orgcharts_test.go",
+        "internal/api/v1/teams_test.go",
+        "internal/store/proxies.go",
+        "internal/store/org.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/proxies.go",
+        "internal/api/v1/orgcharts.go",
+        "internal/api/v1/teams.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/proxies.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 19-26"},
+        {"path": "internal/api/v1/orgcharts.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 27-33"},
+        {"path": "internal/api/v1/teams.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 34-42"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "24 operations implemented (no stub message left in the three files); tests pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf19-build.log",
+        "go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf19-vet.log",
+        "go test -race -run 'Test(Proxy|Proxies|OrgChart|OrganizationChart|Team)' ./internal/api/v1/... 2>&1 | tee /tmp/pf19-test.log",
+        "gofmt -l internal/api/v1/proxies*.go internal/api/v1/orgcharts*.go internal/api/v1/teams*.go internal/store/proxies.go internal/store/org.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-20",
+      "planPath": "impl-plans/active/pf-20-api-definitions-masters.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-20-api-definitions-masters.md",
+        "internal/api/v1/categories_test.go",
+        "internal/api/v1/folders_test.go",
+        "internal/api/v1/definitions_test.go",
+        "internal/api/v1/general_masters_test.go",
+        "internal/store/classification.go",
+        "internal/store/masters.go",
+        "internal/store/definitions.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/categories.go",
+        "internal/api/v1/folders.go",
+        "internal/api/v1/definitions.go",
+        "internal/api/v1/general_masters.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/categories.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 43-46"},
+        {"path": "internal/api/v1/folders.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 47-51"},
+        {"path": "internal/api/v1/definitions.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 52-55"},
+        {"path": "internal/api/v1/general_masters.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 73-82"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "23 operations implemented; tests pass with `-race`; gofmt clean; inferred rules recorded in the progress log"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf20-build.log",
+        "go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf20-vet.log",
+        "go test -race -run 'Test(Categor|Folder|Workflow|Route|GeneralMaster|Master)' ./internal/api/v1/... 2>&1 | tee /tmp/pf20-test.log",
+        "gofmt -l internal/api/v1/categories*.go internal/api/v1/folders*.go internal/api/v1/definitions*.go internal/api/v1/general_masters*.go internal/store/classification.go internal/store/masters.go internal/store/definitions.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-21",
+      "planPath": "impl-plans/active/pf-21-api-roles-audit.md",
+      "dependsOn": ["PF-08", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-21-api-roles-audit.md",
+        "internal/api/v1/roles_test.go",
+        "internal/api/v1/audit_logs_test.go",
+        "internal/store/roles.go",
+        "internal/store/audit_queries.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/roles.go",
+        "internal/api/v1/audit_logs.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/roles.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 83-90"},
+        {"path": "internal/api/v1/audit_logs.go", "intendedEdit": "PF-10 stub file; replace the body of operation 96"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "9 operations implemented; tests pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf21-build.log",
+        "go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf21-vet.log",
+        "go test -race -run 'Test(Role|Roles|AuditLog)' ./internal/api/v1/... 2>&1 | tee /tmp/pf21-test.log",
+        "gofmt -l internal/api/v1/roles*.go internal/api/v1/audit_logs*.go internal/store/roles.go internal/store/audit_queries.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-22",
+      "planPath": "impl-plans/active/pf-22-api-tickets.md",
+      "dependsOn": ["PF-14", "PF-15", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-22-api-tickets.md",
+        "internal/api/v1/tickets_test.go",
+        "internal/api/v1/ticket_actions_test.go",
+        "internal/api/v1/ticket_viewers_test.go",
+        "internal/api/v1/ticket_webhooks_test.go",
+        "internal/store/ticket_queries.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/tickets.go",
+        "internal/api/v1/ticket_actions.go",
+        "internal/api/v1/ticket_viewers.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/tickets.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 56-61"},
+        {"path": "internal/api/v1/ticket_actions.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 62-66"},
+        {"path": "internal/api/v1/ticket_viewers.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 67-70"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "15 operations implemented; ten ticket_* events proven via HTTP + receiver; tests pass with `-race`; gofmt clean; files < 1000 lines"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf22-build.log",
+        "go vet ./internal/api/... ./internal/store/... 2>&1 | tee /tmp/pf22-vet.log",
+        "go test -race -run 'Test(Ticket|Tickets|Task|Viewer|TicketWebhook)' ./internal/api/v1/... 2>&1 | tee /tmp/pf22-test.log",
+        "gofmt -l internal/api/v1/tickets*.go internal/api/v1/ticket_*.go internal/store/ticket_queries.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-23",
+      "planPath": "impl-plans/active/pf-23-api-comments-files.md",
+      "dependsOn": ["PF-14", "PF-15", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-23-api-comments-files.md",
+        "internal/api/v1/comments_test.go",
+        "internal/api/v1/files_test.go",
+        "internal/files/download.go",
+        "internal/files/files_test.go",
+        "internal/store/files.go"
+      ],
+      "sharedPaths": [
+        "internal/api/v1/comments.go",
+        "internal/api/v1/files.go",
+        "internal/files/files.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/api/v1/comments.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 91-95"},
+        {"path": "internal/api/v1/files.go", "intendedEdit": "PF-10 stub file; replace the bodies of operations 71-72"},
+        {"path": "internal/files/files.go", "intendedEdit": "PF-10 contract stub; implement the store keeping the New/Save/SignedURL/DownloadHandler/MaxBytes signatures, and set `present.AttachmentURL` in `New`"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "7 operations implemented; download handler works; comment events proven through the receiver; tests pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf23-build.log",
+        "go vet ./internal/api/... ./internal/files/... ./internal/store/... 2>&1 | tee /tmp/pf23-vet.log",
+        "go test -race ./internal/files/... 2>&1 | tee /tmp/pf23-files.log",
+        "go test -race -run 'Test(Comment|Comments|File|Files|Upload)' ./internal/api/v1/... 2>&1 | tee /tmp/pf23-test.log",
+        "gofmt -l internal/api/v1/comments*.go internal/api/v1/files*.go internal/files internal/store/files.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-24",
+      "planPath": "impl-plans/active/pf-24-admin-api.md",
+      "dependsOn": ["PF-14", "PF-15", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-24-admin-api.md",
+        "internal/admin/tokens_test.go",
+        "internal/admin/webhooks_test.go",
+        "internal/admin/tenant_test.go",
+        "internal/admin/faults_test.go",
+        "internal/admin/fixtures_test.go",
+        "internal/store/admin.go"
+      ],
+      "sharedPaths": [
+        "internal/admin/tokens.go",
+        "internal/admin/service_accounts.go",
+        "internal/admin/webhooks.go",
+        "internal/admin/tenant.go",
+        "internal/admin/faults.go",
+        "internal/admin/fixtures.go"
+      ],
+      "sharedPathNotes": [
+        {"path": "internal/admin/tokens.go", "intendedEdit": "PF-16 stub file; implement the personal token endpoints"},
+        {"path": "internal/admin/service_accounts.go", "intendedEdit": "PF-16 stub file; implement the service account endpoints"},
+        {"path": "internal/admin/webhooks.go", "intendedEdit": "PF-16 stub file; implement webhook CRUD, ping, events, resend and fire"},
+        {"path": "internal/admin/tenant.go", "intendedEdit": "PF-16 stub file; implement tenant GET/PATCH"},
+        {"path": "internal/admin/faults.go", "intendedEdit": "PF-16 stub file; implement the fault rule endpoints"},
+        {"path": "internal/admin/fixtures.go", "intendedEdit": "PF-16 stub file; implement fixture export and flag-gated reset"}
+      ],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "23 endpoints implemented; every \"Fault\" catalog code proven; tests pass with `-race`; gofmt clean"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf24-build.log",
+        "go vet ./internal/admin/... ./internal/store/... 2>&1 | tee /tmp/pf24-vet.log",
+        "go test -race ./internal/admin/... 2>&1 | tee /tmp/pf24-test.log",
+        "gofmt -l internal/admin internal/store/admin.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-25",
+      "planPath": "impl-plans/active/pf-25-readme.md",
+      "dependsOn": ["PF-07", "PF-16"],
+      "writePaths": [
+        "impl-plans/active/pf-25-readme.md",
+        "README.md"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "README contains all 9 sections; grep check has no MISSING lines"
+      ],
+      "verification": [
+        "for s in pf_pat_dev_admin pf_pat_dev_manager pf_pat_dev_finance pf_pat_dev_employee pf_sat_dev_integration X-Kickflow-Signature X-Caller-Id keycloak:up --enable-local-login --enable-admin-reset --oidc-issuer /admin/api/webhooks; do grep -q -- \"$s\" README.md && echo \"ok $s\" || echo \"MISSING $s\"; done 2>&1 | tee /tmp/pf25-grep.log   # no MISSING lines",
+        "grep -c 'pf_pat_dev_admin' fixtures/default/tokens.json   # >= 1 (README matches fixtures)"
+      ]
+    },
+    {
+      "planId": "PF-26",
+      "planPath": "impl-plans/active/pf-26-contract-smoke.md",
+      "dependsOn": ["PF-17", "PF-18", "PF-19", "PF-20", "PF-21", "PF-22", "PF-23", "PF-24"],
+      "writePaths": [
+        "impl-plans/active/pf-26-contract-smoke.md",
+        "internal/contract/spec_test.go",
+        "internal/contract/routes_test.go",
+        "internal/contract/scenarios_users_org_test.go",
+        "internal/contract/scenarios_definitions_test.go",
+        "internal/contract/scenarios_tickets_test.go",
+        "internal/contract/scenarios_misc_test.go",
+        "internal/contract/webhooks_test.go",
+        "internal/contract/helpers_test.go",
+        "internal/cli/serve_smoke_test.go"
+      ],
+      "sharedPaths": [],
+      "sharedPathNotes": [],
+      "artifactRoots": [],
+      "acceptanceCriteria": [
+        "Contract tests cover 96/96 routes and 96/96 scenarios and 13/13 webhook payloads; smoke test passes; any non-test failures are logged as reconciliation requests with the owning plan id"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf26-build.log",
+        "go vet ./internal/contract/... ./internal/cli/... 2>&1 | tee /tmp/pf26-vet.log",
+        "go test -race ./internal/contract/... 2>&1 | tee /tmp/pf26-contract.log     # 96 routes, 96 scenarios, 13 webhook payloads",
+        "go test -race -run TestServeSmoke ./internal/cli/... 2>&1 | tee /tmp/pf26-smoke.log",
+        "gofmt -l internal/contract internal/cli/serve_smoke_test.go   # prints nothing"
+      ]
+    },
+    {
+      "planId": "PF-27",
+      "planPath": "impl-plans/active/pf-27-finalize.md",
+      "dependsOn": ["PF-01", "PF-02", "PF-03", "PF-04", "PF-05", "PF-06", "PF-07", "PF-08", "PF-09", "PF-10", "PF-11", "PF-12", "PF-13", "PF-14", "PF-15", "PF-16", "PF-17", "PF-18", "PF-19", "PF-20", "PF-21", "PF-22", "PF-23", "PF-24", "PF-25", "PF-26"],
+      "writePaths": [
+        "impl-plans/completed",
+        "web/node_modules",
+        "web/dist/app",
+        "punchflow"
+      ],
+      "sharedPaths": [
+        "impl-plans/active",
+        "impl-plans/README.md",
+        "go.mod",
+        "go.sum",
+        "go-toolchain.json",
+        "web/toolchain.json",
+        "web/package.json",
+        "web/bun.lock",
+        "design-docs/specs/notes.md",
+        "internal",
+        "cmd",
+        "fixtures",
+        "deploy",
+        "web/src",
+        "embed.go",
+        "embed_test.go",
+        "fixtures_default_test.go",
+        "README.md",
+        "mise.toml",
+        ".gitignore"
+      ],
+      "sharedPathNotes": [
+        {"path": "impl-plans/active", "intendedEdit": "all plans (PF-01..PF-27); set Status Completed with a final progress entry, then move each file to `impl-plans/completed`"},
+        {"path": "impl-plans/README.md", "intendedEdit": "created before wave 1; update the plan tables and phase status after archiving"},
+        {"path": "go.mod", "intendedEdit": "PF-02; `go mod tidy` only"},
+        {"path": "go.sum", "intendedEdit": "PF-02; updated by `go mod tidy`"},
+        {"path": "go-toolchain.json", "intendedEdit": "PF-02; append the tidy and final verify record (command, exit code, output)"},
+        {"path": "web/toolchain.json", "intendedEdit": "PF-03; append the final frozen install and build record (commands, exit codes, bun.lock sha256)"},
+        {"path": "web/package.json", "intendedEdit": "PF-03; edit only if a logged reconciliation request requires a dependency change"},
+        {"path": "web/bun.lock", "intendedEdit": "PF-03; regenerated only together with a `web/package.json` reconciliation change"},
+        {"path": "design-docs/specs/notes.md", "intendedEdit": "accepted design; append new INF rows only"},
+        {"path": "internal", "intendedEdit": "Go packages from PF-01..PF-26; repair only per reconciliation request or failing check"},
+        {"path": "cmd", "intendedEdit": "PF-01; repair only"},
+        {"path": "fixtures", "intendedEdit": "PF-01/PF-07/PF-16; repair only"},
+        {"path": "deploy", "intendedEdit": "PF-07; repair only"},
+        {"path": "web/src", "intendedEdit": "PF-03/PF-11/PF-12/PF-13; repair only"},
+        {"path": "embed.go", "intendedEdit": "PF-01; repair only"},
+        {"path": "embed_test.go", "intendedEdit": "PF-01; repair only"},
+        {"path": "fixtures_default_test.go", "intendedEdit": "PF-07; repair only"},
+        {"path": "README.md", "intendedEdit": "PF-25; repair only"},
+        {"path": "mise.toml", "intendedEdit": "PF-01; repair only"},
+        {"path": ".gitignore", "intendedEdit": "PF-01; repair only"}
+      ],
+      "artifactRoots": [
+        "web/node_modules",
+        "web/dist/app",
+        "punchflow"
+      ],
+      "acceptanceCriteria": [
+        "All reconciliation requests resolved and listed",
+        "Every verification command passed in one final run, with logs recorded",
+        "`notes.md` updated with new inferences; all plans moved to `impl-plans/completed/`; README index updated"
+      ],
+      "verification": [
+        "go build ./... 2>&1 | tee /tmp/pf27-build.log",
+        "go vet ./... 2>&1 | tee /tmp/pf27-vet.log",
+        "go test -race ./... 2>&1 | tee /tmp/pf27-test.log",
+        "cd web && bun install --frozen-lockfile && bun run typecheck && bun test && bun run build 2>&1 | tee /tmp/pf27-web.log   # writes web/dist/app",
+        "mise run build 2>&1 | tee /tmp/pf27-mise-build.log      # binary embeds web/dist/app",
+        "mise run test 2>&1 | tee /tmp/pf27-mise-test.log",
+        "mise run lint 2>&1 | tee /tmp/pf27-mise-lint.log",
+        "go test -race -run TestServeSmoke ./internal/cli/... 2>&1 | tee /tmp/pf27-smoke.log",
+        "git status --porcelain web/dist/app | head -1   # must print nothing (output is git-ignored)",
+        "ls web/package-lock.json web/yarn.lock web/pnpm-lock.yaml 2>&1   # \"No such file\" for all three",
+        "go test -count=1 -v -run TestEmbeddedBuild ./internal/webui/... 2>&1 | tee /tmp/pf27-embed.log   # after mise run build; must report PASS, not SKIP"
+      ]
+    }
+  ]
+}
